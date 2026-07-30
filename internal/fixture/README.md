@@ -51,3 +51,51 @@ go test ./...        # compile Layer 1 + Layer 2 and exercise them against SQLit
 - PATCH distinguishes absent, explicit null and value; only optional fields can
   be cleared, and an explicit null on a non-optional field is rejected.
 - An `InputOnly` field cannot reach a response.
+
+## Edges
+
+`Post` and a self-referential `Category` exist to exercise the cases `User`
+alone cannot.
+
+- A **to-many** edge is reachable. Under the old rule it could not be: that rule
+  requires `edge.Field() != nil`, which holds only when the foreign key sits on
+  this entity, so `User.posts` was permanently unreachable. Edges now carry their
+  own annotation.
+- `author_id` and `author` are **independent**. The scalar comes from the field's
+  scope, the nested object from the edge's annotation. The old rule made them one
+  switch.
+- Edge state is read through `<Edge>OrErr()`, never a nil check. `loadedTypes` is
+  unexported, so a nil pointer cannot distinguish *not loaded* from *loaded and
+  absent*. Loaded-and-absent serializes as an explicit `null`; not-loaded is an
+  error.
+- **Eager-load plans are generated from the response type's edge set**, so a
+  caller cannot forget one. That is what makes "not loaded is an error" cheap:
+  in generated wiring it never fires, and it only ever catches a hand-rolled
+  query. Note that `db.User.Get` cannot serve a response with edges — it loads
+  none.
+- Two-tier types bound expansion at depth 1 **in the type system**: a summary has
+  no edge fields, so a cycle cannot be built and no depth counter is needed. The
+  cost is explicit in `TestTwoTierBoundsDepthAndWhatThatCosts` — a three-level
+  tree comes back one level deep.
+
+### A trap worth knowing
+
+Declaring a self-referential pair in the chained form
+
+```go
+edge.To("children", X.Type).From("parent").Unique().Field("parent_id").Annotations(a)
+```
+
+attaches the annotation to the **inverse** edge only. The assoc edge is left
+unannotated, nothing is reported, and it silently never appears in a response.
+`category.go` declares the two edges separately for this reason, and
+`schema_annotation_test.go` guards it.
+
+### Inspecting the graph
+
+`ent/probe.go` (build-tagged `ignore`) prints every edge with its annotation,
+its uniqueness and whether `edge.Field()` is nil:
+
+```
+go run -mod=mod probe.go
+```

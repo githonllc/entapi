@@ -37,6 +37,10 @@ type UserResponse struct {
 	Age       *int        `json:"age,omitempty"`
 	Nickname  *string     `json:"nickname,omitempty"`
 	CreatedAt time.Time   `json:"created_at"`
+
+	// To-many edge. Under the FK-derived rule this could never appear here:
+	// the foreign key lives on Post, so edge.Field() is nil on this side.
+	Posts []*PostSummary `json:"posts"`
 }
 
 // NewUserResponse converts an entity to its response DTO.
@@ -49,7 +53,7 @@ func NewUserResponse(e *ent.User) (*UserResponse, error) {
 	if e == nil {
 		return nil, nil
 	}
-	return &UserResponse{
+	r := &UserResponse{
 		ID:        e.ID,
 		Name:      e.Name,
 		Email:     e.Email,
@@ -57,7 +61,18 @@ func NewUserResponse(e *ent.User) (*UserResponse, error) {
 		Age:       e.Age,
 		Nickname:  e.Nickname,
 		CreatedAt: e.CreatedAt,
-	}, nil
+	}
+	posts, err := e.Edges.PostsOrErr()
+	if err != nil {
+		// To-many edges have no not-found state: loaded-but-empty is an empty
+		// slice, so any error here means the caller did not load the edge.
+		return nil, err
+	}
+	r.Posts = make([]*PostSummary, 0, len(posts))
+	for _, p := range posts {
+		r.Posts = append(r.Posts, NewPostSummary(p))
+	}
+	return r, nil
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -426,7 +441,8 @@ func ListUsers(ctx context.Context, db *ent.Client, f *UserFilter, r entdomain.L
 	if err != nil {
 		return nil, err
 	}
-	return entdomain.ListPage(ctx, db.User.Query(), f.Predicates(), os, r, NewUserResponse)
+	q := UserQueryWithResponseEdges(db.User.Query())
+	return entdomain.ListPage(ctx, q, f.Predicates(), os, r, NewUserResponse)
 }
 
 func GetUser(ctx context.Context, db *ent.Client, id uuid.UUID) (*UserResponse, error) {

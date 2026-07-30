@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/githonllc/entdomain"
@@ -19,7 +21,11 @@ import (
 
 func newClient(t *testing.T) (*ent.Client, context.Context) {
 	t.Helper()
-	db, err := stdsql.Open("sqlite", "file:ent?mode=memory&cache=shared&_fk=1")
+	// A per-test DSN. A shared one only works because tests happen to run
+	// sequentially and the in-memory database is dropped when the last
+	// connection closes — that is luck, not isolation.
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := stdsql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

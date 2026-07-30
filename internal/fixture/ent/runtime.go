@@ -5,6 +5,8 @@ package ent
 import (
 	"time"
 
+	"github.com/githonllc/entdomain/internal/fixture/ent/category"
+	"github.com/githonllc/entdomain/internal/fixture/ent/post"
 	"github.com/githonllc/entdomain/internal/fixture/ent/schema"
 	"github.com/githonllc/entdomain/internal/fixture/ent/user"
 	"github.com/google/uuid"
@@ -14,6 +16,18 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	categoryFields := schema.Category{}.Fields()
+	_ = categoryFields
+	// categoryDescID is the schema descriptor for id field.
+	categoryDescID := categoryFields[0].Descriptor()
+	// category.DefaultID holds the default value on creation for the id field.
+	category.DefaultID = categoryDescID.Default.(func() uuid.UUID)
+	postFields := schema.Post{}.Fields()
+	_ = postFields
+	// postDescID is the schema descriptor for id field.
+	postDescID := postFields[0].Descriptor()
+	// post.DefaultID holds the default value on creation for the id field.
+	post.DefaultID = postDescID.Default.(func() uuid.UUID)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescCreatedAt is the schema descriptor for created_at field.

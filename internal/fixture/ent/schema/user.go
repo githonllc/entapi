@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/githonllc/entdomain"
 	"github.com/google/uuid"
@@ -52,5 +53,14 @@ func (User) Fields() []ent.Field {
 		// Never filterable, searchable or sortable, and never in a response.
 		field.String("password_hash").
 			Annotations(entdomain.InputOnlyField()),
+	}
+}
+
+// Edges exercises the to-many case: the foreign key lives on Post, so
+// edge.Field() is nil here and the FK-derived rule could never expose it.
+func (User) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("posts", Post.Type).
+			Annotations(entdomain.Edge().InResponse()),
 	}
 }

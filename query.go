@@ -1,0 +1,136 @@
+package entdomain
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strings"
+)
+
+// This file is Layer 2: the CRUD algorithms, written once, in Go, with type
+// checking, tests and a debugger. Nothing here is generated and nothing here
+// imports ent — the entity-specific parts arrive as type parameters and
+// function values supplied by generated wiring.
+
+// Query is the subset of an ent query builder that pagination needs.
+//
+// Q is self-referential because ent's chainable methods return the concrete
+// builder type (see entgo.io/ent entc/gen/template/builder/query.tmpl:43-68).
+// P is the entity's predicate type, O its order-option type, E the entity.
+type Query[Q, P, O, E any] interface {
+	Where(...P) Q
+	Order(...O) Q
+	Limit(int) Q
+	Offset(int) Q
+	All(context.Context) ([]*E, error)
+	Count(context.Context) (int, error)
+}
+
+// Page is one page of converted results.
+type Page[R any] struct {
+	Data  []*R `json:"data"`
+	Total int  `json:"total"`
+	Page  int  `json:"page"`
+	Size  int  `json:"size"`
+}
+
+// Limit returns the page size, clamped to the supported range.
+//
+// Note: ListRequest.Size carries `validate:"max=100"` while MaxPageSize is
+// 1000. That disagreement is tracked in issue #6; this function is the single
+// place the effective bound is decided.
+func (r ListRequest) Limit() int {
+	switch {
+	case r.Size <= 0:
+		return DefaultPageSize
+	case r.Size > MaxPageSize:
+		return MaxPageSize
+	default:
+		return r.Size
+	}
+}
+
+// Offset returns the row offset for offset-based pagination.
+func (r ListRequest) Offset() int {
+	if r.Page <= 1 {
+		return 0
+	}
+	return (r.Page - 1) * r.Limit()
+}
+
+// SortKey validates the requested sort field against an allow-list and reports
+// the direction. An empty request falls back to def.
+//
+// The allow-list is the whole point: an unchecked sort field is an injection
+// site, an unindexed-scan trigger, and — combined with paging — an ordering
+// oracle over columns the caller was never meant to read.
+func (r ListRequest) SortKey(allow []string, def string) (key string, desc bool, err error) {
+	key = r.SortBy
+	if key == "" {
+		key = def
+	}
+	if key == "" {
+		return "", false, nil
+	}
+	if !slices.Contains(allow, key) {
+		return "", false, fmt.Errorf("%w: cannot sort by %q", ErrValidation, key)
+	}
+	return key, strings.EqualFold(r.Order, "desc"), nil
+}
+
+// ListPage runs a filtered, ordered, paginated query and converts the results.
+//
+// Written once. Every entity reuses it; the generated wiring only supplies the
+// builder, the predicates, the order options and the converter.
+func ListPage[Q Query[Q, P, O, E], P, O, E, R any](
+	ctx context.Context,
+	q Q,
+	ps []P,
+	os []O,
+	r ListRequest,
+	to func(*E) (*R, error),
+) (*Page[R], error) {
+	total, err := q.Where(ps...).Count(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	limit, offset := r.Limit(), r.Offset()
+	entities, err := q.Where(ps...).Order(os...).Limit(limit).Offset(offset).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([]*R, 0, len(entities))
+	for _, e := range entities {
+		converted, err := to(e)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, converted)
+	}
+
+	page := r.Page
+	if page <= 0 {
+		page = 1
+	}
+	return &Page[R]{Data: data, Total: total, Page: page, Size: limit}, nil
+}
+
+// GetOne fetches a single entity by id and converts it.
+//
+// ID is a type parameter, so the identifier type comes from the schema rather
+// than being hardcoded — the generated base service pinned it to uuid.UUID
+// only because text/template cannot express generics.
+func GetOne[E, R, ID any](
+	ctx context.Context,
+	get func(context.Context, ID) (*E, error),
+	to func(*E) (*R, error),
+	id ID,
+) (*R, error) {
+	e, err := get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return to(e)
+}

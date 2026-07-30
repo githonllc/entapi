@@ -352,7 +352,11 @@ func (s *UserService) Create(ctx context.Context, req *dto.UserCreateRequest) (*
 | 9 | §5 净结果 17 条 | **算错** | 完全消解 3 条、新增 3 条 → 18。本稿已按新判定重算 |
 | 10 | 「六个固定 hook 点」 | **不准确（单源，未独立核实）** | Codex 指出 Create/Update hook 按字段存在性条件生成，实际 2–6 个 |
 
-**QUALITY-REVIEW P1-7（`EntToResponse` 无环检测）的定级需要重估。** Fable 指出递归只跟随已加载的边，而 ent 的预加载深度是调用方显式且有限的，因此"崩进程"的路径需要手工缝出环形指针。该发现目前**没有对应的 GitHub issue**（建 issue 时的遗漏）。建议等 #8 编译门建起来后用真实 fixture 判定，而不是靠读码改定级。
+**QUALITY-REVIEW P1-7（`EntToResponse` 无环检测）** ~~没有对应的 GitHub issue~~ → **已裁决并归属 #25**（2026-07-30）。Fable 当时指出递归只跟随已加载的边，而 ent 的预加载深度是调用方显式且有限的，因此"崩进程"的路径需要手工缝出环形指针——这个论证正确，但**条件依赖调用方行为**。
+
+**§7.3 的两级响应类型给出了无条件的结论：`Summary` 类型不含边**，所以 `NewUserResponse` 调 `NewPostSummary`，而 `NewPostSummary` 不再调任何东西。**没有第二层可供环闭合**，深度由类型系统封死，不靠运行时计数器或 visited 集合。P1-7 因此是结构性消解，不是概率降低。
+
+但这条同样是**设计断言，尚未验证**——本项目已有两次这类断言被推翻的记录。#25 带一条 fixture 验收：A、B 互持 response scope 的 FK 且都预加载，断言映射终止；以及断言生成的 `Summary` 类型确实不含边。
 
 ### 评审方法
 

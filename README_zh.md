@@ -6,6 +6,23 @@
 
 一个 [Ent](https://entgo.io) 扩展，从带注解的 schema 自动生成 HTTP 请求/响应 DTO、基础服务和基础处理器。
 
+
+> ### 状态：原型，正在重新设计
+>
+> 这个库能用，但它的形态正在被重新考虑。方向已定，**尚未实现任何一部分**——
+> 下面记录的是**当前已有的东西**，不是计划中的东西。
+>
+> - **方向与理由** — [`DESIGN-v2.md`](DESIGN-v2.md)。里面同时记录了初稿自己搞错的断言，
+>   因为「哪些直觉在这个代码库里不成立」本身就是设计资料。
+> - **已知缺陷** — [`QUALITY-REVIEW.md`](QUALITY-REVIEW.md)，三次独立评审的 41 条发现。
+> - **整体结构** — [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+> - **工作项** — epic [#23](https://github.com/githonllc/entdomain/issues/23)。
+>
+> 采用之前请先读[已知限制](#已知限制)。其中有几条是陷阱而不是缺口，
+> 并且**有一个注解描述了它并不提供的保证**。
+>
+> `go test ./...` 在干净 checkout 上是**红的**（[#2](https://github.com/githonllc/entdomain/issues/2)）。
+
 ## 特性
 
 - **注解驱动** — 使用简洁的构建器标记字段作用域（`DefaultField`、`InputOnlyField`、`OutputOnlyField` 等）
@@ -71,7 +88,8 @@ go generate ./...
 ### 基础构建器
 
 ```go
-entdomain.DefaultField()                      // 所有作用域：创建、更新、响应
+entdomain.DefaultField()                      // 创建、更新、查询、响应
+                                              // 同时把字段标为 searchable / filterable / sortable
 entdomain.InputOnlyField()                    // 仅创建和更新（如密码）
 entdomain.OutputOnlyField()                   // 仅响应（如时间戳、状态）
 entdomain.CreateOnlyField()                   // 创建 + 响应（创建后不可变）
@@ -234,6 +252,47 @@ entdomain.WithBaseService(true)              // 生成 BaseService（默认：fa
 entdomain.WithBaseHandler(true)              // 生成 BaseHandler（默认：false）
 entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 ```
+
+## 已知限制
+
+以下全部核对过源码，不是从文档推断的。每条附带跟踪它的 issue。
+
+**一个名不副实的注解。** `Sensitive` 读起来像数据保护标记。**没有任何代码读它**——
+响应字段选择器只看 scope，所以标了 sensitive 的字段照样出现在响应里。不要依赖它。
+它会被**删除**而不是实现：在一维 scope 模型下，「永不出现在响应里」本来就可以靠
+不给 response scope 表达，这个注解只添加了承诺、没有添加能力
+（[#3](https://github.com/githonllc/entdomain/issues/3)）。
+
+**大约二十个导出的注解字段被接受、存储、然后忽略。** API 照单全收不报错，
+所以从外面看不出哪些是有效的。只有 scope 列表和 required 映射真正到达模板
+（[#17](https://github.com/githonllc/entdomain/issues/17)）。
+
+**`ScopeQuery` 被大多数预设构建器授予，却没有任何消费者。** 它被文档描述为
+「把字段放进查询参数结构体」，而没有模板生成那个结构体。
+
+**除 `InputOnlyField` 外，每个预设构建器都会把字段标成 searchable / filterable /
+sortable。** 今天无害。但它对下一步有影响：按任意列排序是全表扫描的触发点，
+配合分页还是一个排序预言机。这些标记一旦实现，默认全开会让白名单失去意义
+（[#27](https://github.com/githonllc/entdomain/issues/27)）。
+
+**软删除会静默废掉下游的删除钩子。** 生成的删除被改写成更新，携带的是更新操作标志。
+消费者按删除操作注册的钩子因此**根本不会触发**——这不是两套机制打架，
+是一套静默替换了另一套（[#12](https://github.com/githonllc/entdomain/issues/12)）。
+
+**生成的 service 只支持一种主键类型。** 方法签名里硬编码了 `uuid.UUID`，
+非 UUID 主键不受支持（[#29](https://github.com/githonllc/entdomain/issues/29)）。
+
+**钩子派发用错时静默失败。** 忘记调用 `SetSelf`，或者钩子方法名拼错，
+都能正常编译，而钩子永远不执行（[#16](https://github.com/githonllc/entdomain/issues/16)）。
+
+**在 Windows 上导入本包会 panic。** 模板查找用操作系统分隔符拼路径，
+而嵌入文件系统恒用正斜杠，因此在包初始化阶段就加载失败
+（[#4](https://github.com/githonllc/entdomain/issues/4)）。
+
+**本仓库没有任何测试会编译生成的代码。** 模板改动在这里实际上是未测试的；
+已知有多种字段与边的形态会产出无法编译的输出
+（[#8](https://github.com/githonllc/entdomain/issues/8)、
+[#10](https://github.com/githonllc/entdomain/issues/10)）。
 
 ## 贡献
 

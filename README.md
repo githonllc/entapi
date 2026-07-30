@@ -6,6 +6,26 @@
 
 An [Ent](https://entgo.io) extension that generates HTTP request/response DTOs, base service structs, and base handler structs from annotated schemas.
 
+
+> ### Status: prototype under redesign
+>
+> This library works, but its shape is being reconsidered. The direction is settled and
+> **no part of it is implemented yet** — what is documented below is what exists today,
+> not what is planned.
+>
+> - **Direction and rationale** — [`DESIGN-v2.md`](DESIGN-v2.md). It also records the
+>   claims its own first draft got wrong, because knowing which intuitions fail in this
+>   codebase is design material.
+> - **Known defects** — [`QUALITY-REVIEW.md`](QUALITY-REVIEW.md), 41 findings from three
+>   independent reviews.
+> - **How it fits together** — [`ARCHITECTURE.md`](ARCHITECTURE.md).
+> - **Work items** — epic [#23](https://github.com/githonllc/entdomain/issues/23).
+>
+> Read [Known limitations](#known-limitations) before adopting this. Some of them are
+> traps rather than gaps, and one annotation documents a guarantee it does not provide.
+>
+> `go test ./...` is **red on a clean checkout** ([#2](https://github.com/githonllc/entdomain/issues/2)).
+
 ## Features
 
 - **Annotation-driven** — mark field scopes with concise builders (`DefaultField`, `InputOnlyField`, `OutputOnlyField`, etc.)
@@ -71,7 +91,8 @@ go generate ./...
 ### Base Builders
 
 ```go
-entdomain.DefaultField()                      // all scopes: create, update, response
+entdomain.DefaultField()                      // create, update, query, response
+                                              // also marks the field searchable, filterable and sortable
 entdomain.InputOnlyField()                    // create + update only (e.g., password)
 entdomain.OutputOnlyField()                   // response only (e.g., timestamps, state)
 entdomain.CreateOnlyField()                   // create + response (immutable after creation)
@@ -234,6 +255,54 @@ entdomain.WithBaseService(true)              // generate BaseService (default: f
 entdomain.WithBaseHandler(true)              // generate BaseHandler (default: false)
 entdomain.WithEntDomainPackage("custom/path") // override entdomain import path
 ```
+
+## Known limitations
+
+Verified against the source, not inferred from docs. Each links to the issue tracking it.
+
+**An annotation that does not do what its name says.** `Sensitive` reads as a
+data-protection marker. Nothing consults it — the response selector looks only at scopes,
+so a field marked sensitive is emitted into responses like any other. Do not rely on it.
+It is being removed rather than implemented: with a one-dimensional scope model, "never in
+a response" is already expressible by omitting the response scope, so the annotation adds a
+promise without adding a capability ([#3](https://github.com/githonllc/entdomain/issues/3)).
+
+**Roughly twenty exported annotation fields are accepted, stored and ignored.** The API
+accepts them without complaint, so there is no way to tell from the outside which ones do
+anything. Only the scope list and the required map reach a template
+([#17](https://github.com/githonllc/entdomain/issues/17)).
+
+**`ScopeQuery` is granted by most preset builders and consumed by nothing.** It is
+documented as placing a field in a query-parameter struct that no template emits.
+
+**Every preset builder except `InputOnlyField` also marks the field searchable, filterable
+and sortable.** Inert today. It matters for what comes next: sorting by an arbitrary column
+is an unindexed-scan trigger and, combined with paging, an ordering oracle. When these
+markers are implemented, defaulting them to on would make the allow-list meaningless
+([#27](https://github.com/githonllc/entdomain/issues/27)).
+
+**Soft delete silently disables downstream deletion hooks.** The generated delete is
+rewritten as an update, which carries an update operation flag. A consumer hook registered
+for the delete operations therefore never fires at all — this is not two mechanisms
+conflicting, it is one silently replacing the other
+([#12](https://github.com/githonllc/entdomain/issues/12)).
+
+**The generated service supports one identifier type.** `uuid.UUID` is hardcoded in method
+signatures. Non-UUID primary keys are unsupported
+([#29](https://github.com/githonllc/entdomain/issues/29)).
+
+**Hook dispatch fails silently when misused.** Forgetting the `SetSelf` call, or
+misspelling a hook method, compiles cleanly and the hook never runs
+([#16](https://github.com/githonllc/entdomain/issues/16)).
+
+**Package import panics on Windows.** Template lookup joins paths with the OS separator
+while the embedded filesystem always uses forward slashes, so loading fails at package
+initialisation ([#4](https://github.com/githonllc/entdomain/issues/4)).
+
+**Generated code is not compiled by any test in this repository.** Template changes are
+effectively untested here; several field and edge shapes are known to produce output that
+does not build ([#8](https://github.com/githonllc/entdomain/issues/8),
+[#10](https://github.com/githonllc/entdomain/issues/10)).
 
 ## Contributing
 

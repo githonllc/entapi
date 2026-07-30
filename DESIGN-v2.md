@@ -1,6 +1,6 @@
 # entdomain 设计 v2：把生成物从「根」改成「叶」
 
-> **状态：方向已采纳，实现未开始。修订 4。**
+> **状态：方向已采纳，实现未开始。修订 5。**
 >
 > 初稿经过两轮对抗性评审（Fable 5 与 Codex GPT-5.6，各自独立、只读、要求证伪而非认同）。
 > 初稿有 **5 处事实错误**，其中 2 处使整节论证失效。全部列在 §6，本稿已按结论重构。
@@ -12,6 +12,10 @@
 > 修订 4 增补 §8：回答 Q3（生成物生命周期）。它**否决了 Q3 自己提出的 manifest 方案**——
 > 「上次生成了什么」是可以从磁盘读出来的事实，不是需要记住的状态。同一惯例：原判断保留，
 > 不静默删除。
+>
+> 修订 5 增补 §9：裁决五项 owner 决策（分页模型 · 注解与 schema 矛盾 · 错误映射位置 ·
+> 空注解面 · 兼容策略）。过程中**本文的两条承重断言被证伪**——「游标有双格式」和
+> 「ent 错误类型住在框架包里」，两条都记在 §9.0，相关旧表述已就地标注而非删除。
 >
 > 现状描述见 `ARCHITECTURE.md`，缺陷清单见 `QUALITY-REVIEW.md`。本文只谈设计变更。
 > 工作项拆分见 epic #23。
@@ -249,7 +253,12 @@ func (s *UserService) Create(ctx context.Context, req *dto.UserCreateRequest) (*
 - 新增 `Valid*Request` 中间类型；`Apply` 移到该类型上
 - `NewXxxResponse` 返回 `(T, error)`
 
+- 游标相关符号退出公开 API：`Cursor` / `PageInfo` / `EncodeCursor` / `DecodeCursor` / `ListRequest.Cursor`（§9.1）
+- 注解字段删除：`UniqueLookup` / `RangeLookup` / `DomainConfig.EntityName`（§9.4）
+
 两个开关默认关闭，意味着**基类删除对默认配置的消费者不是破坏性的**。仓库内无示例应用、无下游 ent 项目，破坏窗口成本现在最低。
+
+**策略已定，见 §9.5：走 v0，不设弃用窗口，做完打 `v0.2.0` 配迁移说明。** 切 `v1` 的两个触发条件也在那里。
 
 ---
 
@@ -283,12 +292,12 @@ func (s *UserService) Create(ctx context.Context, req *dto.UserCreateRequest) (*
 | 3 | Sensitive fields emitted into responses | **存活** | T2 撤出后回到独立问题：实现 `Sensitive` 或废弃它。**不得连带删除 `ReadOnly`/`WriteOnly`**（§2-2） |
 | 4 | Windows init panic on template lookup | **存活** | `template_loader.go:15`，与设计正交 |
 | 5 | Builders copy shallowly / share state | **存活** | T2 延后后不再是前置条件，但缺陷本身仍在 |
-| 6 | Cursor: zero-limit panic, precision, two formats | **拆分** | 零 limit panic 在 `base_service.tmpl` → 随基类删除**消解**；`cursor.go` 的 int64 精度丢失 + 双格式 → **存活** |
+| 6 | Cursor: zero-limit panic, precision, two formats | **拆分**，后再改写 → 见 §9.1 | 零 limit panic 在 `base_service.tmpl` → 随基类删除**消解**。~~`cursor.go` 的 int64 精度丢失 + 双格式 → 存活~~ **「双格式」这一判断已被 §9.0 W1 否决**（spike 从未实现游标分页）。精度缺陷真实但零调用者；整组游标符号按 §9.1 排除出公开 API |
 | 7 | Remove dead funcs / duplicated template | **存活并扩大** | 新增死代码一处：`dto.tmpl:116` 的 to-many 分支不可达（Q1） |
 | 8 | Codegen fixture harness (generate + compile) | **存活并升级为前置门** | 要重写 DTO 生成就必须先有编译门。**唯一的硬瓶颈** |
 | 9 | Guards not dependency-closed | **改写** | `EntToResponse` 移入 dto 后跨守卫引用消失；`ListResponse` 守卫问题随模板重写解决。验收条件保留 |
 | 10 | Nillable/immutable/named-GoType 不编译 | **改写** | 目标从 `setFieldCallReq` 改为 `Apply` 生成；immutable 的处理依 §1.3 的 `MutableFields` 规则 |
-| 11 | Format failure silent / stale artifacts | **存活并加重** | 输出位置迁移使陈旧产物从卫生问题变成迁移必要条件；需要 manifest（Q3） |
+| 11 | Format failure silent / stale artifacts | **存活并加重** | 输出位置迁移使陈旧产物从卫生问题变成迁移必要条件；~~需要 manifest（Q3）~~ **manifest 已被 §8.0 否决**，改为标记扫描 + 目录所有权，见 §8 |
 | 12 | Soft delete write-only / batch bypasses hooks | **消解** | 不再生成 Delete/DeleteBatch；软删整体移交 #18 |
 | 13 | CRUD methods disagree on error mapping | **改写并缩小** | 无"多个生成方法"需要对齐。改为运行时提供一个 `entdomain.MapError` |
 | 14 | Consistent field presence model | **改写为 T3 主线** | 见 §1.3–1.4。**明确否决 `Optional[T]`**，改用生成的 `UnmarshalJSON` + `Has<X>()` |
@@ -326,7 +335,7 @@ func (s *UserService) Create(ctx context.Context, req *dto.UserCreateRequest) (*
   N2 → #14 #10 #9 并入
 
 第 4 阶段（配套）
-  #13 MapError · #15 运行时拆包 · #11 产物清理 + manifest · #6 cursor 编解码
+  #13 MapError · #15 运行时拆包 · #11 产物清理（标记扫描，非 manifest）· #6 游标符号退出公开 API
   #18 软删 mixin（先答其 Q1）
 
 单独立案
@@ -430,7 +439,9 @@ edge.To("children", X.Type).From("parent").Unique().Field("parent_id").Annotatio
 
 ### 7.5 尚未验证
 
-- **游标分页**：只跑了 offset。`cursor.go` 的精度丢失与双格式（#6）原封未动。
+- **游标分页**：只跑了 offset。`cursor.go` 原封未动。
+  （**后续修正：** 此处初稿写作「精度丢失与双格式（#6）原封未动」，其中「双格式」是错的——
+  spike 根本没有第二套游标编码，见 §9.0 W1。精度缺陷仍属实，处置见 §9.1。）
 - **模板本身**：一行都还没写。这是有意的——目标产物先被证明正确，模板才有东西可对照。
 
 ---
@@ -512,3 +523,153 @@ goimports 失败几乎总是意味着模板产出了**语法上不合法的 Go �
 
 - **entdomain 会删除消费者磁盘上的文件。** 这是新行为。护栏是标记 + 目录所有权 + 拒绝生成，但护栏失效的后果是删掉用户的代码。**这一条必须在 #8 的 harness 里有专门的用例**，包括「目录里有一个手写文件」和「标记被手工改坏」两种。
 - **未验证：** 标记扫描的实际实现、rename 在 Windows 上的行为（`os.Rename` 覆盖已存在目录在 Windows 上会失败，需要先 `RemoveAll`——这与 #4 的 Windows 路径问题是同一类，一起验）。本节全部是设计，一行代码都没写，判定应在 #8 建成后用真实 fixture 做。
+
+---
+
+## 9. 五项 owner 决策（已裁决）
+
+> **状态：已拍板，未实现。** 本节关闭此前散落在 #6 / #10 / #13 / #15 / #17 上的
+> `blocked:owner-decision`。
+>
+> **方法：** 跨模型家族二次意见，裁决规则在看到结果之前声明——两家一致即采纳；
+> 单家有实质意见则由 orchestrator 亲自回源码核实；两家相反则停下问 owner。
+> 实际到场两家：**fable（Anthropic）** 与 **agy（Gemini 3.1 Pro high）**；
+> codex（OpenAI）与 grok（xAI）本轮**额度耗尽**，属真不可用，按顺位规则跳过。
+> D 项两家相反，按预声明规则交 owner 拍板，owner 选 D2。
+
+### 9.0 先记两条被推翻的事实
+
+裁决过程中，**本文档与提交给评审的决策书各有一条承重断言被证伪**。按本文惯例保留而不静默修改。
+
+**W1 —「`cursor.go` 与 spike 各有一套游标编码，双格式二选一」是错的。**
+`git show origin/spike/layer2-fixture:query.go | grep "ursor"` → **零匹配**；
+`git diff --stat main origin/spike/layer2-fixture -- cursor.go` → **空**，两分支该文件逐字节相同。
+spike 的 `ListPage` 走的是 `Limit().Offset()`，压根没实现游标分页。
+**真正的问题不是「两种游标编码选一个」，而是「offset 与 keyset 两套分页模型选一个」。**
+§5 表中 #6 行、§7.5、§9.1 已按此改写。
+
+**W2 —「ent 的错误类型住在框架包里，所以一个独立子包 import 它即可」是错的。**
+`ent.NotFoundError` / `ent.ConstraintError` 由 `entc/gen/template/base.tmpl:142` 与 `:209`
+**生成到每个消费者自己的 ent 包**；框架里的 `sqlgraph.NotFoundError` / `sqlgraph.ConstraintError`
+（`dialect/sql/sqlgraph/graph.go:864` / `:53`）是**另一对类型**。
+所以「独立子包只 import 框架」的方案**不可实现**，不是成本高。详见 9.3。
+
+### 9.1 分页模型：只发 offset，keyset 推迟（原 #6）
+
+**先记事实：`EncodeCursor` / `DecodeCursor` 有零个非测试调用者。** 整套 base64(json)
+keyset 编解码器是死代码。模板里唯一真实的游标分页在 `base_service.tmpl:218-251`，
+用的是裸 `entities[len(entities)-1].ID.String()`，而 #29 要删掉整个 base service。
+`types.go` 的 `ListRequest` 同时声明 `Page`/`Size` 与 `Cursor`，注释承诺
+「When Cursor is set, keyset pagination is used」——**没有任何代码实现这个分支**。
+
+**裁决：#24 只发布 offset 分页**（spike 已验证的 `Page[R]{Data,Total,Page,Size}` 形状），
+并把下列符号**排除在公开 API 之外**：
+
+`Cursor` · `PageInfo` · `EncodeCursor` · `DecodeCursor` · `ListRequest.Cursor`
+
+决定性失败场景：消费者按注释设了 `ListRequest.Cursor`，没有代码分支处理它，于是
+**永远静默拿到 offset 第一页**——一个被冻进契约的错误结果。事后删这个字段是破坏性变更，
+事后加回来是增量变更。**两者不对称，所以往小了发。**
+
+`cursor.go` 的 64-bit 精度缺陷（`ID any` 过 JSON 变 `float64`，而
+`normalizeJSONNumber` 的判据 `f == float64(int64(f))` 对已失真的值同样成立，无法检测）
+**真实存在但当前伤不到任何人**——因为零调用者。它随这些符号一起离开公开 API，
+真要做 keyset 时重新设计，不要复活。
+
+**没有裁决的：** 深翻页的 O(n) 代价、大表上 `OFFSET 100000` 的已知风险、并发写入时跨页
+丢行/重复。这些是 offset 分页的固有代价，**接受，并写进 #24 的文档**。等真实消费者提出
+深翻页需求，再设计 keyset——那时它是加法。
+
+### 9.2 注解与 schema 矛盾：生成期硬失败（原 #10）
+
+**先记事实：`Immutable` 与 `MutableFields` 在本仓 `.go`/`.tmpl` 中零出现。**
+这不是「处理得差」，是**完全没处理**。`updateFields()`（`funcs_fields.go:31-41`）
+只看 `hasDomainScope(field, ScopeUpdate)`。而 ent 自己早就算好了：
+`MutableFields()`（`entc/gen/type.go:553`）跳过 `f.Immutable`，并额外跳过 edge 为 immutable 的字段。
+
+**裁决：检测到矛盾就让 `entc generate` 失败**，错误信息点名 schema、字段、以及互相矛盾的两个事实。
+
+决定性失败场景：静默忽略（把 update 字段与 `MutableFields` 求交集）会让消费者显式写下的
+`ScopeUpdate` 无声消失，字段不出现在 PATCH 请求里，**由 API 客户端在生产环境发现**——
+这比今天那个编译错误严格更糟。「没有逃生阀」正是要点：修复动作是删掉一个注解。
+
+**这是一条通用政策，不是一次修补：注解与 ent schema 矛盾 → 生成失败并同时报出两个事实。**
+后续每个生成切片都按此办理。
+
+### 9.3 错误映射：手写在 runtime，模板只生成一行接线（原 #13 / #15）
+
+由 W2，方案空间比原设想窄。更关键的是一条不对称性：
+
+| 生成的类型 | 形状（`base.tmpl`） | 可判定性 |
+|---|---|---|
+| `NotFoundError` | `struct{ label string }`，无 `Unwrap`，除 `Error()` 外无方法 | **只能靠消费者包里的 `ent.IsNotFound`**；框架侧无通道 |
+| `ConstraintError` | `struct{ msg string; wrap error }` + `Unwrap()` | 可对 `*sqlgraph.ConstraintError` 用 `errors.As` |
+
+**not-found 与 constraint 的可判定性根本不对称**，任何方案都必须分开回答这两类，不能一刀切。
+
+**裁决：`MapError` 手写在 runtime，把判定函数作为参数收进来**，签名形如
+`MapError(err error, isNotFound, isConstraint func(error) bool) error`；
+模板只生成**一行接线**：
+
+```go
+entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+```
+
+已核实 `base.tmpl:152` 与 `:225` 确实生成了 `IsNotFound` 与 `IsConstraintError` 这两个函数，
+所以这一行是可写的，且**模板里零逻辑**——满足「生成 schema 决定的，手写只是重复的」。
+
+映射范围仍按 #13：not-found → `ErrNotFound`，constraint → `ErrAlreadyExists`，**其余不猜**。
+约束错误不总是唯一性冲突；再往下猜，就会在真实原因是外键时告诉用户「已存在」。
+
+由此 **#24「runtime 不 import 任何 ent 包」的验收标准得以保持**：runtime 收的是
+两个 `func(error) bool`，它不认识 ent。
+
+### 9.4 空注解面：删三个，留 `ScopeQuery`（原 #17）
+
+| 字段 | 现状（本轮 grep 核实） | 处置 |
+|---|---|---|
+| `UniqueLookup` / `RangeLookup` | `uniqueLookupFields`/`rangeLookupFields` 注册在 `funcs.go:30-31`，但**无任何模板引用** | **删除**。与 #27 从 `$field.Ops` 导出的运算符表重复，是可推导之物的手写副本 |
+| `DomainConfig.EntityName` | `annotations.go:139-140` + 测试，**零个非测试读者** | **删除**。无后继 |
+| `ScopeQuery` | 唯一读者 `queryFields()`（`funcs_fields.go:64`）**本身未注册进 `templateFuncs()`**，模板零引用 → 当前无可达路径 | **保留** |
+
+顺带记录一个更大的发现：`queryFields`、`searchableFields`、`sortableFields`
+**三个函数都不在 `funcs.go` 的注册表里**，所以 `Searchable` / `Sortable` 同样没有可达消费者。
+这扩大了 #7 与 #17 的范围，**不改变本决策**。
+
+保留 `ScopeQuery` 的理由是一个成本事实而非偏好：它不只是被读，还被
+`annotations.go:41`（`AllFieldScopes`）、`:197`（`OutputOnlyField`）、`:209`（`CreateOnlyField`）
+**三处写入**。删它要改 preset，#27 再加回来就是改两次。而 #27（生成过滤结构与谓词）
+就在同一个 arc 里，是它的真实消费者。
+
+**两家评审在此相反**（一家主张三个全删，理由是 `Sensitive` 的先例应一视同仁），
+按预声明的裁决规则交 owner 拍板，**owner 选择保留**。附加的硬约束：
+
+- `ScopeQuery` 在 #27 落地前**不得进入任何 tagged release**
+- **#27 的验收标准必须包含「`ScopeQuery` 有可达消费者」**
+
+「声明了却静默忽略」的担心由 §9.5 消化：v0 阶段没有对外承诺。
+
+### 9.5 兼容策略：v0，自由破坏，不设弃用窗口
+
+`git tag` → **0**。从未发布过任何版本，唯一已知消费者是同一 owner 的 monorepo。
+
+**裁决：走 Go 自己的约定，`v0.x` 不承诺任何东西。** 本 arc 的删除（`Sensitive`、基类与
+handler #29、三个注解字段 #17、产物布局与输出目录 #11、9.1 的游标符号）**不设弃用窗口**，
+做完后打 `v0.2.0`，配一份迁移说明。
+
+决定性失败场景：保留 `// Deprecated:` 的 no-op 注解，等于把「注解声明了却什么都不做」这个
+**正在被修复的缺陷**又留半年，而新代码会照着复制它。生成期诊断器同样是一段只服务于
+owner 自己 monorepo、且必须择日删除的代码——写迁移说明更便宜。
+
+**切 `v1` 的触发条件**（两条都满足才切，因为它们是事后改不动的契约）：
+
+1. monorepo 消费者在新布局 / 新 API 上重新生成并全绿（#11 / #27 / #29 完成）
+2. 分页模型定稿——即 9.1 的排除清单执行完毕，且若届时已做 keyset，其线格式已冻结
+
+### 9.6 本节没有裁决的
+
+- **谁来写迁移说明、写到哪里**（README 的 Known limitations？单独 MIGRATION.md？）——留给 #17 / #23 收口时定。
+- **9.1 的排除清单是「从公开 API 移除」还是「整个文件删除」**：`cursor.go` 若整文件删除，
+  `cursor_test.go` 一并删；若只是转为 internal，则要有 internal 包。**实现时定，#24 的第一步。**
+- **9.2 的硬失败如何与 #8 的 harness 协作**：harness 需要一个「预期生成失败」的用例形态，
+  这在 #8 当前设计里没有。

@@ -211,14 +211,72 @@ const (
 func (r ListRequest) Limit() int   // requested size, clamped to MaxPageSize; never <= 0
 func (r ListRequest) Offset() int  // (Page-1) * Limit(); never negative
 func (r ListRequest) SortKey(allow []string, def string) (key string, desc bool, err error)
+func (r *ListRequest) Validate() error
 ```
 
-`MaxPageSize` is the single home of the ceiling: `Limit()` clamps to it and
-`Validate()` rejects above it. The `validate` struct tag on `ListRequest.Size`
-deliberately carries **no** `max=` clause — a tag cannot reference a constant, so
-a number written there can only drift. It previously said `max=100` while
-`MaxPageSize` said `1000`, and a third-party tag validator disagreed with
-`Validate()` about which sizes were legal.
+The zero value of `ListRequest` is usable as-is. **There is no `SetDefaults()`** —
+a defaulting call nothing forces you to make is a call you can forget, and
+forgetting it was how a zero page size reached a query. Read the effective
+values through `Limit()` and `Offset()`, never off the fields; those two are
+what `ListPage` calls.
+
+`MaxPageSize` is the single home of the ceiling, with a single reaction to
+crossing it: **`Limit()` clamps**. `Validate()` says nothing about `Size` or
+`Page`, because `Limit()`/`Offset()` sit on the only path into `ListPage` and so
+apply whether or not anyone calls `Validate()` — a ceiling that fires only when
+you opt in is advice, not a bound. `Page.Size` reports the size actually used,
+so clamping is visible; if an oversized request should be a `400` in your API,
+compare against `MaxPageSize` yourself.
+
+The `validate` struct tag on `ListRequest.Size` deliberately carries **no**
+`max=` clause — a tag cannot reference a constant, so a number written there can
+only drift. It previously said `max=100` while `MaxPageSize` said `1000`.
+
+`Validate()` is left with what nothing downstream repairs: `Order` must be
+`asc`, `desc` or empty, since `SortKey()` reads an unrecognised value as
+ascending and a typo would silently reverse the results. Its errors wrap
+`ErrValidation`.
+
+### Error mapping
+
+`ErrorMapper` turns a persistence layer's errors into this package's sentinels.
+It takes predicates as function values, so the runtime still imports no ent
+package. The generated wiring is one line:
+
+```go
+var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+
+// ...
+if err != nil {
+    return nil, mapper.MapError(err)   // missing row -> ErrNotFound
+}
+```
+
+**Uniqueness needs its own predicate**, and this is not a convenience —
+`ent.IsConstraintError` returns true for a duplicate key *and* a foreign-key
+violation alike:
+
+```
+UNIQUE constraint failed: tags.name (2067)
+FOREIGN KEY constraint failed (787)
+```
+
+Mapping it straight to `ErrAlreadyExists` therefore reports a foreign-key
+violation as a duplicate. The distinction lives in the driver error wrapped by
+`*ent.ConstraintError` and is dialect-specific, so the library does not guess
+it — supply it, or get no already-exists classification at all:
+
+```go
+var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError).
+    WithUniqueViolation(func(err error) bool {              // SQLite
+        return strings.Contains(err.Error(), "UNIQUE constraint failed")
+    })
+```
+
+Anything the mapper cannot classify — including a constraint violation of an
+unidentified kind — is returned unchanged: unclassified, never swallowed, and
+never labelled with a sentinel that was not established. Both the sentinel and
+the original error stay in the chain, so `errors.Is` finds either.
 
 `SortKey` checks the requested field against an allow-list. That list is the
 whole point: an unchecked sort field is an injection site, an unindexed-scan

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"text/template/parse"
+
+	"entgo.io/ent/entc/gen"
 )
 
 // templateBuiltins are the functions text/template supplies on its own.
@@ -127,8 +129,12 @@ func TestTemplateInvocationsAreRegistered(t *testing.T) {
 		t.Fatal("no embedded templates were scanned; this test would pass vacuously")
 	}
 
-	// Registered-but-unused entries are reported, not failed: deleting them is
-	// tracked separately and is out of scope for this test.
+	// The reverse direction: a registered entry no template invokes is dead
+	// weight that a reader cannot distinguish from live code. Worse, several
+	// such entries once emitted code for a repository-shaped API that no longer
+	// exists, so reconnecting one would have produced wrong queries rather than
+	// a compile error. Registration is therefore the claim "a template calls
+	// this", and this assertion is what makes the claim true.
 	var unused []string
 	for name := range templateFuncs() {
 		if !used[name] {
@@ -137,6 +143,28 @@ func TestTemplateInvocationsAreRegistered(t *testing.T) {
 	}
 	sort.Strings(unused)
 	if len(unused) > 0 {
-		t.Logf("templateFuncs() entries invoked by no template (%d): %s", len(unused), strings.Join(unused, ", "))
+		t.Errorf("templateFuncs() registers %d entries invoked by no template: %s\ndelete them from templateFuncs() (funcs.go), or add the template call that needs them", len(unused), strings.Join(unused, ", "))
+	}
+}
+
+// TestTemplateFuncsDoNotShadowEntBuiltins pins the second half of the registry
+// contract. templateFuncMap() copies gen.Funcs in first and then overlays
+// templateFuncs(), so a same-named entry silently replaces an Ent builtin for
+// every template — including any Ent-authored template a consumer renders with
+// the same map. The override is invisible at the call site: the template still
+// reads {{ lower $.Name }}, only the implementation changes.
+//
+// Rather than document a hazard, the registry keeps the two namespaces
+// disjoint. Anything Ent already supplies is used from Ent.
+func TestTemplateFuncsDoNotShadowEntBuiltins(t *testing.T) {
+	var shadowed []string
+	for name := range templateFuncs() {
+		if _, ok := gen.Funcs[name]; ok {
+			shadowed = append(shadowed, name)
+		}
+	}
+	sort.Strings(shadowed)
+	if len(shadowed) > 0 {
+		t.Errorf("templateFuncs() shadows %d Ent builtin(s): %s\nremove the entry and let gen.Funcs supply it, or rename this package's function", len(shadowed), strings.Join(shadowed, ", "))
 	}
 }

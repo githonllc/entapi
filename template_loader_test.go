@@ -3,6 +3,7 @@ package entdomain
 import (
 	"go/parser"
 	"go/token"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -44,6 +45,39 @@ func TestEmbeddedTemplatesLoadBySlashPath(t *testing.T) {
 		if content == "" {
 			t.Errorf("loadTemplate(%q) returned empty content", base)
 		}
+	}
+}
+
+// TestEveryEmbeddedTemplateIsLoaded asserts the converse of the walk above:
+// being reachable through loadTemplate is not enough, template_index.go must
+// actually bind the template to a package-level var. An embedded template that
+// nothing loads looks live to a reader and to a grep, but edits to it silently
+// do nothing — which is exactly how templates/model.tmpl came to be a stale
+// byte-for-byte copy of templates/dto.tmpl.
+func TestEveryEmbeddedTemplateIsLoaded(t *testing.T) {
+	src, err := os.ReadFile("template_index.go")
+	if err != nil {
+		t.Fatalf("reading template_index.go failed: %v", err)
+	}
+
+	entries, err := templateFS.ReadDir("templates")
+	if err != nil {
+		t.Fatalf("ReadDir(\"templates\") failed: %v", err)
+	}
+
+	checked := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tmpl") {
+			continue
+		}
+		checked++
+		base := strings.TrimSuffix(entry.Name(), ".tmpl")
+		if !strings.Contains(string(src), `mustLoadTemplate("`+base+`")`) {
+			t.Errorf("templates/%s is embedded but template_index.go never loads it; load it or delete the file", entry.Name())
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no embedded templates were checked; this test would pass vacuously")
 	}
 }
 

@@ -219,13 +219,39 @@ func (r *ListRequest) Validate() error
 所以夹取是可见的；如果在你的 API 里超限就该是 `400`，自己拿它和
 `MaxPageSize` 比即可。
 
-`ListRequest.Size` 的 `validate` tag 里**故意不写** `max=` 子句——tag 引用
-不了常量，写在那里的数字只会漂移。它此前写的是 `max=100`，而 `MaxPageSize`
-是 `1000`。
+`Size`、`Page`、`Order` 的 `validate` tag 里**故意一条规则都不写**。tag 既
+引用不了常量，也表达不了大小写不敏感的比较，所以写在那里的每条规则都是第二份
+拼写，只会与真正执行它的代码漂开——`max=100` 早就与 `MaxPageSize`=1000 漂开
+了，`oneof=asc desc` 也早就与 `SortKey()` 的大小写不敏感比较漂开了。
+`Validate()`、`Limit()`、`Offset()` 才是这些规则的落脚点。
 
-`Validate()` 只剩下游修不了的那些：`Order` 必须是 `asc`、`desc` 或空，因为
-`SortKey()` 会把无法识别的值读成升序，一个拼写错误会静默地把结果倒过来。
-它返回的错误包装了 `ErrValidation`。
+`Validate()` 只剩下游修不了的那些：`Order` 必须是 `asc`、`desc` 或空，且
+**按大小写不敏感比较**。`SortKey()` 用 `EqualFold` 读 `Order`，又位于通往
+`ListPage` 的唯一路径上，所以方向其实是它定的——`Validate()` 因此恰好拒绝
+`SortKey()` 不认的那些，不多不少。`"DESC"` 会按降序执行，所以它通过校验；
+`"descc"` 被拒绝，因为 `SortKey()` 会把它静默读成升序，把结果倒过来。
+返回的错误包装了 `ErrValidation`。
+
+### 从 `SetDefaults()` 迁移
+
+`ListRequest.SetDefaults()` **已删除**。`ListRequest` 的零值现在开箱可用。
+
+```go
+// 之前
+req.SetDefaults()
+if err := req.Validate(); err != nil { /* ... */ }
+
+// 之后——没有需要调的东西
+if err := req.Validate(); err != nil { /* ... */ }
+```
+
+默认值填充和夹取由 `Limit()` / `Offset()` 自己完成，就在通往 `ListPage` 的
+唯一路径上。生效值请通过它们读取，不要直接读字段：`req.Size` 可能仍是 `0`，
+但 `req.Limit()` 永远不是 `0`。如果你依赖 `SetDefaults()` 就地改写请求再序列化
+回去，请显式写 `req.Size = req.Limit()`。
+
+`Validate()` 也不再拒绝超范围的 `Size` / `Page`——它们是被夹取而不是被拒绝。
+如果你的 API 此前对 `size=5000` 返回 `400`，请自己拿它和 `MaxPageSize` 比较。
 
 ### 错误映射
 

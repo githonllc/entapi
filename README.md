@@ -228,14 +228,44 @@ you opt in is advice, not a bound. `Page.Size` reports the size actually used,
 so clamping is visible; if an oversized request should be a `400` in your API,
 compare against `MaxPageSize` yourself.
 
-The `validate` struct tag on `ListRequest.Size` deliberately carries **no**
-`max=` clause — a tag cannot reference a constant, so a number written there can
-only drift. It previously said `max=100` while `MaxPageSize` said `1000`.
+The `validate` struct tags on `Size`, `Page` and `Order` deliberately carry **no
+rules at all**. A tag cannot reference a constant and cannot express a
+case-insensitive comparison, so every rule spelled there is a second spelling
+that can only drift from the code enforcing it — `max=100` had already drifted
+from `MaxPageSize`=1000, and `oneof=asc desc` from `SortKey()`'s case-insensitive
+comparison. `Validate()`, `Limit()` and `Offset()` are the homes.
 
 `Validate()` is left with what nothing downstream repairs: `Order` must be
-`asc`, `desc` or empty, since `SortKey()` reads an unrecognised value as
-ascending and a typo would silently reverse the results. Its errors wrap
-`ErrValidation`.
+`asc`, `desc` or empty, **compared case-insensitively**. `SortKey()` reads
+`Order` with `EqualFold` and sits on the only path into `ListPage`, so it is
+what actually decides the direction — `Validate()` therefore rejects exactly
+what `SortKey()` will not honour and no more. `"DESC"` sorts descending and so
+validates; `"descc"` is rejected, because `SortKey()` would quietly read it as
+ascending and reverse your results. Errors wrap `ErrValidation`.
+
+### Migrating from `SetDefaults()`
+
+`ListRequest.SetDefaults()` **has been removed.** A zero-value `ListRequest` is
+now usable as-is.
+
+```go
+// before
+req.SetDefaults()
+if err := req.Validate(); err != nil { /* ... */ }
+
+// after — nothing to call
+if err := req.Validate(); err != nil { /* ... */ }
+```
+
+`Limit()` and `Offset()` do the defaulting and clamping themselves, on the only
+path into `ListPage`. Read effective values through them rather than off the
+fields; `req.Size` may still be `0`, but `req.Limit()` is never `0`. If you
+relied on `SetDefaults()` mutating the request before serialising it back, set
+`req.Size = req.Limit()` explicitly.
+
+`Validate()` no longer rejects out-of-range `Size` or `Page` either — those are
+clamped, not refused. If your API returned `400` for `size=5000`, compare
+against `MaxPageSize` yourself.
 
 ### Error mapping
 

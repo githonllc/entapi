@@ -52,3 +52,26 @@ func TestGeneratedErrorPredicatesResolveUnambiguously(t *testing.T) {
 		}
 	}
 }
+
+// TestDTOTemplateResolvesIsNotFoundToEnt extends the same rule to dto.tmpl,
+// which acquired an IsNotFound call with the response constructors: a to-one
+// edge that was loaded but matched no row comes back from <Edge>OrErr() as
+// Ent's *NotFoundError, and telling that apart from a not-loaded edge is the
+// whole contract. entdomain.IsNotFound tests this package's sentinels instead,
+// so qualifying the call would compile and silently route every loaded-but-
+// absent edge into the error branch.
+func TestDTOTemplateResolvesIsNotFoundToEnt(t *testing.T) {
+	src, err := templateFS.ReadFile("templates/dto.tmpl")
+	if err != nil {
+		t.Fatalf("reading embedded dto.tmpl failed: %v", err)
+	}
+	text := templateComment.ReplaceAllString(string(src), "")
+
+	if !strings.Contains(text, "IsNotFound(err)") {
+		t.Error("dto.tmpl no longer calls unqualified IsNotFound(err); if the edge contract changed, update this test")
+	}
+	qualified := regexp.MustCompile(`[\w.]+\.IsNotFound\b`)
+	if m := qualified.FindAllString(text, -1); len(m) > 0 {
+		t.Errorf("dto.tmpl qualifies IsNotFound as %v; it must stay unqualified so it binds to Ent's generated predicate in package ent", m)
+	}
+}

@@ -20,9 +20,13 @@ import (
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
 //
-// 2. Response - HTTP-layer response model, restricted by scope.
+// 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
-//    - Includes nested edge entities when FK field has ScopeResponse.
+//    - Includes a nested edge when the EDGE carries an InResponse annotation.
+//      Exposing the foreign-key scalar and exposing the nested object are
+//      independent decisions; neither is derived from the other.
+//    - A nested edge is rendered as the target's Summary, which carries no
+//      edges of its own, so expansion terminates one level down.
 //    - Used by the Handler layer to return HTTP responses.
 //
 // Key Design Principles:
@@ -59,12 +63,69 @@ func (r *EnumWidgetUpdateRequest) Validate() error {
 	return nil
 }
 
-// EnumWidgetResponse represents the response for EnumWidget
+// EnumWidgetSummary is the shape EnumWidget takes on another entity's response.
+//
+// It carries the same scalar fields as EnumWidgetResponse and no edges at all.
+// That is what bounds expansion: NewEnumWidgetResponse calls summary
+// constructors, and a summary constructor calls nothing, so there is no second
+// level for a cycle to close through and no runtime depth counter is needed.
+//
+// The cost is real rather than hidden: a three-level tree comes back one level
+// deep, and a deeper one needs another round trip per level.
+type EnumWidgetSummary struct {
+	// ID field is always included in summaries
+	ID     uuid.UUID         `json:"id"`
+	Status enumwidget.Status `json:"status"`
+	Tier   *enumwidget.Tier  `json:"tier,omitempty"`
+}
+
+// NewEnumWidgetSummary converts an entity to its summary DTO. It cannot fail:
+// a summary reads no edges.
+func NewEnumWidgetSummary(e *EnumWidget) *EnumWidgetSummary {
+	if e == nil {
+		return nil
+	}
+	return &EnumWidgetSummary{
+		ID:     e.ID,
+		Status: e.Status,
+		Tier:   entdomain.PtrOrNil(e.Tier),
+	}
+}
+
+// EnumWidgetResponse represents the response for EnumWidget.
+//
+// It is emitted unconditionally: an entity whose every annotated field is
+// InputOnly still has a meaningful response carrying its ID, and
+// EnumWidgetListResponse below refers to this type either way.
 type EnumWidgetResponse struct {
 	// ID field is always included in responses
 	ID     uuid.UUID         `json:"id"`
 	Status enumwidget.Status `json:"status"`
 	Tier   *enumwidget.Tier  `json:"tier,omitempty"`
+}
+
+// NewEnumWidgetResponse converts an entity to its response DTO.
+//
+// This entity declares no response edges, so the error is always nil. The
+// signature is kept uniform so callers do not need two shapes.
+func NewEnumWidgetResponse(e *EnumWidget) (*EnumWidgetResponse, error) {
+	if e == nil {
+		return nil, nil
+	}
+	r := &EnumWidgetResponse{
+		ID:     e.ID,
+		Status: e.Status,
+		Tier:   entdomain.PtrOrNil(e.Tier),
+	}
+	return r, nil
+}
+
+// EnumWidgetQueryWithResponseEdges applies the eager-load plan for EnumWidgetResponse.
+//
+// The plan is generated from the response type's own edge set, so a caller
+// cannot forget an edge.
+func EnumWidgetQueryWithResponseEdges(q *EnumWidgetQuery) *EnumWidgetQuery {
+	return q
 }
 
 // EnumWidgetListResponse represents the list response for EnumWidget

@@ -243,22 +243,16 @@ func ApplyPostUpdateRequest(builder *PostUpdateOne, req *PostUpdateRequest) {
 
 // PostEntToResponse converts an ent Post entity directly to a Response DTO.
 // Exported for use in service-level queries that bypass the base service.
+//
+// PostResponse declares edges, and edge population goes through
+// <Edge>OrErr(), which reports a not-loaded edge as an error. This signature
+// predates that contract and cannot carry one, so a not-loaded edge yields nil
+// here rather than a response whose edges are silently missing. Call
+// NewPostResponse directly to see the error.
 func PostEntToResponse(entity *Post) *PostResponse {
-	if entity == nil {
+	resp, err := NewPostResponse(entity)
+	if err != nil {
 		return nil
-	}
-
-	resp := &PostResponse{
-		ID:         entity.ID,
-		Title:      entity.Title,
-		AuthorID:   entity.AuthorID,
-		ReviewerID: entdomain.PtrOrNil(entity.ReviewerID),
-	}
-	if entity.Edges.Author != nil {
-		resp.Author = UserEntToResponse(entity.Edges.Author)
-	}
-	if entity.Edges.Reviewer != nil {
-		resp.Reviewer = UserEntToResponse(entity.Edges.Reviewer)
 	}
 	return resp
 }

@@ -1,6 +1,8 @@
 package entdomain
 
 import (
+	"fmt"
+
 	"entgo.io/ent/entc/gen"
 )
 
@@ -54,28 +56,29 @@ func responseFields(node *gen.Type) []*gen.Field {
 	return fields
 }
 
-// responseEdges returns edges suitable for inclusion in HTTP responses.
-// An edge qualifies when: (1) it has a FK field on this entity,
-// (2) that FK field has ScopeResponse, and (3) the target type is a domain entity.
-func responseEdges(node *gen.Type) []*gen.Edge {
-	var edges []*gen.Edge
-	for _, edge := range node.Edges {
-		if edgeQualifiesForResponse(edge.Field(), edge.Type) {
-			edges = append(edges, edge)
+// responseEdges returns the edges a response type declares, in schema order.
+//
+// Selection is by the edge's own DomainEdge annotation (responseEdgeSet), never
+// by where the foreign key happens to sit. The rule this replaced required
+// edge.Field() != nil, which holds only when the column is on this entity, so a
+// to-many edge was permanently unreachable and "expose author_id" and "expose
+// the nested author" were forced to be one switch.
+//
+// It returns an error instead of dropping an edge whose target carries no
+// DomainField annotation at all. Such a target is skipped wholesale by the
+// generator (extension.go), so no <Target>Summary would exist for the response
+// to name: dropping the edge would silently narrow the response the schema
+// asked for, and emitting the reference would fail at the consumer's compiler
+// with an undefined symbol rather than here with a schema-level explanation.
+func responseEdges(node *gen.Type) ([]*gen.Edge, error) {
+	edges := responseEdgeSet(node)
+	for _, edge := range edges {
+		if len(domainFields(edge.Type)) == 0 {
+			return nil, fmt.Errorf(
+				"edge %s.%s is annotated for the response, but %s has no entdomain field annotation, "+
+					"so no %sSummary is generated: annotate a field on %s, or drop the edge annotation",
+				node.Name, edge.Name, edge.Type.Name, edge.Type.Name, edge.Type.Name)
 		}
 	}
-	return edges
-}
-
-// edgeQualifiesForResponse checks if an edge with the given FK field and target
-// type qualifies for inclusion in response structs. Separated from responseEdges
-// for testability, since edge.Field() depends on unexported ent internals.
-func edgeQualifiesForResponse(fkField *gen.Field, targetType *gen.Type) bool {
-	if fkField == nil {
-		return false
-	}
-	if !hasDomainScope(fkField, ScopeResponse) {
-		return false
-	}
-	return len(domainFields(targetType)) > 0
+	return edges, nil
 }

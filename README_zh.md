@@ -406,9 +406,43 @@ graph TD
 
 | 文件 | 内容 |
 |------|------|
-| `{entity}_dto.go` | `CreateRequest`、`UpdateRequest`、`Response`、`ListResponse`、`Validate()` 方法 |
+| `{entity}_dto.go` | `CreateRequest`、`UpdateRequest`、`Validate()` 方法，以及下述响应部分 |
 | `{entity}_base_service.go` | 带 CRUD、Before/After 钩子、`Apply*Request` 构建器、`EntToResponse` 的 `BaseService` |
 | `{entity}_base_handler.go` | 带 `ToResponse`、`ToResponseList`、`PartialUpdate` 的 `BaseHandler` |
+
+### 响应类型、摘要类型与预加载计划
+
+`{entity}_dto.go` 的响应部分由这几个声明构成：
+
+| 声明 | 作用 |
+|---|---|
+| `{Entity}Response` | 完整响应：带 response 作用域的标量字段，外加每条标注了 `InResponse()` 的边 |
+| `{Entity}Summary` | 相同的标量字段，且**不含任何边**；边字段承载的就是这个类型 |
+| `New{Entity}Response(e) (*{Entity}Response, error)` | 转换函数；边的状态一律通过 `<Edge>OrErr()` 读取 |
+| `New{Entity}Summary(e) *{Entity}Summary` | 转换函数；不会失败，因为摘要不读任何边 |
+| `{Entity}QueryWithResponseEdges(q) q` | 预加载计划，由响应类型自己的边集合生成 |
+
+由此得到三条性质，每一条都在 `internal/fixtures/edges` 中有断言：
+
+- **已加载但无关联行 = 显式 `null`，不是缺字段。** 边字段一律不带 `omitempty`。
+  `loadedTypes` 未导出，nil 指针区分不了「没加载」和「加载了但不存在」；这里把两者
+  分开，客户端才能区分「没有关联行」和「没人去查」。
+- **未加载的边返回 error。** `New{Entity}Response` 把它返回出来，而不是发出一个读起来
+  像「这篇文章没有作者」的响应。这个 error 代价很低：预加载计划由同一个边集合生成，
+  生成的接线里不可能漏掉某条边，它只会抓到手写查询。注意 `client.{Entity}.Get` 不加载
+  任何边，因此无法服务于声明了边的响应类型——要走 `Query` 并套上该计划。
+- **展开深度由类型系统封死，而非运行时计数器。** 摘要类型没有边字段，所以
+  `New{Entity}Response` 调用摘要构造函数，而摘要构造函数不再调用任何东西，没有第二层
+  供环闭合。代价明说而不掩盖：三层树只回来一层，更深的树每层需要一次额外往返。
+
+```go
+q := ent.PostQueryWithResponseEdges(client.Post.Query())
+p, err := q.Where(post.IDEQ(id)).Only(ctx)
+if err != nil {
+    return err
+}
+resp, err := ent.NewPostResponse(p) // 仅当某条边未加载时 err 才非 nil
+```
 
 ### BaseService 模式
 

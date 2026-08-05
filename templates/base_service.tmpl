@@ -308,8 +308,25 @@ func Apply{{ $.Name }}UpdateRequest(builder *{{ $.Name }}UpdateOne, req *{{ $.Na
 // Entity → Response conversion
 // ---------------------------------------------------------------------------
 
+{{- $responseEdges := responseEdges $ }}
+
 // {{ $.Name }}EntToResponse converts an ent {{ $.Name }} entity directly to a Response DTO.
 // Exported for use in service-level queries that bypass the base service.
+{{- if $responseEdges }}
+//
+// {{ $.Name }}Response declares edges, and edge population goes through
+// <Edge>OrErr(), which reports a not-loaded edge as an error. This signature
+// predates that contract and cannot carry one, so a not-loaded edge yields nil
+// here rather than a response whose edges are silently missing. Call
+// New{{ $.Name }}Response directly to see the error.
+func {{ $.Name }}EntToResponse(entity *{{ $.Name }}) *{{ $.Name }}Response {
+	resp, err := New{{ $.Name }}Response(entity)
+	if err != nil {
+		return nil
+	}
+	return resp
+}
+{{- else }}
 func {{ $.Name }}EntToResponse(entity *{{ $.Name }}) *{{ $.Name }}Response {
 	if entity == nil {
 		return nil
@@ -331,21 +348,8 @@ func {{ $.Name }}EntToResponse(entity *{{ $.Name }}) *{{ $.Name }}Response {
 {{- end }}
 {{- end }}
 	}
-{{- range $edge := responseEdges $ }}
-{{- if $edge.Unique }}
-	if entity.Edges.{{ pascal $edge.Name }} != nil {
-		resp.{{ pascal $edge.Name }} = {{ $edge.Type.Name }}EntToResponse(entity.Edges.{{ pascal $edge.Name }})
-	}
-{{- else }}
-	if len(entity.Edges.{{ pascal $edge.Name }}) > 0 {
-		resp.{{ pascal $edge.Name }} = make([]*{{ $edge.Type.Name }}Response, len(entity.Edges.{{ pascal $edge.Name }}))
-		for i, e := range entity.Edges.{{ pascal $edge.Name }} {
-			resp.{{ pascal $edge.Name }}[i] = {{ $edge.Type.Name }}EntToResponse(e)
-		}
-	}
-{{- end }}
-{{- end }}
 	return resp
 }
+{{- end }}
 
 {{- end }}

@@ -233,14 +233,16 @@ func ApplyUserUpdateRequest(builder *UserUpdateOne, req *UserUpdateRequest) {
 
 // UserEntToResponse converts an ent User entity directly to a Response DTO.
 // Exported for use in service-level queries that bypass the base service.
+//
+// UserResponse declares edges, and edge population goes through
+// <Edge>OrErr(), which reports a not-loaded edge as an error. This signature
+// predates that contract and cannot carry one, so a not-loaded edge yields nil
+// here rather than a response whose edges are silently missing. Call
+// NewUserResponse directly to see the error.
 func UserEntToResponse(entity *User) *UserResponse {
-	if entity == nil {
+	resp, err := NewUserResponse(entity)
+	if err != nil {
 		return nil
-	}
-
-	resp := &UserResponse{
-		ID:   entity.ID,
-		Name: entity.Name,
 	}
 	return resp
 }

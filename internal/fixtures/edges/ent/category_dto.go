@@ -19,9 +19,13 @@ import (
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
 //
-// 2. Response - HTTP-layer response model, restricted by scope.
+// 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
-//    - Includes nested edge entities when FK field has ScopeResponse.
+//    - Includes a nested edge when the EDGE carries an InResponse annotation.
+//      Exposing the foreign-key scalar and exposing the nested object are
+//      independent decisions; neither is derived from the other.
+//    - A nested edge is rendered as the target's Summary, which carries no
+//      edges of its own, so expansion terminates one level down.
 //    - Used by the Handler layer to return HTTP responses.
 //
 // Key Design Principles:
@@ -58,13 +62,105 @@ func (r *CategoryUpdateRequest) Validate() error {
 	return nil
 }
 
-// CategoryResponse represents the response for Category
+// CategorySummary is the shape Category takes on another entity's response.
+//
+// It carries the same scalar fields as CategoryResponse and no edges at all.
+// That is what bounds expansion: NewCategoryResponse calls summary
+// constructors, and a summary constructor calls nothing, so there is no second
+// level for a cycle to close through and no runtime depth counter is needed.
+//
+// The cost is real rather than hidden: a three-level tree comes back one level
+// deep, and a deeper one needs another round trip per level.
+type CategorySummary struct {
+	// ID field is always included in summaries
+	ID       uuid.UUID  `json:"id"`
+	Name     string     `json:"name"`
+	ParentID *uuid.UUID `json:"parent_id,omitempty"`
+}
+
+// NewCategorySummary converts an entity to its summary DTO. It cannot fail:
+// a summary reads no edges.
+func NewCategorySummary(e *Category) *CategorySummary {
+	if e == nil {
+		return nil
+	}
+	return &CategorySummary{
+		ID:       e.ID,
+		Name:     e.Name,
+		ParentID: entdomain.PtrOrNil(e.ParentID),
+	}
+}
+
+// CategoryResponse represents the response for Category.
+//
+// It is emitted unconditionally: an entity whose every annotated field is
+// InputOnly still has a meaningful response carrying its ID, and
+// CategoryListResponse below refers to this type either way.
+//
+// No edge field is omitempty. A loaded edge with no related row has to reach
+// the client as an explicit null: omitting the key would make it
+// indistinguishable from an edge nobody asked to load.
 type CategoryResponse struct {
 	// ID field is always included in responses
-	ID       uuid.UUID         `json:"id"`
-	Name     string            `json:"name"`
-	ParentID *uuid.UUID        `json:"parent_id,omitempty"`
-	Parent   *CategoryResponse `json:"parent,omitempty"`
+	ID       uuid.UUID          `json:"id"`
+	Name     string             `json:"name"`
+	ParentID *uuid.UUID         `json:"parent_id,omitempty"`
+	Children []*CategorySummary `json:"children"`
+	Parent   *CategorySummary   `json:"parent"`
+}
+
+// NewCategoryResponse converts an entity to its response DTO.
+//
+// Edge state is read through <Edge>OrErr(), never through a nil check: the flag
+// separating "not loaded" from "loaded and absent" is unexported, so a nil
+// pointer cannot tell them apart. Loaded-and-absent becomes an explicit null; a
+// not-loaded edge is returned as an error rather than shipping a response that
+// reads as "this category has none".
+//
+// That error is cheap because CategoryQueryWithResponseEdges below is
+// generated from this type's own edge set, so generated wiring cannot forget an
+// edge and the error only ever catches a hand-rolled query.
+func NewCategoryResponse(e *Category) (*CategoryResponse, error) {
+	if e == nil {
+		return nil, nil
+	}
+	r := &CategoryResponse{
+		ID:       e.ID,
+		Name:     e.Name,
+		ParentID: entdomain.PtrOrNil(e.ParentID),
+	}
+	// A to-many edge has no not-found state: loaded-but-empty is an empty slice,
+	// so any error here means the edge was not loaded.
+	childrenEdge, err := e.Edges.ChildrenOrErr()
+	if err != nil {
+		return nil, err
+	}
+	r.Children = make([]*CategorySummary, 0, len(childrenEdge))
+	for _, v := range childrenEdge {
+		r.Children = append(r.Children, NewCategorySummary(v))
+	}
+	parentEdge, err := e.Edges.ParentOrErr()
+	switch {
+	case err == nil:
+		r.Parent = NewCategorySummary(parentEdge)
+	case IsNotFound(err):
+		// Loaded, and there is no related row. A real state; report it as null.
+		r.Parent = nil
+	default:
+		return nil, err
+	}
+	return r, nil
+}
+
+// CategoryQueryWithResponseEdges applies the eager-load plan for CategoryResponse.
+//
+// The plan is generated from the response type's own edge set, so a caller
+// cannot forget an edge.
+//
+// CategoryClient.Get loads no edges and therefore cannot serve this response
+// type. Wiring for Category must go through Query with this plan applied.
+func CategoryQueryWithResponseEdges(q *CategoryQuery) *CategoryQuery {
+	return q.WithChildren().WithParent()
 }
 
 // CategoryListResponse represents the list response for Category

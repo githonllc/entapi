@@ -45,6 +45,15 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			schemaDir: filepath.Join(root, "internal", "fixtures", "fieldshapes", "ent", "schema"),
 			pkgPath:   modulePath + "/internal/fixtures/fieldshapes/ent",
 		},
+		{
+			// Edges, and — through Secret — an entity with no response-scoped
+			// field at all. The response and summary types are emitted for it
+			// anyway, carrying only the ID, so the ID's import is needed on a
+			// path where responseFields is empty.
+			name:      "edges",
+			schemaDir: filepath.Join(root, "internal", "fixtures", "edges", "ent", "schema"),
+			pkgPath:   modulePath + "/internal/fixtures/edges/ent",
+		},
 		// The "immutable" fixture is deliberately absent: the generator refuses
 		// that schema, so no template is ever rendered for it. Asserting on the
 		// imports of output that is never emitted would be testing a fiction.

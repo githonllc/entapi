@@ -3,7 +3,6 @@ package entdomain
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,14 +171,53 @@ func (e *Extension) generateBaseHandlerFile(g *gen.Graph, node *gen.Type) error 
 	return writeFile(outputPath, buf.Bytes())
 }
 
-// writeFile formats the generated Go source with goimports and writes it to disk
+// writeFile formats the generated Go source with goimports and writes it to disk.
+//
+// A formatting failure aborts. imports.Process only fails on source it cannot
+// parse, which for a generator means a template emitted invalid Go — a bug in
+// this package, not a formatting blemish. Writing it anyway turns that bug into
+// an unexplained compile error in the consumer's repository, with a successful
+// exit code on the generation run.
+//
+// The write is atomic: the content goes to a temporary file in the target
+// directory and is renamed into place only after formatting succeeded. A run
+// that fails partway therefore leaves the previous run's output untouched
+// rather than a half-written file.
 func writeFile(path string, content []byte) error {
 	formatted, err := imports.Process(path, content, nil)
 	if err != nil {
-		log.Printf("WARNING: goimports formatting failed for %s: %v (writing unformatted)", path, err)
-		formatted = content
+		return fmt.Errorf("goimports failed for %s (generated source is not valid Go): %w", path, err)
 	}
-	if err := os.WriteFile(path, formatted, 0644); err != nil {
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
+	}
+
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file for %s: %w", path, err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		// No-op once the rename succeeded; removes the temporary file on every
+		// path that did not get that far.
+		_ = os.Remove(tmpName)
+	}()
+
+	if _, err := tmp.Write(formatted); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("failed to write file %s: %w", path, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to write file %s: %w", path, err)
+	}
+	// CreateTemp uses 0600; generated sources are world-readable like any other
+	// checked-in file.
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return fmt.Errorf("failed to set permissions on %s: %w", path, err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("failed to write file %s: %w", path, err)
 	}
 	return nil

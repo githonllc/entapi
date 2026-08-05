@@ -19,9 +19,13 @@ import (
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
 //
-// 2. Response - HTTP-layer response model, restricted by scope.
+// 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
-//    - Includes nested edge entities when FK field has ScopeResponse.
+//    - Includes a nested edge when the EDGE carries an InResponse annotation.
+//      Exposing the foreign-key scalar and exposing the nested object are
+//      independent decisions; neither is derived from the other.
+//    - A nested edge is rendered as the target's Summary, which carries no
+//      edges of its own, so expansion terminates one level down.
 //    - Used by the Handler layer to return HTTP responses.
 //
 // Key Design Principles:
@@ -60,15 +64,98 @@ func (r *PostUpdateRequest) Validate() error {
 	return nil
 }
 
-// PostResponse represents the response for Post
+// PostSummary is the shape Post takes on another entity's response.
+//
+// It carries the same scalar fields as PostResponse and no edges at all.
+// That is what bounds expansion: NewPostResponse calls summary
+// constructors, and a summary constructor calls nothing, so there is no second
+// level for a cycle to close through and no runtime depth counter is needed.
+//
+// The cost is real rather than hidden: a three-level tree comes back one level
+// deep, and a deeper one needs another round trip per level.
+type PostSummary struct {
+	// ID field is always included in summaries
+	ID         uuid.UUID  `json:"id"`
+	Title      string     `json:"title"`
+	AuthorID   uuid.UUID  `json:"author_id"`
+	ReviewerID *uuid.UUID `json:"reviewer_id,omitempty"`
+}
+
+// NewPostSummary converts an entity to its summary DTO. It cannot fail:
+// a summary reads no edges.
+func NewPostSummary(e *Post) *PostSummary {
+	if e == nil {
+		return nil
+	}
+	return &PostSummary{
+		ID:         e.ID,
+		Title:      e.Title,
+		AuthorID:   e.AuthorID,
+		ReviewerID: entdomain.PtrOrNil(e.ReviewerID),
+	}
+}
+
+// PostResponse represents the response for Post.
+//
+// It is emitted unconditionally: an entity whose every annotated field is
+// InputOnly still has a meaningful response carrying its ID, and
+// PostListResponse below refers to this type either way.
+//
+// No edge field is omitempty. A loaded edge with no related row has to reach
+// the client as an explicit null: omitting the key would make it
+// indistinguishable from an edge nobody asked to load.
 type PostResponse struct {
 	// ID field is always included in responses
-	ID         uuid.UUID     `json:"id"`
-	Title      string        `json:"title"`
-	AuthorID   uuid.UUID     `json:"author_id"`
-	ReviewerID *uuid.UUID    `json:"reviewer_id,omitempty"`
-	Author     *UserResponse `json:"author,omitempty"`
-	Reviewer   *UserResponse `json:"reviewer,omitempty"`
+	ID         uuid.UUID    `json:"id"`
+	Title      string       `json:"title"`
+	AuthorID   uuid.UUID    `json:"author_id"`
+	ReviewerID *uuid.UUID   `json:"reviewer_id,omitempty"`
+	Author     *UserSummary `json:"author"`
+}
+
+// NewPostResponse converts an entity to its response DTO.
+//
+// Edge state is read through <Edge>OrErr(), never through a nil check: the flag
+// separating "not loaded" from "loaded and absent" is unexported, so a nil
+// pointer cannot tell them apart. Loaded-and-absent becomes an explicit null; a
+// not-loaded edge is returned as an error rather than shipping a response that
+// reads as "this post has none".
+//
+// That error is cheap because PostQueryWithResponseEdges below is
+// generated from this type's own edge set, so generated wiring cannot forget an
+// edge and the error only ever catches a hand-rolled query.
+func NewPostResponse(e *Post) (*PostResponse, error) {
+	if e == nil {
+		return nil, nil
+	}
+	r := &PostResponse{
+		ID:         e.ID,
+		Title:      e.Title,
+		AuthorID:   e.AuthorID,
+		ReviewerID: entdomain.PtrOrNil(e.ReviewerID),
+	}
+	authorEdge, err := e.Edges.AuthorOrErr()
+	switch {
+	case err == nil:
+		r.Author = NewUserSummary(authorEdge)
+	case IsNotFound(err):
+		// Loaded, and there is no related row. A real state; report it as null.
+		r.Author = nil
+	default:
+		return nil, err
+	}
+	return r, nil
+}
+
+// PostQueryWithResponseEdges applies the eager-load plan for PostResponse.
+//
+// The plan is generated from the response type's own edge set, so a caller
+// cannot forget an edge.
+//
+// PostClient.Get loads no edges and therefore cannot serve this response
+// type. Wiring for Post must go through Query with this plan applied.
+func PostQueryWithResponseEdges(q *PostQuery) *PostQuery {
+	return q.WithAuthor()
 }
 
 // PostListResponse represents the list response for Post

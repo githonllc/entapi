@@ -43,6 +43,7 @@ func templateFuncs() template.FuncMap {
 		"updateFields":   updateFields,
 		"responseFields": responseFields,
 		"responseEdges":  responseEdges,
+		"edgeJSONKey":    edgeJSONKey,
 
 		// Scope and requirement checking
 		"isDomainRequired": isDomainRequired,
@@ -53,5 +54,6 @@ func templateFuncs() template.FuncMap {
 
 		// Code generation helpers
 		"setFieldCallReq": setFieldCallReq,
+		"fieldValueExpr":  fieldValueExpr,
 	}
 }

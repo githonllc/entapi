@@ -24,9 +24,13 @@ import (
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
 //
-// 2. Response - HTTP-layer response model, restricted by scope.
+// 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
-//    - Includes nested edge entities when FK field has ScopeResponse.
+//    - Includes a nested edge when the EDGE carries an InResponse annotation.
+//      Exposing the foreign-key scalar and exposing the nested object are
+//      independent decisions; neither is derived from the other.
+//    - A nested edge is rendered as the target's Summary, which carries no
+//      edges of its own, so expansion terminates one level down.
 //    - Used by the Handler layer to return HTTP responses.
 //
 // Key Design Principles:
@@ -117,9 +121,54 @@ func (r *{{ $.Name }}UpdateRequest) Validate() error {
 {{- end }}
 
 {{- $responseFields := responseFields $ }}
-{{- if $responseFields }}
+{{- $responseEdges := responseEdges $ }}
 
-// {{ $.Name }}Response represents the response for {{ $.Name }}
+// {{ $.Name }}Summary is the shape {{ $.Name }} takes on another entity's response.
+//
+// It carries the same scalar fields as {{ $.Name }}Response and no edges at all.
+// That is what bounds expansion: New{{ $.Name }}Response calls summary
+// constructors, and a summary constructor calls nothing, so there is no second
+// level for a cycle to close through and no runtime depth counter is needed.
+//
+// The cost is real rather than hidden: a three-level tree comes back one level
+// deep, and a deeper one needs another round trip per level.
+type {{ $.Name }}Summary struct {
+	// ID field is always included in summaries
+	{{ $.ID.StructField }} {{ $.ID.Type }} `json:"{{ $.ID.StorageKey }}"`
+{{- range $f := $responseFields }}
+	{{- if $f.Optional }}
+	{{ $f.StructField }} *{{ $f.Type }} `json:"{{ $f.StorageKey }},omitempty"`
+	{{- else }}
+	{{ $f.StructField }} {{ $f.Type }} `json:"{{ $f.StorageKey }}"`
+	{{- end }}
+{{- end }}
+}
+
+// New{{ $.Name }}Summary converts an entity to its summary DTO. It cannot fail:
+// a summary reads no edges.
+func New{{ $.Name }}Summary(e *{{ $.Name }}) *{{ $.Name }}Summary {
+	if e == nil {
+		return nil
+	}
+	return &{{ $.Name }}Summary{
+		{{ $.ID.StructField }}: e.{{ $.ID.StructField }},
+{{- range $f := $responseFields }}
+		{{ $f.StructField }}: {{ fieldValueExpr $f "e" }},
+{{- end }}
+	}
+}
+
+// {{ $.Name }}Response represents the response for {{ $.Name }}.
+//
+// It is emitted unconditionally: an entity whose every annotated field is
+// InputOnly still has a meaningful response carrying its ID, and
+// {{ $.Name }}ListResponse below refers to this type either way.
+{{- if $responseEdges }}
+//
+// No edge field is omitempty. A loaded edge with no related row has to reach
+// the client as an explicit null: omitting the key would make it
+// indistinguishable from an edge nobody asked to load.
+{{- end }}
 type {{ $.Name }}Response struct {
 	// ID field is always included in responses
 	{{ $.ID.StructField }} {{ $.ID.Type }} `json:"{{ $.ID.StorageKey }}"`
@@ -130,12 +179,84 @@ type {{ $.Name }}Response struct {
 	{{ $f.StructField }} {{ $f.Type }} `json:"{{ $f.StorageKey }}"`
 	{{- end }}
 {{- end }}
-{{- range $edge := responseEdges $ }}
-	{{ pascal $edge.Name }} {{ if $edge.Unique }}*{{ else }}[]*{{ end }}{{ $edge.Type.Name }}Response `json:"{{ $edge.Name }},omitempty"`
+{{- range $edge := $responseEdges }}
+	{{ $edge.StructField }} {{ if $edge.Unique }}*{{ else }}[]*{{ end }}{{ $edge.Type.Name }}Summary `json:"{{ edgeJSONKey $edge }}"`
 {{- end }}
 }
 
+// New{{ $.Name }}Response converts an entity to its response DTO.
+//
+{{- if $responseEdges }}
+// Edge state is read through <Edge>OrErr(), never through a nil check: the flag
+// separating "not loaded" from "loaded and absent" is unexported, so a nil
+// pointer cannot tell them apart. Loaded-and-absent becomes an explicit null; a
+// not-loaded edge is returned as an error rather than shipping a response that
+// reads as "this {{ lower $.Name }} has none".
+//
+// That error is cheap because {{ $.Name }}QueryWithResponseEdges below is
+// generated from this type's own edge set, so generated wiring cannot forget an
+// edge and the error only ever catches a hand-rolled query.
+{{- else }}
+// This entity declares no response edges, so the error is always nil. The
+// signature is kept uniform so callers do not need two shapes.
 {{- end }}
+func New{{ $.Name }}Response(e *{{ $.Name }}) (*{{ $.Name }}Response, error) {
+	if e == nil {
+		return nil, nil
+	}
+	r := &{{ $.Name }}Response{
+		{{ $.ID.StructField }}: e.{{ $.ID.StructField }},
+{{- range $f := $responseFields }}
+		{{ $f.StructField }}: {{ fieldValueExpr $f "e" }},
+{{- end }}
+	}
+{{- range $edge := $responseEdges }}
+{{- $local := printf "%sEdge" (camelCase $edge.Name) }}
+
+{{- if $edge.Unique }}
+	{{ $local }}, err := e.Edges.{{ $edge.StructField }}OrErr()
+	switch {
+	case err == nil:
+		r.{{ $edge.StructField }} = New{{ $edge.Type.Name }}Summary({{ $local }})
+	{{/* IsNotFound is Ent's generated predicate, not this package's. It is
+	     deliberately unqualified: this file is emitted into the consumer's
+	     package ent, so the bare name binds there and unwraps
+	     *ent.NotFoundError. See errors.go. */}}case IsNotFound(err):
+		// Loaded, and there is no related row. A real state; report it as null.
+		r.{{ $edge.StructField }} = nil
+	default:
+		return nil, err
+	}
+{{- else }}
+	// A to-many edge has no not-found state: loaded-but-empty is an empty slice,
+	// so any error here means the edge was not loaded.
+	{{ $local }}, err := e.Edges.{{ $edge.StructField }}OrErr()
+	if err != nil {
+		return nil, err
+	}
+	r.{{ $edge.StructField }} = make([]*{{ $edge.Type.Name }}Summary, 0, len({{ $local }}))
+	for _, v := range {{ $local }} {
+		r.{{ $edge.StructField }} = append(r.{{ $edge.StructField }}, New{{ $edge.Type.Name }}Summary(v))
+	}
+{{- end }}
+{{- end }}
+	return r, nil
+}
+
+// {{ $.Name }}QueryWithResponseEdges applies the eager-load plan for {{ $.Name }}Response.
+//
+// The plan is generated from the response type's own edge set, so a caller
+// cannot forget an edge.
+{{- if $responseEdges }}
+//
+// {{ $.Name }}Client.Get loads no edges and therefore cannot serve this response
+// type. Wiring for {{ $.Name }} must go through Query with this plan applied.
+{{- end }}
+func {{ $.Name }}QueryWithResponseEdges(q *{{ $.QueryName }}) *{{ $.QueryName }} {
+	return q
+{{- range $edge := $responseEdges }}.With{{ $edge.StructField }}()
+{{- end }}
+}
 
 // {{ $.Name }}ListResponse represents the list response for {{ $.Name }}
 type {{ $.Name }}ListResponse struct {

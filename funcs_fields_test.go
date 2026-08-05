@@ -1,6 +1,7 @@
 package entdomain
 
 import (
+	"strings"
 	"testing"
 
 	"entgo.io/ent/entc/gen"
@@ -85,59 +86,94 @@ func TestResponseFields(t *testing.T) {
 	}
 }
 
-func TestEdgeQualifiesForResponse_NilField(t *testing.T) {
-	target := newTestType("Customer", newStringField("name", ptr(DefaultField())))
-	if edgeQualifiesForResponse(nil, target) {
-		t.Error("expected false when fkField is nil")
-	}
-}
-
-func TestEdgeQualifiesForResponse_NoScopeResponse(t *testing.T) {
-	// FK field exists but only has ScopeCreate, not ScopeResponse
-	fkField := newUUIDField("customer_id", ptr(DomainFieldWithScopes(ScopeCreate)))
-	target := newTestType("Customer", newStringField("name", ptr(DefaultField())))
-	if edgeQualifiesForResponse(fkField, target) {
-		t.Error("expected false when FK field lacks ScopeResponse")
-	}
-}
-
-func TestEdgeQualifiesForResponse_TargetNoDomainFields(t *testing.T) {
-	// FK field has ScopeResponse, but target type has no domain fields
-	fkField := newUUIDField("org_id", ptr(DefaultField()))
-	target := newTestType("Organization") // no annotated fields
-	if edgeQualifiesForResponse(fkField, target) {
-		t.Error("expected false when target type has no domain fields")
-	}
-}
-
-func TestEdgeQualifiesForResponse_AllConditionsMet(t *testing.T) {
-	// FK field has ScopeResponse, target type has domain fields
-	fkField := newUUIDField("customer_id", ptr(DefaultField()))
-	target := newTestType("Customer", newStringField("name", ptr(DefaultField())))
-	if !edgeQualifiesForResponse(fkField, target) {
-		t.Error("expected true when all conditions are met")
-	}
-}
-
 func TestResponseEdges_NoEdges(t *testing.T) {
 	node := newTestType("User", newStringField("name", ptr(DefaultField())))
-	got := responseEdges(node)
+	got, err := responseEdges(node)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 0 {
 		t.Fatalf("expected 0 response edges, got %d", len(got))
 	}
 }
 
-func TestResponseEdges_EdgesWithoutFK(t *testing.T) {
-	// Edges where Field() returns nil (no FK on this entity) should be excluded.
-	// All gen.Edge constructed without ent's internal FK resolution have Field() == nil.
-	node := newTestType("User", newStringField("name", ptr(DefaultField())))
+// TestResponseEdges_SelectedByAnnotationNotByForeignKey is the regression this
+// selector exists for. Every gen.Edge built outside ent's own FK resolution has
+// Field() == nil, which is also the shape of a real to-many edge — the foreign
+// key lives on the other entity. The previous rule required Field() != nil, so
+// a to-many edge was unreachable no matter how it was annotated.
+func TestResponseEdges_SelectedByAnnotationNotByForeignKey(t *testing.T) {
 	target := newTestType("Post", newStringField("title", ptr(DefaultField())))
+	node := newTestType("User", newStringField("name", ptr(DefaultField())))
 	node.Edges = []*gen.Edge{
-		{Name: "posts", Type: target, Unique: false},
-		{Name: "profile", Type: target, Unique: true},
+		newEdgeTo("posts", target, false, Edge().InResponse()),
+		newEdgeTo("audit", target, false, nil),
 	}
-	got := responseEdges(node)
+
+	got, err := responseEdges(node)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "posts" {
+		t.Fatalf("response edges = %v, want [posts]", edgeNames(got))
+	}
+}
+
+// TestResponseEdges_UnannotatedEdgeStaysOutEvenWithAResponseScopedFK pins the
+// other half of the split: exposing the scalar and exposing the nested object
+// are independent decisions.
+func TestResponseEdges_UnannotatedEdgeStaysOutEvenWithAResponseScopedFK(t *testing.T) {
+	target := newTestType("User", newStringField("name", ptr(DefaultField())))
+	node := newTestType("Post",
+		newStringField("title", ptr(DefaultField())),
+		newUUIDField("reviewer_id", ptr(DefaultField())), // response-scoped scalar
+	)
+	node.Edges = []*gen.Edge{newEdgeTo("reviewer", target, true, nil)}
+
+	got, err := responseEdges(node)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 0 {
-		t.Fatalf("expected 0 response edges (no FK), got %d", len(got))
+		t.Fatalf("response edges = %v, want none", edgeNames(got))
 	}
+}
+
+// TestResponseEdges_TargetWithoutDomainFieldsIsAnError keeps the generator
+// dependency-closed. A target with no DomainField annotation is skipped
+// wholesale by the generator, so no <Target>Summary exists; dropping the edge
+// would silently narrow the response, and emitting the reference would surface
+// as an undefined symbol in the consumer's build.
+func TestResponseEdges_TargetWithoutDomainFieldsIsAnError(t *testing.T) {
+	target := newTestType("Organization") // no annotated fields
+	node := newTestType("User", newStringField("name", ptr(DefaultField())))
+	node.Edges = []*gen.Edge{newEdgeTo("org", target, true, Edge().InResponse())}
+
+	got, err := responseEdges(node)
+	if err == nil {
+		t.Fatalf("expected an error, got edges %v", edgeNames(got))
+	}
+	for _, want := range []string{"User", "org", "Organization"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err, want)
+		}
+	}
+}
+
+// newEdgeTo builds a gen.Edge pointing at target. Field() is left nil, which is
+// what ent produces for every edge whose foreign key is on the other side.
+func newEdgeTo(name string, target *gen.Type, unique bool, raw any) *gen.Edge {
+	e := &gen.Edge{Name: name, Type: target, Unique: unique}
+	if raw != nil {
+		e.Annotations = gen.Annotations{"DomainEdge": raw}
+	}
+	return e
+}
+
+func edgeNames(edges []*gen.Edge) []string {
+	names := make([]string, len(edges))
+	for i, e := range edges {
+		names[i] = e.Name
+	}
+	return names
 }

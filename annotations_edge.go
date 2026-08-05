@@ -95,11 +95,13 @@ func hasEdgeScope(edge *gen.Edge, scope FieldScope) bool {
 	return a.hasScope(scope)
 }
 
-// responseEdgesV2 selects edges for the response by their own annotation.
+// responseEdgeSet selects edges for the response by their own annotation.
 //
-// Unlike responseEdges it does not consult edge.Field(), so a to-many edge —
-// whose foreign key lives on the other entity — is selectable.
-func responseEdgesV2(node *gen.Type) []*gen.Edge {
+// It does not consult edge.Field(), so a to-many edge — whose foreign key lives
+// on the other entity — is selectable. responseEdges (funcs_fields.go) is the
+// template-facing wrapper that additionally rejects an edge whose target
+// generates no summary.
+func responseEdgeSet(node *gen.Type) []*gen.Edge {
 	var edges []*gen.Edge
 	for _, edge := range node.Edges {
 		if hasEdgeScope(edge, ScopeResponse) {

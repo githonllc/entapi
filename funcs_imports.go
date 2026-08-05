@@ -40,14 +40,21 @@ func dtoImports(node *gen.Type) []string {
 		add(f)
 	}
 
-	// The Response struct — and with it the ID field, which is always part of
-	// it — is only emitted when there is something to respond with.
-	if responseFields := responseFields(node); len(responseFields) > 0 {
-		for _, f := range responseFields {
-			add(f)
-		}
-		add(node.ID)
+	// The Response and Summary structs are emitted for EVERY entity the
+	// generator handles, so the ID's import is unconditional. An entity whose
+	// every annotated field is InputOnly has no response field at all and still
+	// has a response carrying its ID — which is precisely the case that used to
+	// slip through, because the ID was only added alongside a non-empty
+	// responseFields.
+	add(node.ID)
+	for _, f := range responseFields(node) {
+		add(f)
 	}
+
+	// Edges need nothing here. An edge renders as <Target>Summary, and every
+	// entity type ent generates — along with everything this extension adds
+	// beside it — lives in the one generated package, so the reference is
+	// package-local by construction.
 
 	out := make([]string, 0, len(specs))
 	for spec := range specs {

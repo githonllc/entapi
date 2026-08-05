@@ -429,9 +429,48 @@ For each annotated schema, up to three files are generated (all in the `ent/` pa
 
 | File | Contains |
 |------|----------|
-| `{entity}_dto.go` | `CreateRequest`, `UpdateRequest`, `Response`, `ListResponse`, `Validate()` methods |
+| `{entity}_dto.go` | `CreateRequest`, `UpdateRequest`, `Validate()` methods, and the response half below |
 | `{entity}_base_service.go` | `BaseService` with CRUD, Before/After hooks, `Apply*Request` builders, `EntToResponse` |
 | `{entity}_base_handler.go` | `BaseHandler` with `ToResponse`, `ToResponseList`, `PartialUpdate` |
+
+### Responses, summaries and eager-load plans
+
+The response half of `{entity}_dto.go` is four declarations:
+
+| Declaration | Purpose |
+|---|---|
+| `{Entity}Response` | the full response: response-scoped scalars, plus one field per edge annotated `InResponse()` |
+| `{Entity}Summary` | the same scalars and **no edges**; this is what an edge field holds |
+| `New{Entity}Response(e) (*{Entity}Response, error)` | conversion; reads edge state through `<Edge>OrErr()` |
+| `New{Entity}Summary(e) *{Entity}Summary` | conversion; cannot fail, because a summary reads no edges |
+| `{Entity}QueryWithResponseEdges(q) q` | the eager-load plan, derived from the response type's own edge set |
+
+Three properties follow, and each is asserted in `internal/fixtures/edges`:
+
+- **A loaded edge with no related row is an explicit `null`, not a missing key.**
+  No edge field is `omitempty`. `loadedTypes` is unexported, so a nil pointer
+  cannot separate *not loaded* from *loaded and absent*; they are separated here
+  instead, and a client can tell "there is none" from "nobody asked".
+- **A not-loaded edge is an error.** `New{Entity}Response` returns it rather than
+  shipping a response that reads as "this post has no author". The error is cheap
+  because the eager-load plan is generated from the same edge set, so generated
+  wiring cannot forget an edge — it only ever catches a hand-rolled query. Note
+  that `client.{Entity}.Get` loads no edges and therefore cannot serve a response
+  type that declares any; go through `Query` with the plan applied.
+- **Expansion is bounded by the type system, not by a depth counter.** A summary
+  has no edge fields, so `New{Entity}Response` calls summary constructors and a
+  summary constructor calls nothing. There is no second level for a cycle to
+  close through. The cost is stated rather than hidden: a three-level tree comes
+  back one level deep, and a deeper one needs another round trip per level.
+
+```go
+q := ent.PostQueryWithResponseEdges(client.Post.Query())
+p, err := q.Where(post.IDEQ(id)).Only(ctx)
+if err != nil {
+    return err
+}
+resp, err := ent.NewPostResponse(p) // err is non-nil only if an edge was not loaded
+```
 
 ### BaseService Pattern
 

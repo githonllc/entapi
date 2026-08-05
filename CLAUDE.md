@@ -60,18 +60,67 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 
 | File | Contains |
 |---|---|
-| `funcs_fields.go` | field selection: `domainFields`, `createFields`, `updateFields`, `responseFields`, `responseEdges`, lookup-field filters |
+| `funcs_fields.go` | field selection: `domainFields`, `createFields`, `updateFields`, `responseFields`, `responseEdges` |
 | `funcs_scope.go` | `hasDomainScope`, `isDomainRequired`, and `getDomainFieldAnnotation` |
 | `funcs_typechecks.go` | `isTimeField`, `hasSoftDelete`, `isComplexFieldType` |
 | `funcs_imports.go` | `dtoImports`: the import specs the DTO must declare for its field types |
-| `funcs_codegen.go` | string-emitting helpers (`setFieldCallReq`) |
+| `funcs_codegen.go` | string-emitting helpers (`setFieldCallReq`, `fieldValueExpr`) |
 | `funcs_strings.go` | `camelCase`, `contains`, `hasPrefix` |
+| `annotations_edge.go` | edge annotation: `DomainEdge`, `getDomainEdgeAnnotation`, `responseEdgeSet`, `edgeJSONKey` |
 
 **A helper is only callable from a template if it appears in `templateFuncs()`.** Adding a func to a `funcs_*.go` file is not enough.
 
 ### Annotation access
 
 Never read `field.Annotations["DomainField"]` directly. Always go through `getDomainFieldAnnotation` (`funcs_scope.go`): the annotation arrives as `*DomainField` during codegen but as `map[string]interface{}` when loaded from a serialized schema, and that function normalizes both via a JSON round-trip.
+
+### Response, summary and edge generation (#25)
+
+`dto.tmpl` emits, per entity: `{Entity}Response`, `{Entity}Summary`,
+`New{Entity}Response` (returns an error), `New{Entity}Summary` (cannot),
+and `{Entity}QueryWithResponseEdges`. Four rules are load-bearing, all
+established against real ent and real SQLite in #22 — do not re-derive them
+from the templates:
+
+- **Edges are selected by their own `DomainEdge` annotation**, never from
+  foreign-key placement. Deriving it from the FK made a to-many edge
+  permanently unreachable (`edge.Field()` is nil when the column is on the
+  other entity) and fused "expose `author_id`" with "expose the nested
+  `author`". `responseEdges` (`funcs_fields.go`) is the template entry point;
+  `responseEdgeSet` (`annotations_edge.go`) is the pure selector.
+- **`responseEdges` returns an error** when a response-scoped edge targets an
+  entity with no `DomainField` at all. The generator skips such a node, so no
+  `<Target>Summary` exists; dropping the edge would silently narrow the
+  response, and emitting the reference would surface as an undefined symbol in
+  the consumer's build.
+- **Edge state goes through `<Edge>OrErr()`, never a nil check.** `loadedTypes`
+  is unexported. Loaded-and-absent is an explicit `null` (no edge field is
+  `omitempty`); not-loaded is an error. `IsNotFound` in `dto.tmpl` is
+  unqualified for the same reason as in `base_service.tmpl`, and
+  `TestDTOTemplateResolvesIsNotFoundToEnt` pins it.
+- **Summaries carry no edges.** That is what bounds expansion — there is no
+  second level for a cycle to close through, so no runtime depth counter and no
+  visited set. A three-level tree comes back one level deep; that cost is
+  asserted, not glossed.
+
+Because the response and summary structs are emitted for **every** entity, not
+only those with a response-scoped field, `dtoImports` adds `node.ID`'s import
+unconditionally (`funcs_imports.go`). Gating it on a non-empty `responseFields`
+left an all-`InputOnly` entity's ID import undeclared, and
+`TestTemplatesDeclareTheirImports` caught it only once the `edges` fixture —
+which has such an entity — was added to that test's corpus. Edges themselves
+need no import: `<Target>Summary` is package-local.
+
+`{Entity}EntToResponse` (base_service.tmpl) delegates to `New{Entity}Response`
+for an entity with edges and returns nil on the error, because its signature
+predates the contract. #29 deletes it.
+
+**Open, and deliberately not decided here:** which scalar fields a summary
+carries. Nothing in the schema says "this field is the brief one", so the
+generator does not guess — a summary carries every response-scoped field, minus
+the edges. The spike's hand-written `UserSummary{ID, Name}` picked one field by
+judgement, which is the single thing in `internal/fixture/ent/dto/` that is not
+mechanical. Narrowing it needs a new annotation, and that is a separate issue.
 
 ## Annotation model
 
@@ -120,7 +169,9 @@ Every row has a fixture. A fixture whose generation must fail carries
 
 - Tests are in-package (`package entdomain`) and build `gen.Field`/`gen.Type` values by hand via the constructors in `test_helpers_test.go` (`newStringField`, `newUUIDField`, `newTestType`, `ptr`, `assertContains`, …). Use those instead of hand-rolling literals.
 - `funcs_codegen.go` helpers are tested by asserting on **substrings of emitted Go source**, not by compiling it.
-- Two tests do render templates end-to-end: `TestCodegenFixtures` (generates into `internal/fixtures/<dir>/ent` and compiles the result) and `TestTemplatesDeclareTheirImports` (renders each template and checks goimports changes no import). A template edit that breaks compilation or import declarations is caught here; anything beyond that still needs a real ent project.
+- Two tests do render templates end-to-end: `TestCodegenFixtures` (generates into `internal/fixtures/<dir>/ent` and compiles the result) and `TestTemplatesDeclareTheirImports` (renders each template and checks goimports changes no import). A template edit that breaks compilation or import declarations is caught here; anything beyond that still needs a real ent project. Adding coverage to either is one directory plus one line in its table.
+- **`internal/fixtures` (plural) is the generator's output; `internal/fixture` (singular) is its target.** The singular one is a separate Go module holding the #22 spike: `ent/dto/` there is hand-written, compiled and exercised against SQLite, and it is the specification. Read it; never edit it.
+- `internal/fixtures/edges/ent/orerr_contract_test.go` is the one hand-written file under a generated `ent/` directory. It must be in `package ent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database.
 
 ## Dead code is now a test failure, not a convention (#7)
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	entdomain "github.com/githonllc/entdomain"
+	"github.com/google/uuid"
 )
 
 // ============================================================================================
@@ -18,9 +19,13 @@ import (
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
 //
-// 2. Response - HTTP-layer response model, restricted by scope.
+// 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
-//    - Includes nested edge entities when FK field has ScopeResponse.
+//    - Includes a nested edge when the EDGE carries an InResponse annotation.
+//      Exposing the foreign-key scalar and exposing the nested object are
+//      independent decisions; neither is derived from the other.
+//    - A nested edge is rendered as the target's Summary, which carries no
+//      edges of its own, so expansion terminates one level down.
 //    - Used by the Handler layer to return HTTP responses.
 //
 // Key Design Principles:
@@ -53,6 +58,63 @@ func (r *SecretUpdateRequest) Validate() error {
 		return fmt.Errorf("update request cannot be nil")
 	}
 	return nil
+}
+
+// SecretSummary is the shape Secret takes on another entity's response.
+//
+// It carries the same scalar fields as SecretResponse and no edges at all.
+// That is what bounds expansion: NewSecretResponse calls summary
+// constructors, and a summary constructor calls nothing, so there is no second
+// level for a cycle to close through and no runtime depth counter is needed.
+//
+// The cost is real rather than hidden: a three-level tree comes back one level
+// deep, and a deeper one needs another round trip per level.
+type SecretSummary struct {
+	// ID field is always included in summaries
+	ID uuid.UUID `json:"id"`
+}
+
+// NewSecretSummary converts an entity to its summary DTO. It cannot fail:
+// a summary reads no edges.
+func NewSecretSummary(e *Secret) *SecretSummary {
+	if e == nil {
+		return nil
+	}
+	return &SecretSummary{
+		ID: e.ID,
+	}
+}
+
+// SecretResponse represents the response for Secret.
+//
+// It is emitted unconditionally: an entity whose every annotated field is
+// InputOnly still has a meaningful response carrying its ID, and
+// SecretListResponse below refers to this type either way.
+type SecretResponse struct {
+	// ID field is always included in responses
+	ID uuid.UUID `json:"id"`
+}
+
+// NewSecretResponse converts an entity to its response DTO.
+//
+// This entity declares no response edges, so the error is always nil. The
+// signature is kept uniform so callers do not need two shapes.
+func NewSecretResponse(e *Secret) (*SecretResponse, error) {
+	if e == nil {
+		return nil, nil
+	}
+	r := &SecretResponse{
+		ID: e.ID,
+	}
+	return r, nil
+}
+
+// SecretQueryWithResponseEdges applies the eager-load plan for SecretResponse.
+//
+// The plan is generated from the response type's own edge set, so a caller
+// cannot forget an edge.
+func SecretQueryWithResponseEdges(q *SecretQuery) *SecretQuery {
+	return q
 }
 
 // SecretListResponse represents the list response for Secret

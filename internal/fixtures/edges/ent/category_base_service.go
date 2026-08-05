@@ -239,18 +239,16 @@ func ApplyCategoryUpdateRequest(builder *CategoryUpdateOne, req *CategoryUpdateR
 
 // CategoryEntToResponse converts an ent Category entity directly to a Response DTO.
 // Exported for use in service-level queries that bypass the base service.
+//
+// CategoryResponse declares edges, and edge population goes through
+// <Edge>OrErr(), which reports a not-loaded edge as an error. This signature
+// predates that contract and cannot carry one, so a not-loaded edge yields nil
+// here rather than a response whose edges are silently missing. Call
+// NewCategoryResponse directly to see the error.
 func CategoryEntToResponse(entity *Category) *CategoryResponse {
-	if entity == nil {
+	resp, err := NewCategoryResponse(entity)
+	if err != nil {
 		return nil
-	}
-
-	resp := &CategoryResponse{
-		ID:       entity.ID,
-		Name:     entity.Name,
-		ParentID: entdomain.PtrOrNil(entity.ParentID),
-	}
-	if entity.Edges.Parent != nil {
-		resp.Parent = CategoryEntToResponse(entity.Edges.Parent)
 	}
 	return resp
 }

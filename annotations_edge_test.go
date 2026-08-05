@@ -100,7 +100,7 @@ func TestHasEdgeScope_MapRepresentation(t *testing.T) {
 	}
 }
 
-func TestResponseEdgesV2_MapRepresentation(t *testing.T) {
+func TestResponseEdgeSet_MapRepresentation(t *testing.T) {
 	node := &gen.Type{
 		Name: "User",
 		Edges: []*gen.Edge{
@@ -110,7 +110,7 @@ func TestResponseEdgesV2_MapRepresentation(t *testing.T) {
 			newEdge("owner", map[string]interface{}{"scopes": []any{"create"}}), // wrong scope
 		},
 	}
-	got := responseEdgesV2(node)
+	got := responseEdgeSet(node)
 	if len(got) != 1 || got[0].Name != "posts" {
 		names := make([]string, len(got))
 		for i, e := range got {

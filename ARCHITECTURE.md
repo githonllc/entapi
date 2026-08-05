@@ -375,24 +375,17 @@ Say you want `.AsSensitive()` to actually drop a field from `Response` (today it
 7. `templates/base_service.tmpl` — hooks, CRUD, `Apply*Request`, `EntToResponse`
 8. `funcs_typechecks.go` — the conventions (`deleted_at`, UUID, complex types)
 9. `templates/base_handler.tmpl` — 60 lines, the whole handler contract
-10. `funcs_codegen.go` — `fieldPredicate` (and note how much of this file is unreachable)
+10. `funcs_codegen.go` — `setFieldCallReq`, the whole file since #7
 
 ### Risk areas & discrepancies
 
 | Finding | Evidence | Impact |
 |---|---|---|
-| **Test suite is red on a clean checkout** | `TestTemplateFuncs` (`funcs_test.go:7`) asserts `specificMethods` and `setFieldCall`; neither exists in `funcs.go` | `make check` fails before you touch anything |
-| **`gofmt -l .` is dirty** | `funcs.go`, `funcs_codegen.go`, `annotations_test.go`, `types_test.go` | `make lint` fails; `gofmt`/`goimports` are enabled in `.golangci.yml` |
-| **`templates/model.tmpl` is dead** | byte-identical to `dto.tmpl` except line 4; not referenced by `template_index.go` | edits to it silently do nothing; `SKILL.md:266` still names it as the DTO template |
-| **~8 registered template funcs are unreachable** | `generateIdOperation`, `generateSearchCondition`, `searchMethod`, `findByMethod`, `isUniqueField`, `isUUIDType`, `uniqueLookupFields`, `rangeLookupFields` appear in no `.tmpl` | the first four emit repository-era `r.client…`/`model.…` code that contradicts the current `s.DB` shape; `funcs.go:9` claims the opposite |
-| **Three field selectors are dead in both directions** | `queryFields`, `searchableFields`, `sortableFields` (`funcs_fields.go:58,73,85`) are neither registered in `templateFuncs()` nor called from Go outside tests | the `ScopeQuery` half of the scope model has no consumer at all |
 | **`cursor.go` is orphaned from generated code** | `ListWithCursor` does `uuid.Parse(cursor)` and returns `entity.ID.String()` (`base_service.tmpl:223,248`); `EncodeCursor`/`DecodeCursor`/`Cursor` appear in no template | two incompatible cursor formats ship in one package; `ListRequest.Cursor` documents the base64 one |
 | **`ListRequest` is never emitted** | no template references it | consumers must wire pagination input themselves |
-| **BaseService is UUID-only** | `uuid.UUID` hardcoded in every hook and CRUD signature (`base_service.tmpl`) | int/string primary keys generate uncompilable services, while `funcs_codegen.go` still carries multi-ID-type logic no template calls |
-| **Unqualified `IsNotFound` in emitted code** | `base_service.tmpl:163` resolves to *ent's* `IsNotFound`, not `entdomain.IsNotFound` — same name, different package | correct today because the file lands in `package ent`; fragile if output ever moves |
-| **`gen.Funcs` is merged first and can be shadowed** | `extension.go:181-188` | a name collision silently overrides an Ent builtin |
+| **BaseService is UUID-only** | `uuid.UUID` hardcoded in every hook and CRUD signature (`base_service.tmpl`) | int/string primary keys generate uncompilable services |
 | Formatting failure is non-fatal | `extension.go:170` logs a warning and writes unformatted source | a broken template yields a broken-but-written `.go` file |
 
-`DomainConfig`/`EntityName`, `FieldMetadata`, and `Sensitive` occur **only** in `annotations.go` — no template and no other Go file reads them (`grep -rn` over `*.go` + `*.tmpl`, excluding tests). They are declared-only surface; `annotations.go:44` labels `FieldMetadata` "RESERVED", which matches. `Searchable`/`Sortable`/`Filterable` are read only by the three dead selectors above.
+`DomainConfig`/`EntityName`, `FieldMetadata`, and `Sensitive` occur **only** in `annotations.go` — no template and no other Go file reads them (`grep -rn` over `*.go` + `*.tmpl`, excluding tests). They are declared-only surface; `annotations.go:44` labels `FieldMetadata` "RESERVED", which matches. `Searchable`/`Sortable`/`Filterable` had no reader left once #7 deleted the three dead selectors, so they are declared-only too.
 
 ⚠️ Needs verification: everything about *emitted* code in §5.2 and §4 is read off the templates, not off compiled output — this repo contains no ent project, so no generated file was ever compiled during this analysis.

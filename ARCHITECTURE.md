@@ -337,7 +337,7 @@ Two deliberate holes, both documented in the template: `DeleteBatch` skips Befor
 | Sentinel errors + `Is*` predicates, never string matching | `errors.go` — `ErrNotFound` + `IsNotFound(err) { return errors.Is(...) }` |
 | Errors wrapped with `%w` at the generated boundary | `base_service.tmpl:141` — `fmt.Errorf("%w: %v", entdomain.ErrAlreadyExists, err)` |
 | Codegen helpers split by concern, registered in one map | `funcs.go` — the registry is the only thing templates can see |
-| Test fixtures built by hand, never from a live schema | `test_helpers_test.go` — `newStringField`, `newUUIDTestType`, `assertContains` |
+| Test fixtures built by hand, never from a live schema | `test_helpers_test.go` — `newStringField`, `newTestType`, `assertContains` |
 | Emitted code asserts on substrings, not compilation | `funcs_codegen_test.go` — `TestFieldPredicate_*` |
 
 Cross-cutting concerns are mostly *absent by design* — no logging (one `log.Printf` in `writeFile`), no auth, no caching, no concurrency. `.claude/skills/entdomain/SKILL.md` describes tenant and soft-delete interceptors; those live in a **consumer** project (`internal/database/`), not here.

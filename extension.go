@@ -176,7 +176,19 @@ func writeFile(path string, content []byte) error {
 	return nil
 }
 
-// templateFuncMap returns the combined template function map with Ent standard functions
+// templateFuncMap returns the combined template function map with Ent standard functions.
+//
+// The layering is Ent's gen.Funcs first, then templateFuncs(), then the
+// entdomainPkg closure — so a later source wins on a name collision, silently
+// and invisibly at the call site. That shadowing hazard is neutralised at the
+// source rather than managed here: templateFuncs() is required to stay
+// disjoint from gen.Funcs, which TestTemplateFuncsDoNotShadowEntBuiltins
+// enforces. Anything Ent already supplies (lower, hasPrefix, camel, snake, …)
+// reaches the templates from gen.Funcs untouched.
+//
+// Keep the order as-is. If a genuine override is ever needed, it belongs here
+// as an explicit, named exception with a comment — not as a quiet same-named
+// entry in templateFuncs().
 func (e *Extension) templateFuncMap() template.FuncMap {
 	funcs := make(template.FuncMap, len(gen.Funcs))
 	for k, v := range gen.Funcs {

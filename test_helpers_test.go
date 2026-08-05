@@ -1,9 +1,6 @@
 package entdomain
 
 import (
-	"strings"
-	"testing"
-
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/schema/field"
 )
@@ -36,18 +33,6 @@ func newTimeField(name string, df *DomainField) *gen.Field {
 	return newField(name, &field.TypeInfo{Type: field.TypeTime, Ident: "time.Time"}, df)
 }
 
-func newBoolField(name string, df *DomainField) *gen.Field {
-	return newField(name, &field.TypeInfo{Type: field.TypeBool, Ident: "bool"}, df)
-}
-
-func newEnumField(name string, df *DomainField) *gen.Field {
-	return newField(name, &field.TypeInfo{Type: field.TypeEnum, Ident: "string"}, df)
-}
-
-func newInt32Field(name string, df *DomainField) *gen.Field {
-	return newField(name, &field.TypeInfo{Type: field.TypeInt32, Ident: "int32"}, df)
-}
-
 // newUUIDField creates a gen.Field with UUID type.
 func newUUIDField(name string, df *DomainField) *gen.Field {
 	return newField(name, &field.TypeInfo{Type: field.TypeUUID, Ident: "uuid.UUID"}, df)
@@ -66,18 +51,4 @@ func newTestType(name string, fields ...*gen.Field) *gen.Type {
 // ptr returns a pointer to a DomainField value.
 func ptr(d DomainField) *DomainField {
 	return &d
-}
-
-func assertContains(t *testing.T, s, substr string) {
-	t.Helper()
-	if !strings.Contains(s, substr) {
-		t.Errorf("expected output to contain %q, got:\n%s", substr, s)
-	}
-}
-
-func assertNotContains(t *testing.T, s, substr string) {
-	t.Helper()
-	if strings.Contains(s, substr) {
-		t.Errorf("expected output NOT to contain %q, got:\n%s", substr, s)
-	}
 }

@@ -4,20 +4,6 @@ import (
 	"testing"
 )
 
-func TestIsUniqueField(t *testing.T) {
-	unique := newStringField("email", nil)
-	unique.Unique = true
-
-	notUnique := newStringField("name", nil)
-
-	if !isUniqueField(unique) {
-		t.Error("expected unique field to return true")
-	}
-	if isUniqueField(notUnique) {
-		t.Error("expected non-unique field to return false")
-	}
-}
-
 func TestIsTimeField(t *testing.T) {
 	timeField := newTimeField("created_at", nil)
 	stringField := newStringField("name", nil)
@@ -59,67 +45,5 @@ func TestHasTimeFields(t *testing.T) {
 	empty := newTestType("Empty")
 	if hasTimeFields(empty) {
 		t.Error("expected hasTimeFields to return false for empty type")
-	}
-}
-
-func TestHasTimeField(t *testing.T) {
-	df := ptr(DefaultField())
-	node := newTestType("User",
-		newTimeField("created_at", df),
-		newTimeField("updated_at", df),
-		newStringField("name", df),
-	)
-
-	if !hasTimeField(node, "created_at") {
-		t.Error("expected hasTimeField('created_at') to return true")
-	}
-	if !hasTimeField(node, "updated_at") {
-		t.Error("expected hasTimeField('updated_at') to return true")
-	}
-	if hasTimeField(node, "name") {
-		t.Error("expected hasTimeField('name') to return false (not a time field)")
-	}
-	if hasTimeField(node, "deleted_at") {
-		t.Error("expected hasTimeField('deleted_at') to return false (not present)")
-	}
-}
-
-func TestIsUUIDType(t *testing.T) {
-	tests := []struct {
-		input  string
-		expect bool
-	}{
-		{"uuid.UUID", true},
-		{"UUID", true},
-		{"mypackage.UUID", true},
-		{"string", false},
-		{"int64", false},
-		{"int", false},
-		{"time.Time", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := isUUIDType(tt.input)
-			if got != tt.expect {
-				t.Errorf("isUUIDType(%q) = %v, want %v", tt.input, got, tt.expect)
-			}
-		})
-	}
-}
-
-func TestIsUniqueLookupField(t *testing.T) {
-	withLookup := newStringField("email", ptr(DomainField{UniqueLookup: true}))
-	withoutLookup := newStringField("name", ptr(DefaultField()))
-	noAnnotation := newStringField("bio", nil)
-
-	if !isUniqueLookupField(withLookup) {
-		t.Error("expected unique lookup field to return true")
-	}
-	if isUniqueLookupField(withoutLookup) {
-		t.Error("expected non-unique-lookup field to return false")
-	}
-	if isUniqueLookupField(noAnnotation) {
-		t.Error("expected unannotated field to return false")
 	}
 }

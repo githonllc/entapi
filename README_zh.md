@@ -107,6 +107,115 @@ field.String("email").
     )
 ```
 
+### 边注解
+
+边有自己的注解。此前边的暴露与否是从它的外键字段推导的，那把两个不同的决定
+混成了一个——"把 `author_id` 放进响应"和"把嵌套的 `author` 对象放进响应"
+——并且让暴露与否取决于哪张表持有该列。一对多边在本实体上根本没有字段，
+所以在那条规则下永远无法暴露。
+
+```go
+entdomain.Edge()                       // 无作用域
+entdomain.Edge().InResponse()          // 嵌套对象出现在 Response 中
+entdomain.Edge().InResponse().As("written_by")  // 覆盖 JSON key
+```
+
+```go
+func (Post) Edges() []ent.Edge {
+    return []ent.Edge{
+        // author_id（标量）由字段注解控制，author（嵌套对象）由这条边注解
+        // 控制。两者互相独立。
+        edge.From("author", User.Type).
+            Ref("posts").Unique().Required().Field("author_id").
+            Annotations(entdomain.Edge().InResponse()),
+    }
+}
+```
+
+和字段构建器一样，每个边构建器都是值接收者并返回副本，因此一个配置了一半的
+注解可以安全地当作基底复用。
+
+> **陷阱**：用链式写法声明自引用边对
+> `edge.To("children", X.Type).From("parent")...Annotations(a)`，注解**只会
+> 挂到反向边上**。不会报任何错，正向边就这么静默地永不出现。请把两条边分开声明。
+
+## 运行时：泛型 CRUD
+
+每个实体共有的算法在 Go 里只写一次，而不是在模板里每个实体写一遍。实体相关的
+部分以类型参数和函数值的形式传入，因此**这一半不 import 任何 ent 包**，
+标识符类型也不再被写死。
+
+```go
+// Query 是分页所需的 ent query builder 子集。Q 是自引用的，因为 ent 的链式
+// 方法返回的是具体 builder 类型。
+type Query[Q, P, O, E any] interface {
+    Where(...P) Q
+    Order(...O) Q
+    Limit(int) Q
+    Offset(int) Q
+    All(context.Context) ([]*E, error)
+    Count(context.Context) (int, error)
+}
+
+type Page[R any] struct {
+    Data  []*R `json:"data"`
+    Total int  `json:"total"`
+    Page  int  `json:"page"`
+    Size  int  `json:"size"`
+}
+
+func ListPage[Q Query[Q, P, O, E], P, O, E, R any](
+    ctx context.Context, q Q, ps []P, os []O, r ListRequest,
+    to func(*E) (*R, error),
+) (*Page[R], error)
+
+func GetOne[E, R, ID any](
+    ctx context.Context,
+    get func(context.Context, ID) (*E, error),
+    to func(*E) (*R, error),
+    id ID,
+) (*R, error)
+```
+
+类型实参在调用点由推导得出，一个都不用手写：
+
+```go
+// 这里 ID 是 uuid.UUID……
+user, err := entdomain.GetOne(ctx, db.User.Get, NewUserResponse, id)
+
+// ……这里是 int。同一个函数。
+tag, err := entdomain.GetOne(ctx, db.Tag.Get, NewTagResponse, tagID)
+
+page, err := entdomain.ListPage(ctx, db.User.Query(),
+    filter.Predicates(), orderOpts, req, NewUserResponse)
+```
+
+### 分页上界
+
+`ListPage` 使用**偏移分页**。代价直说不粉饰：深翻是 O(n)，每页要付一次
+`COUNT`，并且在并发写入下可能跳过或重复行。
+
+```go
+const (
+    entdomain.DefaultPageSize = 20    // 请求没给出可用的 size 时采用
+    entdomain.MaxPageSize     = 1000  // 上界——只在这里决定，别处没有
+)
+
+func (r ListRequest) Limit() int   // 请求的 size 夹取到 MaxPageSize；永不 <= 0
+func (r ListRequest) Offset() int  // (Page-1) * Limit()；永不为负
+func (r ListRequest) SortKey(allow []string, def string) (key string, desc bool, err error)
+```
+
+`MaxPageSize` 是这个上界唯一的落脚点：`Limit()` 夹取到它，`Validate()` 拒绝
+超过它的值。`ListRequest.Size` 的 `validate` tag 里**故意不写** `max=` 子句
+——tag 引用不了常量，写在那里的数字只会漂移。它此前写的是 `max=100`，而
+`MaxPageSize` 是 `1000`，于是第三方 tag 校验器和 `Validate()` 对哪些 size
+合法的判断并不一致。
+
+`SortKey` 会把请求的字段与白名单核对。白名单正是要点所在：未经校验的排序字段
+是注入点、是全表扫描的触发器，并且与分页组合起来还是一个对调用方本不该读到的
+列的排序预言机。未知字段返回 `ErrValidation`。
+
 ## Schema 示例
 
 ```go

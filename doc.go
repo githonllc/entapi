@@ -74,7 +74,11 @@
 // from one.
 //
 // A ListRequest zero value is usable as-is; there is deliberately no defaulting
-// method, so there is none to forget.
+// method, so there is none to forget. ListRequest.SetDefaults has been removed —
+// see the README for the migration note.
+//
+// [ListRequest.Validate] is left with Order, compared case-insensitively to
+// match [ListRequest.SortKey], which is what actually decides the direction.
 //
 // # Error mapping
 //

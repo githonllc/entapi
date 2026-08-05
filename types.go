@@ -1,6 +1,9 @@
 package entdomain
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	// DefaultPageSize is the number of items per page used when a request does
@@ -35,13 +38,17 @@ const (
 // [ListPage] calls. There is deliberately no defaulting method to forget — a
 // zero Size cannot reach a query.
 //
-// Size carries no numeric ceiling in its validate tag on purpose; see
-// [MaxPageSize].
+// The validate struct tags deliberately carry no rules. A tag cannot reference
+// a constant and cannot express a case-insensitive comparison, so every rule
+// spelled there is a second spelling that can only drift away from the code
+// enforcing it — as max=100 had already drifted from [MaxPageSize]=1000, and
+// oneof=asc desc from [ListRequest.SortKey]'s EqualFold. [ListRequest.Validate],
+// [ListRequest.Limit] and [ListRequest.Offset] are the homes.
 type ListRequest struct {
-	Size   int    `json:"size,omitempty" form:"size" validate:"omitempty,min=1"`
-	Page   int    `json:"page,omitempty" form:"page" validate:"omitempty,min=0"`
+	Size   int    `json:"size,omitempty" form:"size"`
+	Page   int    `json:"page,omitempty" form:"page"`
 	SortBy string `json:"sort_by,omitempty" form:"sort_by"`
-	Order  string `json:"order,omitempty" form:"order" validate:"omitempty,oneof=asc desc"`
+	Order  string `json:"order,omitempty" form:"order"`
 	Cursor string `json:"cursor,omitempty" form:"cursor"` // opaque cursor for keyset pagination
 }
 
@@ -56,14 +63,20 @@ type ListRequest struct {
 // compares Size against [MaxPageSize] itself.
 //
 // Order is different: nothing repairs it. [ListRequest.SortKey] reads an
-// unrecognised value as ascending, so an unnoticed typo silently reverses the
-// results.
+// unrecognised value as ascending rather than failing, so an unnoticed typo
+// silently reverses the results.
+//
+// The comparison is case-insensitive because SortKey's is, and SortKey is what
+// decides the direction — it sits on the only path into [ListPage] and applies
+// whether or not anyone validates. Validate rejects exactly what SortKey will
+// not honour, and no more: "DESC" sorts descending, so refusing it here would
+// be this type disagreeing with itself.
 func (r *ListRequest) Validate() error {
 	if r == nil {
 		return fmt.Errorf("%w: list request cannot be nil", ErrValidation)
 	}
 
-	if r.Order != "" && r.Order != "asc" && r.Order != "desc" {
+	if r.Order != "" && !strings.EqualFold(r.Order, "asc") && !strings.EqualFold(r.Order, "desc") {
 		return fmt.Errorf("%w: order must be 'asc' or 'desc', got %q", ErrValidation, r.Order)
 	}
 

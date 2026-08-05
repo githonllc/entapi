@@ -9,7 +9,8 @@ package {{ base $.Config.Package }}
 import (
 	"context"
 	"fmt"
-{{- if or (hasTimeFields $) (hasSoftDelete $) }}
+{{- /* time is used only by the soft-delete branches of Delete/DeleteBatch */}}
+{{- if hasSoftDelete $ }}
 	"time"
 {{- end }}
 

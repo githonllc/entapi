@@ -12,16 +12,6 @@ func isTimeField(field *gen.Field) bool {
 	return strings.Contains(field.Type.String(), "time.Time")
 }
 
-// hasTimeFields checks if the entity has any time fields.
-func hasTimeFields(node *gen.Type) bool {
-	for _, field := range domainFields(node) {
-		if isTimeField(field) {
-			return true
-		}
-	}
-	return false
-}
-
 // hasSoftDelete checks if an entity has a deleted_at field (convention-based soft-delete detection).
 // Returns true if the entity has a Nillable, Optional time.Time field named "deleted_at".
 func hasSoftDelete(node *gen.Type) bool {

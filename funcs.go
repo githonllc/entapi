@@ -28,8 +28,12 @@ import (
 //   - funcs_scope.go:      scope and requirement checking
 //   - funcs_typechecks.go: field type checking
 //   - funcs_codegen.go:    code generation helpers
+//   - funcs_imports.go:    import specs the emitted files must declare
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
+		// Import declaration
+		"dtoImports": dtoImports,
+
 		// String manipulation
 		"camelCase": camelCase,
 
@@ -44,7 +48,6 @@ func templateFuncs() template.FuncMap {
 		"isDomainRequired": isDomainRequired,
 
 		// Field type checking
-		"hasTimeFields":      hasTimeFields,
 		"isComplexFieldType": isComplexFieldType,
 		"hasSoftDelete":      hasSoftDelete,
 

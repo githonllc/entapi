@@ -22,12 +22,18 @@ var entPredicates = []string{"IsNotFound", "IsConstraintError"}
 // `package ent` and must therefore always carry the entdomain qualifier.
 var entdomainSymbols = []string{"ErrNotFound", "ErrAlreadyExists", "ErrValidation"}
 
+// templateComment matches a {{/* ... */}} block. Comments are stripped before
+// the scan below: the assertion is about the Go source the template emits, and
+// the comments explaining the resolution necessarily name the symbols they warn
+// against.
+var templateComment = regexp.MustCompile(`(?s)\{\{/\*.*?\*/\}\}`)
+
 func TestGeneratedErrorPredicatesResolveUnambiguously(t *testing.T) {
 	src, err := templateFS.ReadFile("templates/base_service.tmpl")
 	if err != nil {
 		t.Fatalf("reading embedded base_service.tmpl failed: %v", err)
 	}
-	text := string(src)
+	text := templateComment.ReplaceAllString(string(src), "")
 
 	for _, name := range entPredicates {
 		qualified := regexp.MustCompile(`[\w.]+\.` + name + `\b`)

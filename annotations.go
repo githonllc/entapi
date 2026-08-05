@@ -104,10 +104,6 @@ type DomainField struct {
 	// Example is the example value
 	Example interface{} `json:"example,omitempty"`
 
-	// Sensitive indicates whether the field is sensitive (e.g., password; should not appear in HTTP responses).
-	// Only affects the handler layer; the service/repository layers can still fully operate on this field.
-	Sensitive bool `json:"sensitive,omitempty"`
-
 	// Searchable indicates whether the field is searchable (affects QueryParams and query method generation)
 	Searchable bool `json:"searchable,omitempty"`
 
@@ -227,15 +223,17 @@ func DefaultField() DomainField {
 }
 
 // InputOnlyField creates an HTTP-input-only field (excluded from HTTP responses).
-// Suitable for: passwords, sensitive information, etc.
+// Suitable for: passwords, secrets and anything else that must never be
+// serialised back to a client. Withholding ScopeResponse is what keeps the
+// field out of the response struct, and it is the only mechanism that does:
+// there is no separate marker to set, and none to forget.
 // Layer impact:
 // - Handler layer: can be populated from HTTP create/update requests, but excluded from responses
 // - Service layer: fully accessible; can internally set, read, and query this field
 // - Repository layer: fully accessible; can create, update, read, and query this field
 func InputOnlyField() DomainField {
 	return DomainField{
-		Scopes:    []FieldScope{ScopeCreate, ScopeUpdate},
-		Sensitive: true,
+		Scopes: []FieldScope{ScopeCreate, ScopeUpdate},
 	}
 }
 
@@ -320,12 +318,6 @@ func (d DomainField) WithDescription(desc string) DomainField {
 // WithExample sets an example value for the field
 func (d DomainField) WithExample(example interface{}) DomainField {
 	d.Example = example
-	return d
-}
-
-// AsSensitive marks the field as sensitive
-func (d DomainField) AsSensitive() DomainField {
-	d.Sensitive = true
 	return d
 }
 

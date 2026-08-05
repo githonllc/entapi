@@ -136,7 +136,7 @@ skinparam classAttributeIconSize 0
 class DomainField <<annotation>> {
   Scopes []FieldScope
   Required map[FieldScope]bool
-  Sensitive/Searchable/Sortable/Filterable bool
+  Searchable/Sortable/Filterable bool
   UniqueLookup/RangeLookup bool
   Metadata *FieldMetadata
   --
@@ -355,14 +355,14 @@ Enum predicates need two branches because Go type assertions do not match underl
 
 ### Adding a field capability end to end
 
-Say you want `.AsSensitive()` to actually drop a field from `Response` (today it is stored and ignored):
+Say you want `.AsSearchable()` to actually reach the generated code (today it is stored and ignored):
 
 1. `annotations.go` — field already exists on `DomainField`; no change.
-2. `funcs_fields.go` — filter it inside `responseFields`.
-3. `funcs.go` — only if you add a *new* template func. **A helper in `funcs_*.go` is invisible to templates unless it is in `templateFuncs()`.**
-4. `templates/dto.tmpl` + `templates/base_service.tmpl` — `Response` struct and `EntToResponse` are two places; both must agree or the emitted file will not compile.
-5. `funcs_fields_test.go` — table test with `newStringField("x", ptr(InputOnlyField()))`.
-6. Regenerate in a real ent project. Nothing in this repo compiles emitted output.
+2. `funcs_fields.go` — a new selector reading it, next to `responseFields`.
+3. `funcs.go` — register the selector in `templateFuncs()`. **A helper in `funcs_*.go` is invisible to templates unless it is there** — and one registered but invoked by no template fails `TestTemplateInvocationsAreRegistered`, so the registration and the template edit are one commit.
+4. `templates/dto.tmpl` + `templates/base_service.tmpl` — a field-shaped capability usually lands in two places (the struct and its converter); both must agree or the emitted file will not compile.
+5. `funcs_fields_test.go` — table test with `newStringField("x", ptr(DefaultField()))`.
+6. Add or extend a fixture under `internal/fixtures/` — `TestCodegenFixtures` is the only thing here that compiles emitted output.
 
 ### Reading order
 
@@ -386,6 +386,6 @@ Say you want `.AsSensitive()` to actually drop a field from `Response` (today it
 | **BaseService is UUID-only** | `uuid.UUID` hardcoded in every hook and CRUD signature (`base_service.tmpl`) | int/string primary keys generate uncompilable services |
 | Formatting failure is non-fatal | `extension.go:170` logs a warning and writes unformatted source | a broken template yields a broken-but-written `.go` file |
 
-`DomainConfig`/`EntityName`, `FieldMetadata`, and `Sensitive` occur **only** in `annotations.go` — no template and no other Go file reads them (`grep -rn` over `*.go` + `*.tmpl`, excluding tests). They are declared-only surface; `annotations.go:44` labels `FieldMetadata` "RESERVED", which matches. `Searchable`/`Sortable`/`Filterable` had no reader left once #7 deleted the three dead selectors, so they are declared-only too.
+`DomainConfig`/`EntityName` and `FieldMetadata` occur **only** in `annotations.go` — no template and no other Go file reads them (`grep -rn` over `*.go` + `*.tmpl`, excluding tests). They are declared-only surface; `annotations.go:44` labels `FieldMetadata` "RESERVED", which matches. `Searchable`/`Sortable`/`Filterable` had no reader left once #7 deleted the three dead selectors, so they are declared-only too. `Sensitive` was the same shape but carried a security promise in its godoc, so #3 deleted it instead of leaving it declared.
 
 ⚠️ Needs verification: everything about *emitted* code in §5.2 and §4 is read off the templates, not off compiled output — this repo contains no ent project, so no generated file was ever compiled during this analysis.

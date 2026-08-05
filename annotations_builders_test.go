@@ -762,9 +762,6 @@ func TestComplexBuilderChaining(t *testing.T) {
 			WithLength(intPtr(8), intPtr(128))
 
 		// From InputOnlyField
-		if !field.Sensitive {
-			t.Error("Should be Sensitive")
-		}
 		expectedScopes := []FieldScope{ScopeCreate, ScopeUpdate}
 		if len(field.Scopes) != len(expectedScopes) {
 			t.Errorf("Should have %d scopes, got %d", len(expectedScopes), len(field.Scopes))

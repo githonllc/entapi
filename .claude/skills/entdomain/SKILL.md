@@ -51,7 +51,7 @@ Scopes control which **handler-layer DTOs** include a field. They do NOT restric
 | Builder | Scopes | Use For |
 |---------|--------|---------|
 | `DefaultField()` | create, update, response | Most business fields (name, email, status) |
-| `InputOnlyField()` | create, update + sensitive | Password, secrets |
+| `InputOnlyField()` | create, update | Password, secrets — no response scope, so never in a response |
 | `OutputOnlyField()` | response | System fields (timestamps, computed state) |
 | `CreateOnlyField()` | create, response | Immutable after creation (external_id) |
 | `NewDomainField()` | none | Tracked by ent but not in any HTTP struct (deleted_at, password_hash) |
@@ -62,7 +62,6 @@ Scopes control which **handler-layer DTOs** include a field. They do NOT restric
 - `.WithRequired(scope)` — required in that scope's DTO
 - `.AsSearchable()`, `.AsFilterable()`, `.AsSortable()` — query capabilities
 - `.AsUniqueLookup()`, `.AsRangeLookup()` — generate FindBy methods
-- `.AsSensitive()` — excluded from responses
 - `.WithDescription(desc)`, `.WithExample(val)` — OpenAPI metadata
 
 ## Generated Files Per Entity

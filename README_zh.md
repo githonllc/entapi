@@ -107,6 +107,34 @@ field.String("email").
     )
 ```
 
+### 从 `AsSensitive()` 迁移
+
+**安全相关。** `DomainField.Sensitive` 与 `AsSensitive()` **已删除**。它们从来
+没有起过任何作用：响应字段选择只读 scope 列表，别的一概不看，所以标了 sensitive
+的字段照样被生成进 `Response` 结构体并序列化成 JSON。如果你在一个同时带
+`ScopeResponse` 的字段上调用了 `AsSensitive()`——而 `DefaultField()` 就会授予
+`ScopeResponse`——那个字段一直都在你的 API 响应里。**请据此审计你的响应；删掉这个
+调用不会改变任何行为，因为它本来就没有行为。**
+
+```go
+// 之前——能编译，只有承诺，照样泄露
+field.String("password").
+    Annotations(entdomain.DefaultField().AsSensitive())
+
+// 之后——scope 列表就是机制，而且它真的生效
+field.String("password").
+    Annotations(entdomain.InputOnlyField())
+```
+
+`InputOnlyField()` 只授予 `ScopeCreate` 和 `ScopeUpdate`。让字段不出现在响应里，
+靠的是不给它 `ScopeResponse`，而且从来只有这一条路。自定义组合同理：
+`entdomain.DomainFieldWithScopes(entdomain.ScopeCreate)`。
+
+选择删除而不是实现，是因为在一维 scope 模型下它只添加承诺、不添加能力。它唯一
+能表达而 scope 表达不了的语义——「对一部分调用者可见、对另一部分不可见」——需要
+一个本包并不存在的受众维度
+（[#3](https://github.com/githonllc/entdomain/issues/3)）。
+
 ### 边注解
 
 边有自己的注解。此前边的暴露与否是从它的外键字段推导的，那把两个不同的决定
@@ -471,12 +499,6 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 ## 已知限制
 
 以下全部核对过源码，不是从文档推断的。每条附带跟踪它的 issue。
-
-**一个名不副实的注解。** `Sensitive` 读起来像数据保护标记。**没有任何代码读它**——
-响应字段选择器只看 scope，所以标了 sensitive 的字段照样出现在响应里。不要依赖它。
-它会被**删除**而不是实现：在一维 scope 模型下，「永不出现在响应里」本来就可以靠
-不给 response scope 表达，这个注解只添加了承诺、没有添加能力
-（[#3](https://github.com/githonllc/entdomain/issues/3)）。
 
 **大约二十个导出的注解字段被接受、存储、然后忽略。** API 照单全收不报错，
 所以从外面看不出哪些是有效的。只有 scope 列表和 required 映射真正到达模板

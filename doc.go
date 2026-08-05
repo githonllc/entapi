@@ -33,6 +33,12 @@
 //	edge.To("posts", Post.Type).
 //	    Annotations(entdomain.Edge().InResponse())
 //
+// A field stays out of responses by not carrying [ScopeResponse] — that is the
+// only mechanism, so use [InputOnlyField] or a custom scope list for passwords
+// and secrets. DomainField.Sensitive and AsSensitive have been removed; they
+// were never read by anything, so a field marked sensitive was emitted into the
+// response struct regardless. See the README for the migration note.
+//
 // Wire the extension in your entc.go:
 //
 //	func main() {

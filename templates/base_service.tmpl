@@ -160,7 +160,11 @@ func (s *Base{{ $.Name }}Service) Update(ctx context.Context, id uuid.UUID, req 
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
-		if IsNotFound(err) {
+		{{/* IsNotFound (and IsConstraintError) are Ent's generated predicates, not
+		     this package's. They are deliberately unqualified: this file is emitted
+		     into the consumer's package ent, so the bare names bind there and unwrap
+		     *ent.NotFoundError / *ent.ConstraintError. The entdomain sentinels below
+		     stay qualified because package ent has no such symbols. See errors.go. */}}if IsNotFound(err) {
 			return nil, fmt.Errorf("%w: {{ lower $.Name }} %s", entdomain.ErrNotFound, id)
 		}
 		if IsConstraintError(err) {
@@ -185,7 +189,11 @@ func (s *Base{{ $.Name }}Service) Delete(ctx context.Context, id uuid.UUID) erro
 	err := s.DB.{{ $.Name }}.DeleteOneID(id).Exec(ctx)
 {{- end }}
 	if err != nil {
-		if IsNotFound(err) {
+		{{/* IsNotFound (and IsConstraintError) are Ent's generated predicates, not
+		     this package's. They are deliberately unqualified: this file is emitted
+		     into the consumer's package ent, so the bare names bind there and unwrap
+		     *ent.NotFoundError / *ent.ConstraintError. The entdomain sentinels below
+		     stay qualified because package ent has no such symbols. See errors.go. */}}if IsNotFound(err) {
 			return fmt.Errorf("%w: {{ lower $.Name }} %s", entdomain.ErrNotFound, id)
 		}
 		return err

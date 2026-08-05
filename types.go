@@ -7,21 +7,33 @@ const (
 	// not ask for one, or asks for a non-positive one.
 	DefaultPageSize = 20
 
-	// MaxPageSize is the maximum allowed number of items per page, and the
-	// single place that bound is decided.
+	// MaxPageSize is the maximum allowed number of items per page: the single
+	// place that bound is decided, with a single reaction to crossing it.
 	//
-	// Everything that enforces a page-size ceiling reads this constant:
-	// [ListRequest.Limit] clamps to it and [ListRequest.Validate] rejects above
-	// it. The struct tag on ListRequest.Size deliberately does not restate it —
-	// a tag cannot reference a constant, so a number written there can only
-	// drift out of agreement with this one. It previously said max=100 while
-	// this constant said 1000.
+	// [ListRequest.Limit] is the only thing that reads it, and it clamps.
+	// Clamping rather than rejecting, because Limit sits on the only path into
+	// [ListPage] and therefore applies whether or not a caller remembers to
+	// validate anything; a ceiling that fires only when someone opts in is
+	// advice, not a bound. Whether an oversized request also deserves a 4xx is
+	// a policy the consumer owns — compare against this constant to decide.
+	// [Page].Size reports the size actually used, so clamping is visible.
+	//
+	// The struct tag on ListRequest.Size deliberately does not restate the
+	// number — a tag cannot reference a constant, so a number written there can
+	// only drift out of agreement with this one. It previously said max=100
+	// while this constant said 1000.
 	MaxPageSize = 1000
 )
 
 // ListRequest represents a paginated list request with optional sorting.
 // Supports both offset-based (Page/Size) and cursor-based (Cursor/Size) pagination.
 // When Cursor is set, keyset pagination is used; otherwise offset pagination applies.
+//
+// The zero value is usable and needs no preparation. Read the effective values
+// through [ListRequest.Limit] and [ListRequest.Offset], never off the fields
+// directly: those two methods are what default and clamp, and they are what
+// [ListPage] calls. There is deliberately no defaulting method to forget — a
+// zero Size cannot reach a query.
 //
 // Size carries no numeric ceiling in its validate tag on purpose; see
 // [MaxPageSize].
@@ -33,34 +45,26 @@ type ListRequest struct {
 	Cursor string `json:"cursor,omitempty" form:"cursor"` // opaque cursor for keyset pagination
 }
 
-// SetDefaults fills in zero-valued fields with sensible defaults.
-// Call this before using the request to ensure pagination works correctly.
-func (r *ListRequest) SetDefaults() {
-	if r.Size == 0 {
-		r.Size = DefaultPageSize
-	}
-}
-
-// Validate checks that all fields are within acceptable bounds.
-// It does NOT modify the receiver — call SetDefaults first if needed.
+// Validate reports input that nothing downstream can silently repair. Errors
+// wrap [ErrValidation].
+//
+// It deliberately says nothing about Size or Page. [ListRequest.Limit] and
+// [ListRequest.Offset] normalise those on the only path into [ListPage], so a
+// second opinion here would be a bypassable duplicate of a bound that is
+// already enforced — and the two used to disagree, one clamping and one
+// rejecting. A consumer that wants an oversized request to be a client error
+// compares Size against [MaxPageSize] itself.
+//
+// Order is different: nothing repairs it. [ListRequest.SortKey] reads an
+// unrecognised value as ascending, so an unnoticed typo silently reverses the
+// results.
 func (r *ListRequest) Validate() error {
 	if r == nil {
-		return fmt.Errorf("list request cannot be nil")
-	}
-
-	if r.Size < 0 {
-		return fmt.Errorf("size cannot be negative")
-	}
-	if r.Size > MaxPageSize {
-		return fmt.Errorf("size cannot exceed %d", MaxPageSize)
-	}
-
-	if r.Page < 0 {
-		return fmt.Errorf("page cannot be negative")
+		return fmt.Errorf("%w: list request cannot be nil", ErrValidation)
 	}
 
 	if r.Order != "" && r.Order != "asc" && r.Order != "desc" {
-		return fmt.Errorf("order must be 'asc' or 'desc'")
+		return fmt.Errorf("%w: order must be 'asc' or 'desc', got %q", ErrValidation, r.Order)
 	}
 
 	return nil

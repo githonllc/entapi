@@ -156,8 +156,40 @@ func NewDomainField() DomainField {
 // This is the most basic builder for custom scope combinations.
 func DomainFieldWithScopes(scopes ...FieldScope) DomainField {
 	return DomainField{
-		Scopes: scopes,
+		Scopes: copyScopes(scopes),
 	}
+}
+
+// copyScopes, copyEnum and copyTags return a copy of the slice, so a built
+// annotation never shares a backing array with its caller's slice, with a
+// package-level var such as AllFieldScopes, or with another chain forked from
+// the same base annotation. nil stays nil, so an unset field keeps encoding as
+// absent rather than as an empty list.
+func copyScopes(scopes []FieldScope) []FieldScope {
+	if scopes == nil {
+		return nil
+	}
+	out := make([]FieldScope, len(scopes))
+	copy(out, scopes)
+	return out
+}
+
+func copyEnum(values []interface{}) []interface{} {
+	if values == nil {
+		return nil
+	}
+	out := make([]interface{}, len(values))
+	copy(out, values)
+	return out
+}
+
+func copyTags(tags []string) []string {
+	if tags == nil {
+		return nil
+	}
+	out := make([]string, len(tags))
+	copy(out, tags)
+	return out
 }
 
 // DefaultField creates a standard business field (fully accessible at the HTTP layer).
@@ -168,7 +200,10 @@ func DomainFieldWithScopes(scopes ...FieldScope) DomainField {
 // - Repository layer: fully accessible, unrestricted by scopes
 func DefaultField() DomainField {
 	return DomainField{
-		Scopes: AllFieldScopes,
+		// A copy: handing out the package-level slice would let any caller
+		// that assigns to an element corrupt AllFieldScopes for every
+		// subsequent caller.
+		Scopes: copyScopes(AllFieldScopes),
 	}.AsSearchable().AsFilterable().AsSortable()
 }
 
@@ -235,12 +270,19 @@ func AuditLogField() DomainField {
 
 // Fluent builder methods
 
-// WithRequired marks the field as required within the specified scope
+// WithRequired marks the field as required within the specified scope.
+//
+// The receiver is taken by value, but that copy is shallow: writing into the
+// receiver's map would be visible to every other chain forked from the same
+// base annotation. So always allocate a fresh map and copy the existing
+// entries into it, even when the receiver's map is non-nil.
 func (d DomainField) WithRequired(scope FieldScope) DomainField {
-	if d.Required == nil {
-		d.Required = make(map[FieldScope]bool)
+	required := make(map[FieldScope]bool, len(d.Required)+1)
+	for k, v := range d.Required {
+		required[k] = v
 	}
-	d.Required[scope] = true
+	required[scope] = true
+	d.Required = required
 	return d
 }
 
@@ -300,13 +342,22 @@ func (d DomainField) AsRangeLookup() DomainField {
 
 // Metadata related methods
 
-// ensureMetadata initializes the Metadata field if nil, returning
-// the (potentially updated) DomainField. This eliminates the repetitive
-// nil-check pattern across all metadata builder methods.
+// ensureMetadata gives the returned DomainField a *FieldMetadata that nobody
+// else holds, so the caller can write through it freely.
+//
+// It always allocates. The receiver is copied by value but the Metadata
+// pointer is not, so reusing an existing pointee would make every chain forked
+// from the same base annotation write into one shared FieldMetadata. Enum and
+// Tags are slices and get their own backing arrays for the same reason.
 func (d DomainField) ensureMetadata() DomainField {
 	if d.Metadata == nil {
 		d.Metadata = &FieldMetadata{}
+		return d
 	}
+	metadata := *d.Metadata
+	metadata.Enum = copyEnum(metadata.Enum)
+	metadata.Tags = copyTags(metadata.Tags)
+	d.Metadata = &metadata
 	return d
 }
 
@@ -356,7 +407,7 @@ func (d DomainField) WithLength(min, max *int) DomainField {
 // WithEnum sets the allowed enumeration values for the field.
 func (d DomainField) WithEnum(values ...interface{}) DomainField {
 	d = d.ensureMetadata()
-	d.Metadata.Enum = values
+	d.Metadata.Enum = copyEnum(values)
 	return d
 }
 
@@ -384,6 +435,6 @@ func (d DomainField) AsDeprecated() DomainField {
 // WithTags adds grouping tags to the field for documentation organization.
 func (d DomainField) WithTags(tags ...string) DomainField {
 	d = d.ensureMetadata()
-	d.Metadata.Tags = tags
+	d.Metadata.Tags = copyTags(tags)
 	return d
 }

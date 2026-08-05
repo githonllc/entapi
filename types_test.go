@@ -13,8 +13,8 @@ func TestListRequestValidation(t *testing.T) {
 		{
 			name: "valid request",
 			req: &ListRequest{
-				Size:  10,
-				Page: 0,
+				Size:   10,
+				Page:   0,
 				SortBy: "name",
 				Order:  "asc",
 			},
@@ -23,8 +23,8 @@ func TestListRequestValidation(t *testing.T) {
 		{
 			name: "valid request with desc order",
 			req: &ListRequest{
-				Size:  20,
-				Page: 10,
+				Size:   20,
+				Page:   10,
 				SortBy: "created_at",
 				Order:  "desc",
 			},
@@ -33,7 +33,7 @@ func TestListRequestValidation(t *testing.T) {
 		{
 			name: "negative limit",
 			req: &ListRequest{
-				Size:  -1,
+				Size: -1,
 				Page: 0,
 			},
 			wantErr: true,
@@ -41,7 +41,7 @@ func TestListRequestValidation(t *testing.T) {
 		{
 			name: "negative offset",
 			req: &ListRequest{
-				Size:  10,
+				Size: 10,
 				Page: -1,
 			},
 			wantErr: true,
@@ -49,7 +49,7 @@ func TestListRequestValidation(t *testing.T) {
 		{
 			name: "limit too large",
 			req: &ListRequest{
-				Size:  1001,
+				Size: 1001,
 				Page: 0,
 			},
 			wantErr: true,
@@ -58,8 +58,8 @@ func TestListRequestValidation(t *testing.T) {
 			name: "invalid order",
 			req: &ListRequest{
 				Size:  10,
-				Page: 0,
-				Order:  "invalid",
+				Page:  0,
+				Order: "invalid",
 			},
 			wantErr: true,
 		},
@@ -93,4 +93,3 @@ func TestListRequestDefaults(t *testing.T) {
 		t.Errorf("Validation should not fail after SetDefaults: %v", err)
 	}
 }
-

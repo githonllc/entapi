@@ -49,6 +49,7 @@ var fixtures = []fixtureCase{
 	{dir: "fieldshapes", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
 	{dir: "immutable", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Doc.origin", "Doc.source", "Immutable()", `scope "update"`, "SetOrigin", "SetSource"}},
 	{dir: "edges", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "intid", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the

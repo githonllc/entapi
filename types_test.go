@@ -30,29 +30,33 @@ func TestListRequestValidation(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		// Size and Page are no longer Validate()'s business: Limit() and
+		// Offset() normalise them on the only path into ListPage, so rejecting
+		// them here as well would be a second, bypassable reaction to the same
+		// input. See TestClampingIsTheOnlyReactionToTheCeiling.
 		{
-			name: "negative limit",
+			name: "negative limit is normalised, not rejected",
 			req: &ListRequest{
 				Size: -1,
 				Page: 0,
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
-			name: "negative offset",
+			name: "negative page is normalised, not rejected",
 			req: &ListRequest{
 				Size: 10,
 				Page: -1,
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
-			name: "limit too large",
+			name: "oversized limit is clamped, not rejected",
 			req: &ListRequest{
 				Size: 1001,
 				Page: 0,
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "invalid order",
@@ -80,16 +84,24 @@ func TestListRequestValidation(t *testing.T) {
 	}
 }
 
-func TestListRequestDefaults(t *testing.T) {
+// TestZeroValueRequestNeedsNoPreparation replaces the old TestListRequestDefaults.
+//
+// The defect it encodes: SetDefaults() was a separate mutating call that
+// nothing forced a caller to make, while Validate() accepted Size == 0. A
+// handler that forgot the call passed a zero size straight through — the
+// documented P0-8 in QUALITY-REVIEW.md. The fix is not a reminder, it is
+// removing the call that could be forgotten: Limit() defaults and clamps, and
+// it sits on the only path into ListPage.
+func TestZeroValueRequestNeedsNoPreparation(t *testing.T) {
 	req := &ListRequest{}
-	req.SetDefaults()
 
-	if req.Size != DefaultPageSize {
-		t.Errorf("Default size should be %d, got %d", DefaultPageSize, req.Size)
-	}
-
-	// Validate should pass after defaults
 	if err := req.Validate(); err != nil {
-		t.Errorf("Validation should not fail after SetDefaults: %v", err)
+		t.Errorf("a zero-value request must be valid as-is: %v", err)
+	}
+	if got := req.Limit(); got != DefaultPageSize {
+		t.Errorf("Limit() = %d, want %d without any preparatory call", got, DefaultPageSize)
+	}
+	if got := req.Offset(); got != 0 {
+		t.Errorf("Offset() = %d, want 0", got)
 	}
 }

@@ -63,16 +63,6 @@ func newTestType(name string, fields ...*gen.Field) *gen.Type {
 	}
 }
 
-// newUUIDTestType creates a gen.Type with given name, a UUID ID field, and the provided fields.
-func newUUIDTestType(name string, fields ...*gen.Field) *gen.Type {
-	idField := newUUIDField("id", nil)
-	return &gen.Type{
-		Name:   name,
-		ID:     idField,
-		Fields: fields,
-	}
-}
-
 // ptr returns a pointer to a DomainField value.
 func ptr(d DomainField) *DomainField {
 	return &d

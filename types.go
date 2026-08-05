@@ -3,18 +3,30 @@ package entdomain
 import "fmt"
 
 const (
-	// DefaultPageSize is the default number of items per page when not specified or invalid.
+	// DefaultPageSize is the number of items per page used when a request does
+	// not ask for one, or asks for a non-positive one.
 	DefaultPageSize = 20
 
-	// MaxPageSize is the maximum allowed number of items per page.
+	// MaxPageSize is the maximum allowed number of items per page, and the
+	// single place that bound is decided.
+	//
+	// Everything that enforces a page-size ceiling reads this constant:
+	// [ListRequest.Limit] clamps to it and [ListRequest.Validate] rejects above
+	// it. The struct tag on ListRequest.Size deliberately does not restate it —
+	// a tag cannot reference a constant, so a number written there can only
+	// drift out of agreement with this one. It previously said max=100 while
+	// this constant said 1000.
 	MaxPageSize = 1000
 )
 
 // ListRequest represents a paginated list request with optional sorting.
 // Supports both offset-based (Page/Size) and cursor-based (Cursor/Size) pagination.
 // When Cursor is set, keyset pagination is used; otherwise offset pagination applies.
+//
+// Size carries no numeric ceiling in its validate tag on purpose; see
+// [MaxPageSize].
 type ListRequest struct {
-	Size   int    `json:"size,omitempty" form:"size" validate:"omitempty,min=1,max=100"`
+	Size   int    `json:"size,omitempty" form:"size" validate:"omitempty,min=1"`
 	Page   int    `json:"page,omitempty" form:"page" validate:"omitempty,min=0"`
 	SortBy string `json:"sort_by,omitempty" form:"sort_by"`
 	Order  string `json:"order,omitempty" form:"order" validate:"omitempty,oneof=asc desc"`

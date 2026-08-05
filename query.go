@@ -34,11 +34,15 @@ type Page[R any] struct {
 	Size  int  `json:"size"`
 }
 
-// Limit returns the page size, clamped to the supported range.
+// Limit returns the effective page size: the requested size clamped to
+// [MaxPageSize], or [DefaultPageSize] when nothing usable was requested.
 //
-// Note: ListRequest.Size carries `validate:"max=100"` while MaxPageSize is
-// 1000. That disagreement is tracked in issue #6; this function is the single
-// place the effective bound is decided.
+// It never returns zero or a negative number, which is what keeps a caller from
+// reproducing the v1 lister's panic — a zero limit there produced an empty
+// slice that was then indexed at len-1.
+//
+// The bound itself lives in exactly one place, [MaxPageSize]; this function
+// reads it rather than restating it.
 func (r ListRequest) Limit() int {
 	switch {
 	case r.Size <= 0:

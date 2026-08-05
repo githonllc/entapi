@@ -113,8 +113,12 @@ func TestDomainFieldBuilders(t *testing.T) {
 			}
 		}
 
-		if !field.Sensitive {
-			t.Error("InputOnlyField should be sensitive")
+		// Withholding ScopeResponse is the whole mechanism: there is no
+		// separate marker that keeps the field out of the response.
+		for _, scope := range field.Scopes {
+			if scope == ScopeResponse {
+				t.Error("InputOnlyField must not carry ScopeResponse")
+			}
 		}
 	})
 
@@ -179,14 +183,6 @@ func TestDomainFieldFluentAPI(t *testing.T) {
 
 		if !field.Sortable {
 			t.Error("Field should be sortable")
-		}
-	})
-
-	t.Run("AsSensitive", func(t *testing.T) {
-		field := NewDomainField().AsSensitive()
-
-		if !field.Sensitive {
-			t.Error("Field should be sensitive")
 		}
 	})
 

@@ -110,6 +110,38 @@ field.String("email").
     )
 ```
 
+### Migrating from `AsSensitive()`
+
+**Security-relevant.** `DomainField.Sensitive` and `AsSensitive()` **have been
+removed.** They never did anything: response field selection reads the scope
+list and nothing else, so a field marked sensitive was emitted into the
+generated `Response` struct and serialised to JSON like any other field. If you
+called `AsSensitive()` on a field that also carried `ScopeResponse` — which
+`DefaultField()` grants — that field has been in your API responses all along.
+**Audit your responses for it; removing the call changes no behaviour, because
+there was none.**
+
+```go
+// before — compiles, promises nothing, leaks
+field.String("password").
+    Annotations(entdomain.DefaultField().AsSensitive())
+
+// after — the scope list is the mechanism, and it is enforced
+field.String("password").
+    Annotations(entdomain.InputOnlyField())
+```
+
+`InputOnlyField()` grants `ScopeCreate` and `ScopeUpdate` only. Withholding
+`ScopeResponse` is what keeps a field out of the response, and it is the only
+thing that ever did. Any custom combination works the same way:
+`entdomain.DomainFieldWithScopes(entdomain.ScopeCreate)`.
+
+The marker was removed rather than implemented because in a one-dimensional
+scope model it adds a promise without adding a capability. The one meaning it
+could carry that scopes cannot — visible to some callers but not others — needs
+an audience dimension this package does not have
+([#3](https://github.com/githonllc/entdomain/issues/3)).
+
 ### Edge Annotations
 
 Edges carry their own annotation. Exposure used to be derived from the edge's
@@ -494,13 +526,6 @@ entdomain.WithEntDomainPackage("custom/path") // override entdomain import path
 ## Known limitations
 
 Verified against the source, not inferred from docs. Each links to the issue tracking it.
-
-**An annotation that does not do what its name says.** `Sensitive` reads as a
-data-protection marker. Nothing consults it — the response selector looks only at scopes,
-so a field marked sensitive is emitted into responses like any other. Do not rely on it.
-It is being removed rather than implemented: with a one-dimensional scope model, "never in
-a response" is already expressible by omitting the response scope, so the annotation adds a
-promise without adding a capability ([#3](https://github.com/githonllc/entdomain/issues/3)).
 
 **Roughly twenty exported annotation fields are accepted, stored and ignored.** The API
 accepts them without complaint, so there is no way to tell from the outside which ones do

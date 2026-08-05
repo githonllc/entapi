@@ -49,8 +49,8 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 |---|---|
 | `funcs_fields.go` | field selection: `domainFields`, `createFields`, `updateFields`, `responseFields`, `responseEdges`, lookup-field filters |
 | `funcs_scope.go` | `hasDomainScope`, `isDomainRequired`, and `getDomainFieldAnnotation` |
-| `funcs_typechecks.go` | `isTimeField`, `isUUIDType`, `hasSoftDelete`, `isComplexFieldType` |
-| `funcs_codegen.go` | string-emitting helpers (`setFieldCallReq`, `fieldPredicate`, …) |
+| `funcs_typechecks.go` | `isTimeField`, `hasTimeFields`, `hasSoftDelete`, `isComplexFieldType` |
+| `funcs_codegen.go` | string-emitting helpers (`setFieldCallReq`) |
 | `funcs_strings.go` | `camelCase`, `contains`, `hasPrefix` |
 
 **A helper is only callable from a template if it appears in `templateFuncs()`.** Adding a func to a `funcs_*.go` file is not enough.
@@ -80,17 +80,37 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
 - `funcs_codegen.go` helpers are tested by asserting on **substrings of emitted Go source**, not by compiling it.
 - **No test renders a full template end-to-end.** Template edits are effectively untested here; verify them by regenerating in a real ent project.
 
-## Known dead / stale code (verified as of the initial commit)
+## Dead code is now a test failure, not a convention (#7)
 
-Do not treat these as load-bearing, and prefer deleting over extending them:
+The dead template, the dead registry entries, the unreachable field selectors,
+and the test-local copy of the annotation decoder are gone. Three assertions
+keep them from coming back — read them before adding to the registry:
 
-- `templates/model.tmpl` is byte-identical to `templates/dto.tmpl` except for one header comment, and is never loaded by `template_index.go`. `dto.tmpl` is the live one. (`.claude/skills/entdomain/SKILL.md` still points at `model.tmpl` — that line is wrong.)
-- `generateIdOperation`, `generateSearchCondition`, `searchMethod`, `findByMethod`, `isUniqueField`, `isUUIDType`, `uniqueLookupFields`, `rangeLookupFields` are registered as template funcs but referenced by **no** template. The first four emit repository-era code (`r.client…`, `model.…`) that no longer matches the generated `BaseService` shape (`s.DB`). The comment in `funcs.go` claiming only template-invoked functions are registered is therefore inaccurate.
-- `funcs_test.go` defines its own `convertMapToDomainField`, a test-local duplicate of the map branch of `getDomainFieldAnnotation`.
+- `TestTemplateInvocationsAreRegistered` (`template_funcs_consistency_test.go`)
+  fails in **both** directions: a template calling an unsupplied function, and a
+  registered entry no template invokes. The lists are derived from the parsed
+  template trees, never hardcoded. Registering a helper "for later" fails CI.
+- `TestTemplateFuncsDoNotShadowEntBuiltins` keeps `templateFuncs()` disjoint
+  from `gen.Funcs`. `templateFuncMap()` overlays ours on Ent's, so a same-named
+  entry would silently replace an Ent builtin. Use Ent's `lower`, `hasPrefix`,
+  `camel`, `snake`, … directly; do not re-register them.
+- `TestEveryEmbeddedTemplateIsLoaded` (`template_loader_test.go`) requires every
+  embedded `.tmpl` to be bound in `template_index.go`, so a template nothing
+  loads cannot survive unnoticed the way `model.tmpl` did.
 
-### Baseline state at the initial commit
+Related: `templates/base_service.tmpl` calls `IsNotFound`/`IsConstraintError`
+**unqualified on purpose** — the emitted file lands in the consumer's
+`package ent`, so those bind to Ent's generated predicates, not to this
+package's `IsNotFound` (`errors.go`). Qualifying them would compile and
+silently stop matching. `TestGeneratedErrorPredicatesResolveUnambiguously`
+guards both that and the converse rule that the `entdomain.Err*` sentinels
+always stay qualified.
 
-`go test ./...` is **red on a clean checkout**: `TestTemplateFuncs` asserts the presence of `specificMethods` and `setFieldCall`, which no longer exist. `gofmt -l .` also flags `funcs.go`, `funcs_codegen.go`, `annotations_test.go`, `types_test.go`, so `make lint` fails too. If you see these, they predate your change — but do not add to them.
+### Baseline state
+
+`make check` and `gofmt -l .` are green; the red suite and dirty formatting the initial commit shipped with were fixed in #2/#4/#5. `make lint` still exits 2 on four `unused` findings in `annotations_edge.go` — those functions are awaiting the tests in #24. Anything else is yours.
+
+`golangci-lint` and `goimports` are not on the default PATH; run lint as `PATH=$PATH:$HOME/go/bin make lint`.
 
 ## Docs to keep in sync
 

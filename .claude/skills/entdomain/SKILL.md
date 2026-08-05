@@ -263,6 +263,6 @@ ext := entdomain.NewExtensionWithOptions(
 | `funcs.go` | Template function registry |
 | `funcs_fields.go` | Field filtering (createFields, updateFields, etc.) |
 | `funcs_codegen.go` | Code generation helpers |
-| `templates/model.tmpl` | Template for DTOs (CreateRequest, UpdateRequest, Response) |
+| `templates/dto.tmpl` | Template for DTOs (CreateRequest, UpdateRequest, Response) |
 | `templates/base_service.tmpl` | Template for BaseService with hooks |
 | `templates/base_handler.tmpl` | Template for BaseHandler with PartialUpdate |

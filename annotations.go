@@ -192,6 +192,25 @@ func copyTags(tags []string) []string {
 	return out
 }
 
+// copyValidation returns a copy of the validation rules, so a caller that
+// keeps a reference to the map it passed in cannot mutate the annotation it
+// already built. nil stays nil, like the slice helpers above.
+//
+// The copy is shallow and deliberately stops at the map: the interface{}
+// values are handed straight over, so a caller that passes a nested map or
+// slice as a rule value still shares that value. Deep-copying arbitrary rule
+// values is out of scope here.
+func copyValidation(rules map[string]interface{}) map[string]interface{} {
+	if rules == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(rules))
+	for k, v := range rules {
+		out[k] = v
+	}
+	return out
+}
+
 // DefaultField creates a standard business field (fully accessible at the HTTP layer).
 // Suitable for: most business fields such as name, email, address, etc.
 // Layer impact:
@@ -288,7 +307,7 @@ func (d DomainField) WithRequired(scope FieldScope) DomainField {
 
 // WithValidation adds validation rules to the field
 func (d DomainField) WithValidation(rules map[string]interface{}) DomainField {
-	d.Validation = rules
+	d.Validation = copyValidation(rules)
 	return d
 }
 

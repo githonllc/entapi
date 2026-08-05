@@ -30,6 +30,8 @@ type fixtureCase struct {
 
 var fixtures = []fixtureCase{
 	{dir: "basic", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "fieldshapes", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "immutable", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the

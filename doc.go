@@ -8,7 +8,14 @@
 //     annotated with EntDomain markers.
 //
 //   - At runtime, it provides the types and helpers that the generated
-//     code depends on: [PageInfo], error sentinel values, and pointer utilities.
+//     code depends on: the generic CRUD operations [ListPage] and [GetOne],
+//     [Page], [ListRequest], [PageInfo], error sentinel values, and pointer
+//     utilities.
+//
+// The runtime half imports no ent package. Its entity-specific parts arrive as
+// type parameters and function values supplied by generated wiring, so a
+// consumer's binary does not link the generator's dependency graph and the
+// identifier type is not hardcoded.
 //
 // # Quick Start
 //
@@ -17,6 +24,14 @@
 //	field.String("name").
 //	    Annotations(entdomain.DefaultField().
 //	        WithRequired(entdomain.ScopeCreate))
+//
+// Annotate edges with [Edge]. An edge's exposure is its own decision, not one
+// derived from its foreign-key field: "put author_id in the response" and "put
+// a nested author object in the response" are different intents, and a to-many
+// edge has no field on this entity to derive anything from.
+//
+//	edge.To("posts", Post.Type).
+//	    Annotations(entdomain.Edge().InResponse())
 //
 // Wire the extension in your entc.go:
 //
@@ -33,6 +48,28 @@
 //
 // Run go generate to produce {entity}_dto.go, {entity}_base_service.go,
 // and {entity}_base_handler.go for each annotated schema.
+//
+// # Runtime
+//
+// [ListPage] runs a filtered, ordered, paginated query against anything
+// satisfying [Query] — in practice an ent query builder — and converts the
+// results. [GetOne] fetches one entity by id. Both infer all their type
+// arguments at the call site, including the identifier type:
+//
+//	user, err := entdomain.GetOne(ctx, db.User.Get, NewUserResponse, id)     // ID is uuid.UUID
+//	tag,  err := entdomain.GetOne(ctx, db.Tag.Get, NewTagResponse, tagID)    // ID is int
+//
+//	page, err := entdomain.ListPage(ctx, db.User.Query(),
+//	    filter.Predicates(), orderOpts, req, NewUserResponse)
+//
+// [ListPage] uses offset pagination, which is O(n) deep, costs a COUNT per
+// page, and can skip or repeat rows under concurrent writes.
+//
+// [MaxPageSize] is the single place the page-size ceiling is decided:
+// [ListRequest.Limit] clamps to it and [ListRequest.Validate] rejects above it.
+// The validate struct tag on ListRequest.Size carries no numeric ceiling of its
+// own, because a struct tag cannot reference a constant and so can only drift
+// away from one.
 //
 // See the README for the full annotation reference and generated code examples.
 package entdomain

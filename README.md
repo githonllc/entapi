@@ -110,6 +110,121 @@ field.String("email").
     )
 ```
 
+### Edge Annotations
+
+Edges carry their own annotation. Exposure used to be derived from the edge's
+foreign-key field, which conflated two different decisions — "put `author_id` in
+the response" and "put a nested `author` object in the response" — and made
+exposure depend on which table holds the column. A to-many edge has no field on
+this entity at all, so under that rule it could never be exposed.
+
+```go
+entdomain.Edge()                       // no scopes
+entdomain.Edge().InResponse()          // the nested object appears in Response
+entdomain.Edge().InResponse().As("written_by")  // override the JSON key
+```
+
+```go
+func (Post) Edges() []ent.Edge {
+    return []ent.Edge{
+        // author_id (the scalar) is controlled by the field annotation;
+        // author (the nested object) by this one. They are independent.
+        edge.From("author", User.Type).
+            Ref("posts").Unique().Required().Field("author_id").
+            Annotations(entdomain.Edge().InResponse()),
+    }
+}
+```
+
+Like the field builders, every edge builder takes a value receiver and returns a
+copy, so a partially configured annotation is safe to reuse as a base.
+
+> **Trap.** Declaring a self-referential pair in the chained form
+> `edge.To("children", X.Type).From("parent")...Annotations(a)` attaches the
+> annotation to the **inverse edge only**. No error is reported and the assoc
+> edge silently never appears. Declare the two edges separately.
+
+## Runtime: generic CRUD
+
+The algorithms every entity shares are written once in Go rather than once per
+entity in a template. The entity-specific parts arrive as type parameters and
+function values, so **this half imports no ent package** and the identifier type
+is not hardcoded.
+
+```go
+// Query is the subset of an ent query builder pagination needs. Q is
+// self-referential because ent's chainable methods return the concrete builder.
+type Query[Q, P, O, E any] interface {
+    Where(...P) Q
+    Order(...O) Q
+    Limit(int) Q
+    Offset(int) Q
+    All(context.Context) ([]*E, error)
+    Count(context.Context) (int, error)
+}
+
+type Page[R any] struct {
+    Data  []*R `json:"data"`
+    Total int  `json:"total"`
+    Page  int  `json:"page"`
+    Size  int  `json:"size"`
+}
+
+func ListPage[Q Query[Q, P, O, E], P, O, E, R any](
+    ctx context.Context, q Q, ps []P, os []O, r ListRequest,
+    to func(*E) (*R, error),
+) (*Page[R], error)
+
+func GetOne[E, R, ID any](
+    ctx context.Context,
+    get func(context.Context, ID) (*E, error),
+    to func(*E) (*R, error),
+    id ID,
+) (*R, error)
+```
+
+Type arguments are inferred at the call site — none are written by hand:
+
+```go
+// ID is uuid.UUID here...
+user, err := entdomain.GetOne(ctx, db.User.Get, NewUserResponse, id)
+
+// ...and int here. Same function.
+tag, err := entdomain.GetOne(ctx, db.Tag.Get, NewTagResponse, tagID)
+
+page, err := entdomain.ListPage(ctx, db.User.Query(),
+    filter.Predicates(), orderOpts, req, NewUserResponse)
+```
+
+### Pagination bounds
+
+`ListPage` uses **offset pagination**. The cost, stated rather than glossed: it
+is O(n) deep, costs a `COUNT` per page, and can skip or repeat rows under
+concurrent writes.
+
+```go
+const (
+    entdomain.DefaultPageSize = 20    // used when no usable size was requested
+    entdomain.MaxPageSize     = 1000  // the ceiling — decided here and nowhere else
+)
+
+func (r ListRequest) Limit() int   // requested size, clamped to MaxPageSize; never <= 0
+func (r ListRequest) Offset() int  // (Page-1) * Limit(); never negative
+func (r ListRequest) SortKey(allow []string, def string) (key string, desc bool, err error)
+```
+
+`MaxPageSize` is the single home of the ceiling: `Limit()` clamps to it and
+`Validate()` rejects above it. The `validate` struct tag on `ListRequest.Size`
+deliberately carries **no** `max=` clause — a tag cannot reference a constant, so
+a number written there can only drift. It previously said `max=100` while
+`MaxPageSize` said `1000`, and a third-party tag validator disagreed with
+`Validate()` about which sizes were legal.
+
+`SortKey` checks the requested field against an allow-list. That list is the
+whole point: an unchecked sort field is an injection site, an unindexed-scan
+trigger, and — combined with paging — an ordering oracle over columns the caller
+was never meant to read. An unknown field yields `ErrValidation`.
+
 ## Schema Example
 
 ```go

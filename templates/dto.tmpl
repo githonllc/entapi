@@ -7,7 +7,12 @@
 package {{ base $.Config.Package }}
 
 import (
+{{- if or (createFields $) (updateFields $) }}
 	"fmt"
+{{- end }}
+{{- range dtoImports $ }}
+	{{ . }}
+{{- end }}
 	entdomain "{{ entdomainPkg }}"
 )
 

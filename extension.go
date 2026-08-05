@@ -68,7 +68,7 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 		// contradiction cannot be generated into code that compiles, so the
 		// only honest outcomes are a clear error here or a compile error in the
 		// consumer's package. See schema_conflicts.go.
-		if err := checkGraphConflicts(g); err != nil {
+		if err := checkGraphConflicts(g, e.Config); err != nil {
 			return err
 		}
 

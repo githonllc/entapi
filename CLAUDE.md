@@ -74,6 +74,34 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
 - Hook dispatch works via `SetSelf` + an embedded interface; without `SetSelf` the no-op defaults on `Base{Entity}Service` are used.
 - `Base{Entity}Handler` exists so consumer handler packages never import `ent` transitively for conversion — keep it dependency-free.
 
+## Generation can fail, and that is a feature (#10)
+
+`generatePerTypeFiles` calls `checkGraphConflicts` (`schema_conflicts.go`)
+**before** `next.Generate(g)`, so a rejected schema leaves nothing on disk —
+not even ent's own output. The policy it implements, which later generation
+slices are expected to follow:
+
+> An annotation that contradicts the ent schema fails generation, reporting
+> both facts. Anything that can be generated correctly is generated, not
+> refused.
+
+The one contradiction detected today is an ent-`Immutable()` field carrying
+`ScopeUpdate` (which `DefaultField()` grants). ent's update builders iterate
+`MutableFields`, which excludes immutable fields, so `Set<X>` does not exist on
+`<Entity>UpdateOne` and no template can emit a call that compiles. Dropping the
+field silently was rejected: it would vanish from the PATCH API where neither
+`encoding/json` nor `Validate()` can observe the missing key.
+
+Conversely, `Optional().Nillable()` and named `GoType`s over slices/maps *are*
+generated, because correct output exists for them — `*T` in the create request
+(`dto.tmpl`), and `PtrNilSafe` chosen by `isComplexFieldType`, which reads
+`field.Type.RType.Kind` rather than the rendered type name. The full table is
+in README.md, "Field shapes".
+
+Every row has a fixture. A fixture whose generation must fail carries
+`wantGenErr` in the `fixtures` table and has no generated output to commit; see
+`internal/fixtures/README.md`.
+
 ## Testing conventions
 
 - Tests are in-package (`package entdomain`) and build `gen.Field`/`gen.Type` values by hand via the constructors in `test_helpers_test.go` (`newStringField`, `newUUIDField`, `newTestType`, `ptr`, `assertContains`, …). Use those instead of hand-rolling literals.

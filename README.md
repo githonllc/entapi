@@ -451,6 +451,38 @@ Scopes control which HTTP-layer DTOs include a field. They do **not** restrict s
 | `ScopeUpdate` | Field appears in `UpdateRequest` |
 | `ScopeResponse` | Field appears in `Response` |
 
+## Field shapes: how ent modifiers and scopes interact
+
+A scope says where a field appears in the HTTP layer. An ent modifier
+(`Optional()`, `Nillable()`, `Immutable()`, a `GoType`) decides what ent itself
+generates. When the two meet, the outcome is one of exactly two things, and it
+is predictable from this table.
+
+The governing rule: **anything that can be generated correctly is generated;
+only a combination that has no correct output at all is refused, and a refusal
+names the entity, the field and both conflicting facts.**
+
+| Schema shape | What is generated |
+|---|---|
+| `Optional()` | `*T` in create/update requests and in the response |
+| `Optional().Nillable()` | `*T` everywhere, including in a create request where the field is `WithRequired(ScopeCreate)` — the create setter ent emits is `SetNillable<X>(*T)`, so "required" is enforced by the generated `Validate()`, which rejects a nil pointer, not by the absence of a pointer |
+| `Immutable()` **+ `ScopeUpdate`** | **Generation fails.** ent's update builders iterate `MutableFields`, which excludes immutable fields, so `Set<X>` does not exist on `<Entity>UpdateOne` and no template can emit a call that compiles. Use `CreateOnlyField()` / `OutputOnlyField()`, or drop `Immutable()` |
+| `Immutable()` without `ScopeUpdate` | Generated normally; the field is settable on create and readable in responses |
+| `field.Enum(...)`, optional or required | Generated normally; the Go type is the enum type in the entity's own package |
+| `field.JSON(...)` over a slice or map | Generated normally; an optional one is converted with `entdomain.PtrNilSafe`, since `entdomain.PtrOrNil` is `[T comparable]` |
+| A named `GoType` whose underlying type is a slice or map | Same as the line above. The decision is made from the type's reflect kind, not from how it is spelled, so `type Tags []string` is recognised as a slice |
+| A named `GoType` over a comparable type (string, int, struct of comparables) | Generated normally, via `entdomain.PtrOrNil` |
+
+Note that `DefaultField()` grants `ScopeUpdate`, so an immutable field carrying
+the default annotation hits the refusal above. That is deliberate: the
+alternative — quietly dropping the field from the update request — removes it
+from the PATCH API without a word, where neither `encoding/json` nor the
+generated `Validate()` can observe the missing key, and an API client discovers
+it in production.
+
+Every row is covered by a fixture under `internal/fixtures/` that is generated
+and then compiled by `TestCodegenFixtures`.
+
 ## Extension Options
 
 ```go
@@ -502,10 +534,13 @@ misspelling a hook method, compiles cleanly and the hook never runs
 while the embedded filesystem always uses forward slashes, so loading fails at package
 initialisation ([#4](https://github.com/githonllc/entdomain/issues/4)).
 
-**Generated code is not compiled by any test in this repository.** Template changes are
-effectively untested here; several field and edge shapes are known to produce output that
-does not build ([#8](https://github.com/githonllc/entdomain/issues/8),
-[#10](https://github.com/githonllc/entdomain/issues/10)).
+**Only the field shapes with a fixture are known to compile.** `TestCodegenFixtures`
+generates and compiles every schema under `internal/fixtures/`, which now covers the
+nillable, immutable, enum, JSON/map and named-`GoType` shapes above
+([#8](https://github.com/githonllc/entdomain/issues/8),
+[#10](https://github.com/githonllc/entdomain/issues/10)). Edges, non-UUID identifiers and
+soft delete have no fixture yet; a template change touching them is still unverified until
+one exists.
 
 ## Contributing
 

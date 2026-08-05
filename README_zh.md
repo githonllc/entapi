@@ -432,6 +432,34 @@ var (
 | `ScopeUpdate` | 字段出现在 `UpdateRequest` 中 |
 | `ScopeResponse` | 字段出现在 `Response` 中 |
 
+## 字段形态：ent 修饰符与作用域如何相互作用
+
+作用域决定字段出现在 HTTP 层的哪里；ent 修饰符（`Optional()`、`Nillable()`、
+`Immutable()`、`GoType`）决定 ent 自己生成什么。两者相遇时的结果只有两种，
+并且可以从下表预测。
+
+总规则：**凡是能正确生成的一律生成；只有根本不存在正确输出的组合才被拒绝，
+而拒绝时会点名实体、字段以及相互冲突的两个事实。**
+
+| Schema 形态 | 生成结果 |
+|---|---|
+| `Optional()` | 创建/更新请求与响应中均为 `*T` |
+| `Optional().Nillable()` | 处处都是 `*T`，包括标了 `WithRequired(ScopeCreate)` 的创建请求——ent 为此类字段生成的 setter 是 `SetNillable<X>(*T)`，所以「必填」由生成的 `Validate()` 拒绝空指针来保证，而不是靠去掉指针 |
+| `Immutable()` **+ `ScopeUpdate`** | **生成失败。** ent 的 update builder 遍历 `MutableFields`，其中不含 immutable 字段，因此 `<Entity>UpdateOne` 上根本没有 `Set<X>`，任何模板都写不出能编译的调用。改用 `CreateOnlyField()` / `OutputOnlyField()`，或去掉 `Immutable()` |
+| `Immutable()` 但无 `ScopeUpdate` | 正常生成：可在创建时设置，可在响应中读取 |
+| `field.Enum(...)`，可选或必填 | 正常生成；Go 类型是实体自身包内的枚举类型 |
+| 底层为切片或映射的 `field.JSON(...)` | 正常生成；可选字段用 `entdomain.PtrNilSafe` 转换，因为 `entdomain.PtrOrNil` 约束是 `[T comparable]` |
+| 底层为切片或映射的具名 `GoType` | 同上。判定依据是类型的 reflect kind 而不是它的书写形式，因此 `type Tags []string` 会被识别为切片 |
+| 底层可比较的具名 `GoType`（string、int、成员皆可比较的 struct） | 正常生成，走 `entdomain.PtrOrNil` |
+
+注意 `DefaultField()` 会授予 `ScopeUpdate`，所以带默认注解的 immutable 字段
+必然触发上面的拒绝。这是有意的：另一种做法——悄悄把该字段从更新请求里剔除——
+等于在无人知晓的情况下把它从 PATCH API 中移除，而 `encoding/json` 和生成的
+`Validate()` 都观察不到一个没有对应结构体字段的键，最终由 API 调用方在生产环境发现。
+
+表中每一行都有 `internal/fixtures/` 下的 fixture 覆盖，由 `TestCodegenFixtures`
+先生成再编译。
+
 ## 扩展选项
 
 ```go
@@ -476,10 +504,12 @@ sortable。** 今天无害。但它对下一步有影响：按任意列排序是
 而嵌入文件系统恒用正斜杠，因此在包初始化阶段就加载失败
 （[#4](https://github.com/githonllc/entdomain/issues/4)）。
 
-**本仓库没有任何测试会编译生成的代码。** 模板改动在这里实际上是未测试的；
-已知有多种字段与边的形态会产出无法编译的输出
+**只有带 fixture 的字段形态才是「已知能编译」的。** `TestCodegenFixtures` 会生成并
+编译 `internal/fixtures/` 下的每个 schema，现已覆盖上表中的 nillable、immutable、
+枚举、JSON/映射与具名 `GoType` 形态
 （[#8](https://github.com/githonllc/entdomain/issues/8)、
-[#10](https://github.com/githonllc/entdomain/issues/10)）。
+[#10](https://github.com/githonllc/entdomain/issues/10)）。边、非 UUID 主键与软删除
+尚无 fixture；在补上之前，触及它们的模板改动仍属未验证。
 
 ## 贡献
 

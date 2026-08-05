@@ -35,3 +35,26 @@ a DO NOT EDIT header. Regenerate; never hand-edit.
 `basic` is the happy path and must stay green. Hostile shapes belong to the issue
 that fixes the bug they expose, each bringing its own directory — do not make
 `basic` hostile.
+
+## Fixtures whose generation must FAIL
+
+Some schemas are legal ent but have no correct output at all — an `Immutable()`
+field carrying `ScopeUpdate` is the standing example, since ent generates no
+update setter for one. The generator refuses those rather than emitting
+something that does not build, and the refusal needs coverage too.
+
+Set `wantGenErr` on the table entry to a list of substrings the generation error
+must contain. The case then asserts three things: generation failed, the message
+contains each substring (naming the entity, the field and the conflict — "it
+failed" is not enough, the message is all a schema author gets), and **nothing
+was written** under `<dir>/ent` except the hand-written `schema` package. So
+such a fixture has no generated output to commit.
+
+`go test -v -run TestCodegenFixtures/<dir> ./.` prints the refusal message even
+when the case passes.
+
+| Fixture | Shape | Outcome |
+|---|---|---|
+| `basic` | happy path | generates and compiles |
+| `fieldshapes` | nillable, enum, JSON/map and named-`GoType` fields, optional and required | generates and compiles |
+| `immutable` | `Immutable()` fields carrying `ScopeUpdate` | generation refused |

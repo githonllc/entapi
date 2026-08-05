@@ -1,6 +1,7 @@
 package entdomain
 
 import (
+	"reflect"
 	"strings"
 
 	"entgo.io/ent/entc/gen"
@@ -32,10 +33,33 @@ func hasSoftDelete(node *gen.Type) bool {
 	return false
 }
 
-// isComplexFieldType checks if a field type is too complex for basic
-// operations like sorting (slices, maps, JSON types).
-func isComplexFieldType(fieldType string) bool {
-	return strings.HasPrefix(fieldType, "[]") ||
-		strings.HasPrefix(fieldType, "map[") ||
-		strings.Contains(fieldType, "json.")
+// isComplexFieldType reports whether a field's Go type is one Go's comparable
+// constraint rejects — slices, maps and functions, including named types whose
+// underlying type is one of those.
+//
+// It decides which pointer helper the generated response constructor calls:
+// entdomain.PtrOrNil is [T comparable] and does not compile for such a type,
+// so those fields must go to entdomain.PtrNilSafe instead.
+//
+// The resolved type is the authority, not its rendered name. A named type
+// declared as `type Tags []string` renders as "schema.Tags" and matches no
+// prefix, which is exactly how it used to reach PtrOrNil and fail the
+// consumer's build (#10). ent records the reflect kind of a Go type on
+// Type.RType, so ask that first and fall back to the rendered name only for
+// fields that carry no RType (built-in JSON descriptors declared through the
+// type string alone).
+func isComplexFieldType(f *gen.Field) bool {
+	if f == nil || f.Type == nil {
+		return false
+	}
+	if rt := f.Type.RType; rt != nil {
+		switch rt.Kind {
+		case reflect.Slice, reflect.Map, reflect.Func:
+			return true
+		}
+	}
+	name := f.Type.String()
+	return strings.HasPrefix(name, "[]") ||
+		strings.HasPrefix(name, "map[") ||
+		strings.Contains(name, "json.")
 }

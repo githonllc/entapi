@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"entgo.io/ent/entc"
@@ -26,12 +27,21 @@ type fixtureCase struct {
 	dir string
 	// opts are the extension options generation runs with.
 	opts []Option
+	// wantGenErr, when non-empty, turns the case around: generation is
+	// required to FAIL, and its error must contain every listed substring.
+	// Nothing is compiled, and nothing may be written under <dir>/ent besides
+	// the hand-written schema package — a refused generation that still leaves
+	// files behind is a bug of its own.
+	//
+	// This is how a schema the generator must refuse gets covered. Adding one
+	// is still a directory plus a line in the table.
+	wantGenErr []string
 }
 
 var fixtures = []fixtureCase{
 	{dir: "basic", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
 	{dir: "fieldshapes", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
-	{dir: "immutable", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "immutable", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Doc.origin", "Doc.source", "Immutable()", `scope "update"`, "SetOrigin", "SetSource"}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the
@@ -71,6 +81,12 @@ func TestCodegenFixtures(t *testing.T) {
 				Target:  targetDir,
 				Package: pkgPath,
 			}, entc.Extensions(NewExtensionWithOptions(fc.opts...)))
+
+			if len(fc.wantGenErr) > 0 {
+				assertGenerationRefused(t, fc, targetDir, err)
+				return
+			}
+
 			if err != nil {
 				t.Fatalf("fixture %q: ent generation failed for schema %s: %v", fc.dir, schemaDir, err)
 			}
@@ -88,6 +104,40 @@ func TestCodegenFixtures(t *testing.T) {
 					fc.dir, targetDir, goTool, pattern, root, err, out)
 			}
 		})
+	}
+}
+
+// assertGenerationRefused is the wantGenErr half of the harness: a schema the
+// generator must refuse has to produce an error naming what is wrong, and has
+// to leave the fixture's ent directory untouched. "It failed" is not enough —
+// the message is the only thing a schema author gets, so its content is the
+// assertion.
+func assertGenerationRefused(t *testing.T, fc fixtureCase, targetDir string, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("fixture %q: generation succeeded, but this schema must be refused (wantGenErr %q)", fc.dir, fc.wantGenErr)
+	}
+	for _, want := range fc.wantGenErr {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("fixture %q: generation error does not mention %q.\ngot: %v", fc.dir, want, err)
+		}
+	}
+
+	// Log it even on success: the message is what a schema author sees, and
+	// `go test -v -run TestCodegenFixtures/<dir>` is how you read it back.
+	t.Logf("fixture %q: generation refused, as required:\n%v", fc.dir, err)
+
+	entries, readErr := os.ReadDir(targetDir)
+	if readErr != nil {
+		t.Fatalf("fixture %q: cannot read %s: %v", fc.dir, targetDir, readErr)
+	}
+	for _, entry := range entries {
+		if entry.Name() == "schema" {
+			continue
+		}
+		t.Errorf("fixture %q: generation was refused but wrote %s into %s; a refused generation must leave nothing behind",
+			fc.dir, entry.Name(), targetDir)
 	}
 }
 

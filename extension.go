@@ -64,6 +64,15 @@ func (e *Extension) Templates() []*gen.Template {
 // generatePerTypeFiles is the core Hook that generates separate files for each Type.
 func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 	return gen.GenerateFunc(func(g *gen.Graph) error {
+		// Reject annotations that contradict the ent schema before anything is
+		// written — including by ent's own generator, which runs below. A
+		// contradiction cannot be generated into code that compiles, so the
+		// only honest outcomes are a clear error here or a compile error in the
+		// consumer's package. See schema_conflicts.go.
+		if err := checkGraphConflicts(g); err != nil {
+			return err
+		}
+
 		// Run the standard generation first
 		if err := next.Generate(g); err != nil {
 			return err

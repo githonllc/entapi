@@ -23,10 +23,10 @@ func templateFuncs() template.FuncMap {
 		"hasPrefix": hasPrefix,
 
 		// Field selection (used in template range loops)
-		"domainFields":      domainFields,
-		"createFields":      createFields,
-		"updateFields":      updateFields,
-		"responseFields":    responseFields,
+		"domainFields":       domainFields,
+		"createFields":       createFields,
+		"updateFields":       updateFields,
+		"responseFields":     responseFields,
 		"uniqueLookupFields": uniqueLookupFields,
 		"rangeLookupFields":  rangeLookupFields,
 		"responseEdges":      responseEdges,
@@ -52,7 +52,7 @@ func templateFuncs() template.FuncMap {
 		"contains": contains,
 
 		// Template code generation helpers
-		"generateIdOperation":    generateIdOperation,
+		"generateIdOperation":     generateIdOperation,
 		"generateSearchCondition": generateSearchCondition,
 	}
 }

@@ -243,4 +243,3 @@ func TestDomainConfigAnnotation(t *testing.T) {
 		t.Errorf("EntityName = %v, want %v", config.EntityName, "TestEntity")
 	}
 }
-

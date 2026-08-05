@@ -248,4 +248,3 @@ func last(slice []*gen.Field) *gen.Field {
 	}
 	return slice[len(slice)-1]
 }
-

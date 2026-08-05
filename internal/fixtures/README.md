@@ -69,6 +69,7 @@ when the case passes.
 | `fieldshapes` | nillable, enum, JSON/map and named-`GoType` fields, optional and required | generates and compiles |
 | `edges` | to-one, to-many, a self-referential pair declared separately, a response-scoped foreign key whose edge is deliberately unannotated, and an entity with no response-scoped field at all | generates and compiles |
 | `immutable` | `Immutable()` fields carrying `ScopeUpdate` | generation refused |
+| `intid` | a domain-annotated entity with ent's default `int` primary key, with the base service enabled | generation refused |
 | `stale` | an entity that loses its annotations between two runs | generates twice, see below |
 
 `basic`, `fieldshapes` and `edges` are also the corpus for

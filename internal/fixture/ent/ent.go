@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/githonllc/entdomain/internal/fixture/ent/category"
 	"github.com/githonllc/entdomain/internal/fixture/ent/post"
+	"github.com/githonllc/entdomain/internal/fixture/ent/tag"
 	"github.com/githonllc/entdomain/internal/fixture/ent/user"
 )
 
@@ -77,6 +78,7 @@ func checkColumn(table, column string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			category.Table: category.ValidColumn,
 			post.Table:     post.ValidColumn,
+			tag.Table:      tag.ValidColumn,
 			user.Table:     user.ValidColumn,
 		})
 	})

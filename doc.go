@@ -65,11 +65,29 @@
 // [ListPage] uses offset pagination, which is O(n) deep, costs a COUNT per
 // page, and can skip or repeat rows under concurrent writes.
 //
-// [MaxPageSize] is the single place the page-size ceiling is decided:
-// [ListRequest.Limit] clamps to it and [ListRequest.Validate] rejects above it.
-// The validate struct tag on ListRequest.Size carries no numeric ceiling of its
-// own, because a struct tag cannot reference a constant and so can only drift
-// away from one.
+// [MaxPageSize] is the single place the page-size ceiling is decided, with a
+// single reaction to crossing it: [ListRequest.Limit] clamps. [ListRequest.Validate]
+// says nothing about Size or Page, because Limit and [ListRequest.Offset] sit on
+// the only path into ListPage and apply whether or not anyone validates. The
+// validate struct tag on ListRequest.Size carries no numeric ceiling of its own,
+// because a struct tag cannot reference a constant and so can only drift away
+// from one.
+//
+// A ListRequest zero value is usable as-is; there is deliberately no defaulting
+// method, so there is none to forget.
+//
+// # Error mapping
+//
+// [ErrorMapper] translates a persistence layer's errors into [ErrNotFound] and
+// [ErrAlreadyExists]. It takes predicates as function values so the runtime
+// stays ent-free:
+//
+//	var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+//
+// Uniqueness requires [ErrorMapper.WithUniqueViolation]: ent.IsConstraintError
+// is true for a duplicate key and a foreign-key violation alike, so mapping it
+// straight to ErrAlreadyExists would report the latter as the former. What the
+// mapper cannot classify it returns unchanged rather than guessing.
 //
 // See the README for the full annotation reference and generated code examples.
 package entdomain

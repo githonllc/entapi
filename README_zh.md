@@ -204,13 +204,65 @@ const (
 func (r ListRequest) Limit() int   // 请求的 size 夹取到 MaxPageSize；永不 <= 0
 func (r ListRequest) Offset() int  // (Page-1) * Limit()；永不为负
 func (r ListRequest) SortKey(allow []string, def string) (key string, desc bool, err error)
+func (r *ListRequest) Validate() error
 ```
 
-`MaxPageSize` 是这个上界唯一的落脚点：`Limit()` 夹取到它，`Validate()` 拒绝
-超过它的值。`ListRequest.Size` 的 `validate` tag 里**故意不写** `max=` 子句
-——tag 引用不了常量，写在那里的数字只会漂移。它此前写的是 `max=100`，而
-`MaxPageSize` 是 `1000`，于是第三方 tag 校验器和 `Validate()` 对哪些 size
-合法的判断并不一致。
+`ListRequest` 的零值开箱可用。**没有 `SetDefaults()`**——一个没人强制你调的
+默认值填充调用，就是一个你会忘记调的调用，而忘记它正是零 size 直达查询的
+成因。生效值一律通过 `Limit()` / `Offset()` 读取，不要直接读字段；`ListPage`
+调的就是这两个。
+
+`MaxPageSize` 是这个上界唯一的落脚点，越界也只有一种反应：**`Limit()` 夹取**。
+`Validate()` 对 `Size` 和 `Page` 一言不发，因为 `Limit()` / `Offset()` 位于
+通往 `ListPage` 的唯一路径上，不管有没有人调 `Validate()` 都会生效——只在
+主动调用时才触发的上界是建议不是上界。`Page.Size` 会报出真正生效的 size，
+所以夹取是可见的；如果在你的 API 里超限就该是 `400`，自己拿它和
+`MaxPageSize` 比即可。
+
+`ListRequest.Size` 的 `validate` tag 里**故意不写** `max=` 子句——tag 引用
+不了常量，写在那里的数字只会漂移。它此前写的是 `max=100`，而 `MaxPageSize`
+是 `1000`。
+
+`Validate()` 只剩下游修不了的那些：`Order` 必须是 `asc`、`desc` 或空，因为
+`SortKey()` 会把无法识别的值读成升序，一个拼写错误会静默地把结果倒过来。
+它返回的错误包装了 `ErrValidation`。
+
+### 错误映射
+
+`ErrorMapper` 把持久层的错误翻译成本包的哨兵值。它以函数值的形式接收谓词，
+因此运行时仍然不 import 任何 ent 包。生成的 wiring 只有一行：
+
+```go
+var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+
+// ...
+if err != nil {
+    return nil, mapper.MapError(err)   // 缺行 -> ErrNotFound
+}
+```
+
+**唯一性需要自己的谓词**，这不是为了方便——`ent.IsConstraintError` 对重复键
+和外键冲突一视同仁地返回 true：
+
+```
+UNIQUE constraint failed: tags.name (2067)
+FOREIGN KEY constraint failed (787)
+```
+
+因此把它直接映射成 `ErrAlreadyExists`，等于把外键冲突报成重复键。区别只存在
+于被 `*ent.ConstraintError` 包裹的 driver error 里，且与方言相关，所以库不猜
+——要么你给出判定，要么就得不到 already-exists 分类：
+
+```go
+var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError).
+    WithUniqueViolation(func(err error) bool {              // SQLite
+        return strings.Contains(err.Error(), "UNIQUE constraint failed")
+    })
+```
+
+映射器判不出来的一切——包括种类未识别的约束冲突——原样返回：不分类、不吞掉、
+也绝不贴上一个并未被确立的哨兵。哨兵和原错误同时留在错误链上，`errors.Is`
+两边都找得到。
 
 `SortKey` 会把请求的字段与白名单核对。白名单正是要点所在：未经校验的排序字段
 是注入点、是全表扫描的触发器，并且与分页组合起来还是一个对调用方本不该读到的

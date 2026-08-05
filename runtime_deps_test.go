@@ -23,6 +23,7 @@ var runtimeFiles = []string{
 	"query.go",
 	"types.go",
 	"errors.go",
+	"errors_map.go",
 	"cursor.go",
 }
 

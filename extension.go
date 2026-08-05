@@ -79,29 +79,46 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 
 		// Generate separate files for each Type that has entdomain annotations.
 		// Entities without annotations are skipped to avoid empty generated files.
+		//
+		// written records this run's output set, which is what tells a file
+		// left over from an earlier run apart from one just produced.
+		written := make(map[string]bool)
 		for _, node := range g.Nodes {
 			if len(domainFields(node)) == 0 {
 				continue
 			}
 
 			// Generate DTO file → ent/{entity}_dto.go
-			if err := e.generateDTOFile(g, node); err != nil {
+			path, err := e.generateDTOFile(g, node)
+			if err != nil {
 				return fmt.Errorf("failed to generate %s DTO: %w", node.Name, err)
 			}
+			written[path] = true
 
 			// Generate base service file → ent/{entity}_base_service.go
 			if e.Config.GenerateBaseService {
-				if err := e.generateBaseServiceFile(g, node); err != nil {
+				path, err := e.generateBaseServiceFile(g, node)
+				if err != nil {
 					return fmt.Errorf("failed to generate %s base service file: %w", node.Name, err)
 				}
+				written[path] = true
 			}
 
 			// Generate base handler file → ent/{entity}_base_handler.go
 			if e.Config.GenerateBaseHandler {
-				if err := e.generateBaseHandlerFile(g, node); err != nil {
+				path, err := e.generateBaseHandlerFile(g, node)
+				if err != nil {
 					return fmt.Errorf("failed to generate %s base handler file: %w", node.Name, err)
 				}
+				written[path] = true
 			}
+		}
+
+		// Only once every file is on disk: a run that failed partway must not
+		// delete anything, or a template bug would take the previous output
+		// with it.
+		if err := removeStaleArtifacts(g.Config.Target, g.Nodes, written); err != nil {
+			return err
 		}
 
 		return nil
@@ -110,65 +127,74 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 
 // generateDTOFile generates a DTO file for a single Type.
 // Output: ent/{entity}_dto.go
-func (e *Extension) generateDTOFile(g *gen.Graph, node *gen.Type) error {
+func (e *Extension) generateDTOFile(g *gen.Graph, node *gen.Type) (string, error) {
 	tmpl, err := template.New("dto").
 		Funcs(e.templateFuncMap()).
 		Parse(dtoTemplate)
 	if err != nil {
-		return fmt.Errorf("failed to parse DTO template: %w", err)
+		return "", fmt.Errorf("failed to parse DTO template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, node); err != nil {
-		return fmt.Errorf("failed to render DTO template: %w", err)
+		return "", fmt.Errorf("failed to render DTO template: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s_dto.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
 
-	return writeFile(outputPath, buf.Bytes())
+	if err := writeFile(outputPath, buf.Bytes()); err != nil {
+		return "", err
+	}
+	return outputPath, nil
 }
 
 // generateBaseServiceFile generates a base service file for a single Type.
 // Output: ent/{entity}_base_service.go
-func (e *Extension) generateBaseServiceFile(g *gen.Graph, node *gen.Type) error {
+func (e *Extension) generateBaseServiceFile(g *gen.Graph, node *gen.Type) (string, error) {
 	tmpl, err := template.New("base_service").
 		Funcs(e.templateFuncMap()).
 		Parse(baseServiceTemplate)
 	if err != nil {
-		return fmt.Errorf("failed to parse base service template: %w", err)
+		return "", fmt.Errorf("failed to parse base service template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, node); err != nil {
-		return fmt.Errorf("failed to render base service template: %w", err)
+		return "", fmt.Errorf("failed to render base service template: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s_base_service.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
 
-	return writeFile(outputPath, buf.Bytes())
+	if err := writeFile(outputPath, buf.Bytes()); err != nil {
+		return "", err
+	}
+	return outputPath, nil
 }
 
 // generateBaseHandlerFile generates a base handler file for a single Type.
 // Output: ent/{entity}_base_handler.go
-func (e *Extension) generateBaseHandlerFile(g *gen.Graph, node *gen.Type) error {
+func (e *Extension) generateBaseHandlerFile(g *gen.Graph, node *gen.Type) (string, error) {
 	tmpl, err := template.New("base_handler").
 		Funcs(e.templateFuncMap()).
 		Parse(baseHandlerTemplate)
 	if err != nil {
-		return fmt.Errorf("failed to parse base handler template: %w", err)
+		return "", fmt.Errorf("failed to parse base handler template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, node); err != nil {
-		return fmt.Errorf("failed to render base handler template: %w", err)
+		return "", fmt.Errorf("failed to render base handler template: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s_base_handler.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
 
-	return writeFile(outputPath, buf.Bytes())
+	if err := writeFile(outputPath, buf.Bytes()); err != nil {
+		return "", err
+	}
+	return outputPath, nil
 }
 
 // writeFile formats the generated Go source with goimports and writes it to disk.

@@ -6,11 +6,6 @@ import (
 	"entgo.io/ent/entc/gen"
 )
 
-// isUniqueField checks if a field has a unique constraint via ent's Unique() builder.
-func isUniqueField(field *gen.Field) bool {
-	return field.Unique
-}
-
 // isTimeField checks if a field is a time field.
 func isTimeField(field *gen.Field) bool {
 	return strings.Contains(field.Type.String(), "time.Time")
@@ -24,30 +19,6 @@ func hasTimeFields(node *gen.Type) bool {
 		}
 	}
 	return false
-}
-
-// hasTimeField checks if the entity has a specific named time field.
-func hasTimeField(node *gen.Type, fieldName string) bool {
-	for _, field := range domainFields(node) {
-		if strings.ToLower(field.Name) == fieldName && isTimeField(field) {
-			return true
-		}
-	}
-	return false
-}
-
-// isUniqueLookupField checks if a field is annotated with UniqueLookup.
-func isUniqueLookupField(field *gen.Field) bool {
-	annotation := getDomainFieldAnnotation(field)
-	if annotation == nil {
-		return false
-	}
-	return annotation.UniqueLookup
-}
-
-// isUUIDType checks if the given type string represents a UUID type.
-func isUUIDType(typeStr string) bool {
-	return strings.Contains(strings.ToLower(typeStr), "uuid")
 }
 
 // hasSoftDelete checks if an entity has a deleted_at field (convention-based soft-delete detection).

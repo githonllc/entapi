@@ -54,59 +54,6 @@ func responseFields(node *gen.Type) []*gen.Field {
 	return fields
 }
 
-// queryFields returns fields that can be used for searching
-func queryFields(node *gen.Type) []*gen.Field {
-	var fields []*gen.Field
-	for _, field := range node.Fields {
-		annotation := getDomainFieldAnnotation(field)
-		if annotation != nil {
-			// Check if field is searchable OR has ScopeQuery
-			if annotation.Searchable || hasDomainScope(field, ScopeQuery) {
-				fields = append(fields, field)
-			}
-		}
-	}
-	return fields
-}
-
-// searchableFields returns fields that can be searched
-func searchableFields(node *gen.Type) []*gen.Field {
-	var fields []*gen.Field
-	for _, field := range node.Fields {
-		annotation := getDomainFieldAnnotation(field)
-		if annotation != nil && annotation.Searchable {
-			fields = append(fields, field)
-		}
-	}
-	return fields
-}
-
-// sortableFields returns fields that can be sorted
-func sortableFields(node *gen.Type) []*gen.Field {
-	var fields []*gen.Field
-	for _, field := range node.Fields {
-		annotation := getDomainFieldAnnotation(field)
-		if annotation != nil && annotation.Sortable {
-			// Filter out complex field types that do not support sorting
-			if !isComplexFieldType(field.Type.String()) {
-				fields = append(fields, field)
-			}
-		}
-	}
-	return fields
-}
-
-// uniqueLookupFields returns all fields with UniqueLookup annotation
-func uniqueLookupFields(node *gen.Type) []*gen.Field {
-	var fields []*gen.Field
-	for _, field := range domainFields(node) {
-		if isUniqueLookupField(field) {
-			fields = append(fields, field)
-		}
-	}
-	return fields
-}
-
 // responseEdges returns edges suitable for inclusion in HTTP responses.
 // An edge qualifies when: (1) it has a FK field on this entity,
 // (2) that FK field has ScopeResponse, and (3) the target type is a domain entity.
@@ -131,16 +78,4 @@ func edgeQualifiesForResponse(fkField *gen.Field, targetType *gen.Type) bool {
 		return false
 	}
 	return len(domainFields(targetType)) > 0
-}
-
-// rangeLookupFields returns all fields with RangeLookup annotation
-func rangeLookupFields(node *gen.Type) []*gen.Field {
-	var fields []*gen.Field
-	for _, field := range domainFields(node) {
-		annotation := getDomainFieldAnnotation(field)
-		if annotation != nil && annotation.RangeLookup {
-			fields = append(fields, field)
-		}
-	}
-	return fields
 }

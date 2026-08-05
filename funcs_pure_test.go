@@ -4,30 +4,6 @@ import (
 	"testing"
 )
 
-func TestContains(t *testing.T) {
-	tests := []struct {
-		name  string
-		slice []string
-		item  string
-		want  bool
-	}{
-		{name: "found at beginning", slice: []string{"a", "b", "c"}, item: "a", want: true},
-		{name: "found at end", slice: []string{"a", "b", "c"}, item: "c", want: true},
-		{name: "not found", slice: []string{"a", "b", "c"}, item: "d", want: false},
-		{name: "empty slice", slice: []string{}, item: "a", want: false},
-		{name: "nil slice", slice: nil, item: "a", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := contains(tt.slice, tt.item)
-			if got != tt.want {
-				t.Errorf("contains(%v, %q) = %v, want %v", tt.slice, tt.item, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsComplexFieldType(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -5,11 +5,6 @@ import (
 	"unicode"
 )
 
-// hasPrefix checks if a string has a prefix.
-func hasPrefix(s, prefix string) bool {
-	return strings.HasPrefix(s, prefix)
-}
-
 // camelCase converts a snake_case or PascalCase string to camelCase.
 // Examples: "phone_number" → "phoneNumber", "PhoneNumber" → "phoneNumber", "name" → "name".
 func camelCase(s string) string {
@@ -36,14 +31,4 @@ func camelCase(s string) string {
 	runes := []rune(s)
 	runes[0] = unicode.ToLower(runes[0])
 	return string(runes)
-}
-
-// contains checks if a slice contains a string.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }

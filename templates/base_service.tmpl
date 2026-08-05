@@ -320,7 +320,7 @@ func {{ $.Name }}EntToResponse(entity *{{ $.Name }}) *{{ $.Name }}Response {
 {{- if $field.Nillable }}
 		{{ $field.StructField }}: entity.{{ $field.StructField }},
 {{- else if $field.Optional }}
-	{{- if isComplexFieldType $field.Type.String }}
+	{{- if isComplexFieldType $field }}
 		{{ $field.StructField }}: entdomain.PtrNilSafe(entity.{{ $field.StructField }}),
 	{{- else }}
 		{{ $field.StructField }}: entdomain.PtrOrNil(entity.{{ $field.StructField }}),

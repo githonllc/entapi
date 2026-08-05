@@ -40,7 +40,11 @@ import (
 type {{ $.Name }}CreateRequest struct {
 {{- range $f := $createFields }}
 	{{- if isDomainRequired $f "create" }}
-	{{ $f.StructField }} {{ $f.Type }} `json:"{{ $f.StorageKey }}" validate:"required"`
+	{{- /* A Nillable field is *T on the entity and its create setter is
+	       SetNillable<X>(*T), so the request carries *T even when the field is
+	       required: "required" is enforced by Validate below, not by the
+	       absence of a pointer. */}}
+	{{ $f.StructField }} {{ if $f.Nillable }}*{{ end }}{{ $f.Type }} `json:"{{ $f.StorageKey }}" validate:"required"`
 	{{- else }}
 	{{ $f.StructField }} {{ if $f.Optional }}*{{ end }}{{ $f.Type }} `json:"{{ $f.StorageKey }},omitempty"`
 	{{- end }}
@@ -54,7 +58,16 @@ func (r *{{ $.Name }}CreateRequest) Validate() error {
 	}
 {{- range $f := $createFields }}
 {{- if isDomainRequired $f "create" }}
+{{- if $f.Nillable }}
+	if r.{{ $f.StructField }} == nil {
+		return fmt.Errorf("{{ $f.StorageKey }} is required")
+	}
 {{- if eq $f.Type.String "string" }}
+	if *r.{{ $f.StructField }} == "" {
+		return fmt.Errorf("{{ $f.StorageKey }} cannot be empty")
+	}
+{{- end }}
+{{- else if eq $f.Type.String "string" }}
 	if r.{{ $f.StructField }} == "" {
 		return fmt.Errorf("{{ $f.StorageKey }} is required")
 	}

@@ -137,7 +137,6 @@ class DomainField <<annotation>> {
   Scopes []FieldScope
   Required map[FieldScope]bool
   Searchable/Sortable/Filterable bool
-  UniqueLookup/RangeLookup bool
   Metadata *FieldMetadata
   --
   Name() string
@@ -156,8 +155,8 @@ enum FieldScope {
   ScopeResponse
 }
 class DomainConfig <<annotation>> {
-  EntityName string
 }
+note bottom of DomainConfig : carries no options\nsince #17
 class Extension <<aggregate root>> {
   Config *ExtensionConfig
   Hooks() []gen.Hook
@@ -383,9 +382,11 @@ Say you want `.AsSearchable()` to actually reach the generated code (today it is
 |---|---|---|
 | **`cursor.go` is orphaned from generated code** | `ListWithCursor` does `uuid.Parse(cursor)` and returns `entity.ID.String()` (`base_service.tmpl:223,248`); `EncodeCursor`/`DecodeCursor`/`Cursor` appear in no template | two incompatible cursor formats ship in one package; `ListRequest.Cursor` documents the base64 one |
 | **`ListRequest` is never emitted** | no template references it | consumers must wire pagination input themselves |
-| **BaseService is UUID-only** | `uuid.UUID` hardcoded in every hook and CRUD signature (`base_service.tmpl`) | int/string primary keys generate uncompilable services |
+| **BaseService is UUID-only** | `uuid.UUID` hardcoded in every hook and CRUD signature (`base_service.tmpl`) | int/string primary keys are now refused at generation time by `unsupportedIDType` (`schema_conflicts.go`) instead of producing uncompilable services; widening the set is #29 |
 | Formatting failure is non-fatal | `extension.go:170` logs a warning and writes unformatted source | a broken template yields a broken-but-written `.go` file |
 
-`DomainConfig`/`EntityName` and `FieldMetadata` occur **only** in `annotations.go` — no template and no other Go file reads them (`grep -rn` over `*.go` + `*.tmpl`, excluding tests). They are declared-only surface; `annotations.go:44` labels `FieldMetadata` "RESERVED", which matches. `Searchable`/`Sortable`/`Filterable` had no reader left once #7 deleted the three dead selectors, so they are declared-only too. `Sensitive` was the same shape but carried a security promise in its godoc, so #3 deleted it instead of leaving it declared.
+The declared-only surface is no longer established by grepping. `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` (`annotation_surface_test.go`) derives every exported knob by reflection over `DomainField`, `FieldMetadata`, `DomainEdge`, `DomainConfig` and the scope vocabulary, then decides reachability by toggling each and asking whether any *registered* template function returns anything different. 25 of the 30 knobs change nothing; only `Scopes`, `Required`, `ScopeCreate`, `ScopeUpdate` and `ScopeResponse` reach generation.
+
+Each of the 25 carries a written pending status naming an issue, and the test fails in both directions — an unlisted dead knob and a listed knob that has come alive both break the build. #17 deleted `UniqueLookup`/`RangeLookup` (redundant with the operator table #27 derives from ent's `$field.Ops`) and `DomainConfig.EntityName` (no reader, no successor); `FieldMetadata` stayed, because `annotations.go:44` labels it RESERVED for spec generation, which is a stated forward contract rather than an unfalsifiable promise. `Sensitive` was a third shape again — a security promise in its godoc — so #3 deleted it outright.
 
 ⚠️ Needs verification: everything about *emitted* code in §5.2 and §4 is read off the templates, not off compiled output — this repo contains no ent project, so no generated file was ever compiled during this analysis.

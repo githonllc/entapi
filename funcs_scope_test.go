@@ -159,12 +159,6 @@ func TestGetDomainFieldAnnotation_MapRoundTrip(t *testing.T) {
 	if !got.Filterable {
 		t.Error("expected Filterable = true")
 	}
-	if !got.UniqueLookup {
-		t.Error("expected UniqueLookup = true")
-	}
-	if !got.RangeLookup {
-		t.Error("expected RangeLookup = true")
-	}
 }
 
 func TestGetDomainFieldAnnotation_NoKey(t *testing.T) {

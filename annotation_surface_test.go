@@ -43,8 +43,8 @@ import (
 // # How the knob list is derived
 //
 // By reflection over the annotation types, not by enumeration. A new exported
-// field on DomainField, FieldMetadata, DomainEdge or DomainConfig enters this
-// test the moment it is declared, and fails it until it is either wired to
+// field on DomainField, FieldMetadata or DomainEdge enters this test the
+// moment it is declared, and fails it until it is either wired to
 // generation or written down as pending. That is the anti-rot property; a
 // hardcoded list would rot exactly the way the surface did.
 
@@ -69,33 +69,31 @@ var pendingKnobs = map[string]string{
 	// for OpenAPI/Swagger spec generation, which is a stated forward contract
 	// rather than an unfalsifiable promise. No issue implements spec generation
 	// yet; #17 is the record of the decision to keep them until one does.
-	"DomainField.Metadata":     "RESERVED for spec generation; kept as a stated forward contract per the #17 verdict",
-	"FieldMetadata.Title":      "RESERVED for spec generation (#17)",
-	"FieldMetadata.Format":     "RESERVED for spec generation (#17)",
-	"FieldMetadata.Pattern":    "RESERVED for spec generation (#17)",
-	"FieldMetadata.Minimum":    "RESERVED for spec generation (#17)",
-	"FieldMetadata.Maximum":    "RESERVED for spec generation (#17)",
-	"FieldMetadata.MinLength":  "RESERVED for spec generation (#17)",
-	"FieldMetadata.MaxLength":  "RESERVED for spec generation (#17)",
-	"FieldMetadata.Enum":       "RESERVED for spec generation (#17)",
-	"FieldMetadata.ReadOnly":   "RESERVED for spec generation (#17)",
-	"FieldMetadata.WriteOnly":  "RESERVED for spec generation (#17)",
-	"FieldMetadata.Deprecated": "RESERVED for spec generation (#17)",
-	"FieldMetadata.Tags":       "RESERVED for spec generation (#17)",
+	// Description and Example joined this block on #17, moved off DomainField.
+	// They are OpenAPI schema fields like their neighbours, so they inherit the
+	// same pending status rather than carrying a reason of their own.
+	// DomainField.Validation was deleted in the same change: #26's Validate()
+	// is its successor, so it was not a candidate for this block.
+	"DomainField.Metadata":      "RESERVED for spec generation; kept as a stated forward contract per the #17 verdict",
+	"FieldMetadata.Title":       "RESERVED for spec generation (#17)",
+	"FieldMetadata.Description": "RESERVED for spec generation (#17)",
+	"FieldMetadata.Format":      "RESERVED for spec generation (#17)",
+	"FieldMetadata.Pattern":     "RESERVED for spec generation (#17)",
+	"FieldMetadata.Minimum":     "RESERVED for spec generation (#17)",
+	"FieldMetadata.Maximum":     "RESERVED for spec generation (#17)",
+	"FieldMetadata.MinLength":   "RESERVED for spec generation (#17)",
+	"FieldMetadata.MaxLength":   "RESERVED for spec generation (#17)",
+	"FieldMetadata.Enum":        "RESERVED for spec generation (#17)",
+	"FieldMetadata.Example":     "RESERVED for spec generation (#17)",
+	"FieldMetadata.ReadOnly":    "RESERVED for spec generation (#17)",
+	"FieldMetadata.WriteOnly":   "RESERVED for spec generation (#17)",
+	"FieldMetadata.Deprecated":  "RESERVED for spec generation (#17)",
+	"FieldMetadata.Tags":        "RESERVED for spec generation (#17)",
 
 	// DomainEdge.Scopes and DomainEdge.JSONKey are deliberately absent: #25
 	// registered responseEdges and edgeJSONKey, so both are consumed now. They
 	// were listed here while this branch was based on the commit before #25
 	// landed, and this test is what caught it on rebase.
-
-	// NOT COVERED by the #17 verdict, which enumerated the query knobs, the
-	// metadata block, EntityName and the identifier types but not these three.
-	// They are recorded here so the surface is fully accounted for, and raised
-	// on #17 for the owner: their disposition is an annotation-surface decision
-	// and is not this test's to make.
-	"DomainField.Validation":  "UNDECIDED — no reader; disposition not covered by the #17 verdict, raised there for the owner",
-	"DomainField.Description": "UNDECIDED — no reader; disposition not covered by the #17 verdict, raised there for the owner",
-	"DomainField.Example":     "UNDECIDED — no reader; disposition not covered by the #17 verdict, raised there for the owner",
 }
 
 // annotationKnob is one exported setting a schema author can write, together
@@ -133,9 +131,8 @@ type surfaceProbe struct {
 	optional *gen.Field
 	edge     *gen.Edge
 
-	df     DomainField
-	de     DomainEdge
-	config DomainConfig
+	df DomainField
+	de DomainEdge
 }
 
 func newSurfaceProbe() *surfaceProbe {
@@ -152,7 +149,6 @@ func newSurfaceProbe() *surfaceProbe {
 		Annotations: gen.Annotations{"DomainEdge": &p.de},
 	}
 	p.node.Edges = []*gen.Edge{p.edge}
-	p.node.Annotations = gen.Annotations{"DomainConfig": &p.config}
 	p.graph = &gen.Graph{
 		Config: &gen.Config{Package: "example.com/project/ent"},
 		Nodes:  []*gen.Type{p.node},
@@ -168,7 +164,6 @@ func newSurfaceProbe() *surfaceProbe {
 func (p *surfaceProbe) reset() {
 	p.df = DomainField{}
 	p.de = DomainEdge{}
-	p.config = DomainConfig{}
 }
 
 // observe runs every registered template function over the probe and returns a
@@ -344,16 +339,6 @@ func annotationKnobs(t *testing.T) []annotationKnob {
 			name: "DomainEdge." + field.Name,
 			apply: func(p *surfaceProbe) {
 				reflect.ValueOf(&p.de).Elem().FieldByIndex(field.Index).Set(probeValue(t, field.Type))
-			},
-		})
-	}
-
-	for _, f := range exportedFields(reflect.TypeOf(DomainConfig{})) {
-		field := f
-		knobs = append(knobs, annotationKnob{
-			name: "DomainConfig." + field.Name,
-			apply: func(p *surfaceProbe) {
-				reflect.ValueOf(&p.config).Elem().FieldByIndex(field.Index).Set(probeValue(t, field.Type))
 			},
 		})
 	}

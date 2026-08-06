@@ -1,7 +1,6 @@
 package entdomain
 
 import (
-	"reflect"
 	"testing"
 )
 
@@ -493,14 +492,15 @@ func TestIdField(t *testing.T) {
 		}
 	}
 
-	// Description
-	if field.Description != "Unique entity identifier" {
-		t.Errorf("IdField Description = %q, want %q", field.Description, "Unique entity identifier")
-	}
-
-	// ReadOnly via Metadata
+	// Description and ReadOnly, both via Metadata. WithDescription writes
+	// through ensureMetadata since #17, and AsReadOnly runs after it in
+	// IdField's chain, so this also pins that the second builder preserves the
+	// first one's write rather than starting a fresh block.
 	if field.Metadata == nil {
 		t.Fatal("IdField should have Metadata set")
+	}
+	if field.Metadata.Description != "Unique entity identifier" {
+		t.Errorf("IdField Metadata.Description = %q, want %q", field.Metadata.Description, "Unique entity identifier")
 	}
 	if !field.Metadata.ReadOnly {
 		t.Error("IdField Metadata.ReadOnly should be true")
@@ -546,8 +546,8 @@ func TestAuditLogField(t *testing.T) {
 	}
 
 	// AuditLogField should NOT have a description (unlike IdField)
-	if field.Description != "" {
-		t.Errorf("AuditLogField Description = %q, want empty string", field.Description)
+	if field.Metadata.Description != "" {
+		t.Errorf("AuditLogField Metadata.Description = %q, want empty string", field.Metadata.Description)
 	}
 }
 
@@ -614,24 +614,8 @@ func TestDomainFieldWithScopes(t *testing.T) {
 	}
 }
 
-// --- DomainConfig annotation ---
-
-func TestDomainConfigName(t *testing.T) {
-	config := DomainConfig{}
-	if config.Name() != "DomainConfig" {
-		t.Errorf("DomainConfig.Name() = %q, want %q", config.Name(), "DomainConfig")
-	}
-}
-
-// TestDomainConfigCarriesNoOptions pins what is left of DomainConfig after
-// #17 removed EntityName: an annotation with no settings at all. If a field is
-// added back, it needs a reader and a test that proves generation observes it,
-// not just a round-trip through the struct.
-func TestDomainConfigCarriesNoOptions(t *testing.T) {
-	if n := reflect.TypeOf(DomainConfig{}).NumField(); n != 0 {
-		t.Errorf("DomainConfig has %d field(s), want 0; see the #17 verdict on EntityName", n)
-	}
-}
+// DomainConfig was removed entirely on #17; TestDomainConfigIsNotPublished in
+// annotation_placement_test.go is what keeps it from coming back.
 
 // --- Complex builder chaining ---
 
@@ -703,8 +687,8 @@ func TestComplexBuilderChaining(t *testing.T) {
 		}
 
 		// Description
-		if field.Description != "User password" {
-			t.Errorf("Description = %q, want %q", field.Description, "User password")
+		if field.Metadata.Description != "User password" {
+			t.Errorf("Metadata.Description = %q, want %q", field.Metadata.Description, "User password")
 		}
 
 		// Length constraints
@@ -741,8 +725,8 @@ func TestComplexBuilderChaining(t *testing.T) {
 		if field.Metadata.Maximum == nil || *field.Metadata.Maximum != 1000 {
 			t.Errorf("Metadata.Maximum = %v, want 1000", field.Metadata.Maximum)
 		}
-		if field.Description != "Legacy score field" {
-			t.Errorf("Description = %q, want %q", field.Description, "Legacy score field")
+		if field.Metadata.Description != "Legacy score field" {
+			t.Errorf("Metadata.Description = %q, want %q", field.Metadata.Description, "Legacy score field")
 		}
 		if len(field.Metadata.Tags) != 2 {
 			t.Fatalf("Tags length = %d, want 2", len(field.Metadata.Tags))
@@ -779,11 +763,11 @@ func TestComplexBuilderChaining(t *testing.T) {
 		if field.Metadata.Pattern != `^(draft|published|archived)$` {
 			t.Errorf("Pattern = %q, want %q", field.Metadata.Pattern, `^(draft|published|archived)$`)
 		}
-		if field.Example != "draft" {
-			t.Errorf("Example = %v, want %q", field.Example, "draft")
+		if field.Metadata.Example != "draft" {
+			t.Errorf("Metadata.Example = %v, want %q", field.Metadata.Example, "draft")
 		}
-		if field.Description != "Content status" {
-			t.Errorf("Description = %q, want %q", field.Description, "Content status")
+		if field.Metadata.Description != "Content status" {
+			t.Errorf("Metadata.Description = %q, want %q", field.Metadata.Description, "Content status")
 		}
 	})
 
@@ -836,8 +820,11 @@ func TestWithExample(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			field := NewDomainField().WithExample(tt.example)
-			if field.Example != tt.example {
-				t.Errorf("Example = %v, want %v", field.Example, tt.example)
+			if field.Metadata == nil {
+				t.Fatal("WithExample should have allocated a Metadata block")
+			}
+			if field.Metadata.Example != tt.example {
+				t.Errorf("Metadata.Example = %v, want %v", field.Metadata.Example, tt.example)
 			}
 		})
 	}

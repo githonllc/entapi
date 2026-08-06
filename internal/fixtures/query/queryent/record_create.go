@@ -33,6 +33,20 @@ func (rc *RecordCreate) SetBody(s string) *RecordCreate {
 	return rc
 }
 
+// SetRef sets the "ref" field.
+func (rc *RecordCreate) SetRef(s string) *RecordCreate {
+	rc.mutation.SetRef(s)
+	return rc
+}
+
+// SetNillableRef sets the "ref" field if the given value is not nil.
+func (rc *RecordCreate) SetNillableRef(s *string) *RecordCreate {
+	if s != nil {
+		rc.SetRef(*s)
+	}
+	return rc
+}
+
 // SetStatus sets the "status" field.
 func (rc *RecordCreate) SetStatus(r record.Status) *RecordCreate {
 	rc.mutation.SetStatus(r)
@@ -222,6 +236,10 @@ func (rc *RecordCreate) createSpec() (*Record, *sqlgraph.CreateSpec) {
 	if value, ok := rc.mutation.Body(); ok {
 		_spec.SetField(record.FieldBody, field.TypeString, value)
 		_node.Body = value
+	}
+	if value, ok := rc.mutation.Ref(); ok {
+		_spec.SetField(record.FieldRef, field.TypeString, value)
+		_node.Ref = value
 	}
 	if value, ok := rc.mutation.Status(); ok {
 		_spec.SetField(record.FieldStatus, field.TypeEnum, value)

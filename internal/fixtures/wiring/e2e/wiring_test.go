@@ -329,7 +329,10 @@ func TestWiringWithoutResponseEdges(t *testing.T) {
 		t.Errorf("id = %s, want %s", got.ID, created.ID)
 	}
 
-	p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyContains: ptr("fir")}, entdomain.ListRequest{SortBy: "body"})
+	// body is Filterable but not Searchable, so the substring class is not on
+	// this filter at all (ADR-0005). HasPrefix is the cheap-class operator, and
+	// which operator narrows the page is incidental to what this asserts.
+	p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: ptr("fir")}, entdomain.ListRequest{SortBy: "body"})
 	if err != nil {
 		t.Fatalf("ListNotes: %v", err)
 	}

@@ -244,7 +244,7 @@ func queryConflicts(node *gen.Type, f *gen.Field) []string {
 		out = append(out, fmt.Sprintf(
 			"%s.%s: annotation marks the field Searchable, but ent derives no Contains predicate for type %q "+
 				"(entc/gen/func.go fieldOps), so there is no %sContains to put in the free-text disjunction. "+
-				"Free-text search is a substring match and only string fields have one — drop AsSearchable(), or use AsFilterable() for exact matching",
+				"Free-text search is a substring match and only string fields have one — drop AsSearchable(); AsFilterable() offers this type's non-substring operators",
 			node.Name, f.Name, f.Type.String(), f.StructField(),
 		))
 	}

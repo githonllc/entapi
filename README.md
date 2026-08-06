@@ -891,23 +891,45 @@ runtime switch brings it back.
 
 | Declaration | Purpose |
 |---|---|
-| `{Entity}Filter` | one parameter per operator per `Filterable` field, plus `Q` when any field is `Searchable` |
+| `{Entity}Filter` | one parameter per operator per `Filterable` field — minus the substring class unless the field is also `Searchable` — plus `Q` when any field is `Searchable` |
 | `(*{Entity}Filter).Predicates() []predicate.{Entity}` | the ent predicates, combined conjunctively by `Where(...)` |
 | `{Entity}SortKeys []string` | the sort allow-list: exactly the `Sortable` fields |
 | `{Entity}Order(entdomain.ListRequest) ([]{entity}.OrderOption, error)` | validates the requested key against the allow-list and returns ent's own order builders, always ending with the primary key |
 
-**Operator coverage is whatever ent derives for the field's type**, read from
-`$field.Ops` rather than from a table this package keeps. A string gets thirteen
-parameters, an enum four, an optional `int` eight plus one, a `time.Time` eight.
-Emitting an operator costs nothing at generation time; adding one later means
-changing a template, regenerating, and possibly breaking a URL contract.
+**Which operators exist is whatever ent derives for the field's type**, read
+from `$field.Ops` rather than from a table this package keeps. Which of them
+become parameters is decided by two markers, in two classes
+([ADR-0005](docs/adr/0005-contains-operators-gated-by-searchable.md)):
+
+| Class | Marker | Operators |
+|---|---|---|
+| index-friendly | `AsFilterable()` | EQ, NEQ, In, NotIn, GT, GTE, LT, LTE, `_prefix` (left-anchored `LIKE` uses the index), and the collapsed `_is_null` question |
+| substring | `AsFilterable()` **and** `AsSearchable()` | `_contains`, `_icontains`, `_ieq`, `_suffix` |
+
+A `Filterable`-only string therefore gets ten parameters and a
+`Filterable`+`Searchable` one gets thirteen; an enum four, an optional `int`
+eight plus one, a `time.Time` eight. The split exists because `LIKE '%x%'` and
+`LOWER(x) = LOWER(?)` defeat a B-tree index exactly like the unchecked sort the
+allow-list below exists to prevent — `_ieq` is exact-match *semantics* but sits
+in the expensive class for its *cost*. Emitting an operator costs nothing at
+generation time; adding one later means changing a template, regenerating, and
+possibly breaking a URL contract — which is precisely why the expensive ones are
+opt-in rather than granted by default.
+
+`Searchable` alone opens no structured parameter at all: `Filterable` is what
+opens the structured surface, and `Searchable` widens an already-open one.
 
 ```go
 type RecordFilter struct {
     Title             *string  `form:"title" json:"title,omitempty"`             // EQ
     TitleNEQ          *string  `form:"title_neq" json:"title_neq,omitempty"`
     TitleIn           []string `form:"title_in" json:"title_in,omitempty"`
-    // … GT GTE LT LTE Contains HasPrefix HasSuffix EqualFold ContainsFold
+    // … GT GTE LT LTE HasPrefix — and, because title is Searchable too,
+    //   Contains HasSuffix EqualFold ContainsFold
+
+    Ref    *string `form:"ref" json:"ref,omitempty"`               // Filterable only:
+    RefNEQ *string `form:"ref_neq" json:"ref_neq,omitempty"`       // no ref_contains
+    // … In NotIn GT GTE LT LTE HasPrefix, then RefIsNull
 
     ScoreIsNull *bool `form:"score_is_null" json:"score_is_null,omitempty"`
 
@@ -942,6 +964,39 @@ than emitting a call ent never wrote: a marker on a field withholding
 `ScopeQuery`, `Searchable` on a type with no `Contains` predicate, `Filterable`
 on a type with no predicates at all, and `Sortable` on a type ent's order
 builders skip because it is not comparable.
+
+### Migrating from `AsFilterable()` granting substring operators
+
+**BREAKING.** A `Filterable`-only string field used to get the full ent-derived
+operator set, including `?name_contains=`, `?name_icontains=`, `?name_ieq=` and
+`?name_suffix=`. Those four parameters are now the substring class and require
+`AsSearchable()` on the same field
+([ADR-0005](docs/adr/0005-contains-operators-gated-by-searchable.md),
+[#64](https://github.com/githonllc/entdomain/issues/64)).
+
+After regenerating, a request that still sends `name_contains=x` gets no error:
+form and JSON binding drop a key the struct no longer has, so a working query
+becomes an **unfiltered** one. Grep your callers for `_contains`, `_icontains`,
+`_ieq` and `_suffix` before regenerating — the compiler cannot find these for
+you, because they are URL keys, not identifiers.
+
+To restore them, add the marker:
+
+```go
+field.String("name").
+    Annotations(entdomain.DefaultField().AsFilterable().AsSearchable())
+```
+
+**State the coupling, because it is the price:** `AsSearchable()` also enrols
+the field in the free-text `q` disjunction. The two are not separately
+expressible, and that is deliberate — a third marker would be taxonomy growth
+for a distinction `Searchable` already encodes. ADR-0005 accepts it knowingly. A
+consumer who needs the structured `_contains` parameter but must keep the field
+out of `q` writes their own predicate against ent directly.
+
+Nothing else moves: `_prefix` stays with `AsFilterable()` (left-anchored `LIKE`
+uses the index), the null question stays, and a `Searchable`-only field still
+gets no structured parameters at all.
 
 ### Migrating from unordered list results
 
@@ -1238,8 +1293,8 @@ table exists to prevent.
 | `DomainField.Required` | `WithRequired(ScopeCreate)` makes the create request demand a value ent would have defaulted or allowed to be absent; `WithRequired(ScopeUpdate)` withdraws the field from the set an explicit `null` may clear |
 | `DomainEdge.Scopes`, set by `Edge().InResponse()` | Puts the nested object in the response type |
 | `DomainEdge.JSONKey`, set by `.As("key")` | Overrides the edge's JSON key |
-| `DomainField.Filterable`, set by `.AsFilterable()` | Emits one filter parameter per operator ent derives for the field's type |
-| `DomainField.Searchable`, set by `.AsSearchable()` | Adds the field to the `q` free-text disjunction |
+| `DomainField.Filterable`, set by `.AsFilterable()` | Emits one filter parameter per operator ent derives for the field's type, minus the substring class (`_contains`, `_icontains`, `_ieq`, `_suffix`) |
+| `DomainField.Searchable`, set by `.AsSearchable()` | Adds the field to the `q` free-text disjunction, and — on a `Filterable` field — emits the substring class too |
 | `DomainField.Sortable`, set by `.AsSortable()` | Adds the field to `{Entity}SortKeys`, the sort allow-list |
 
 Eleven of the twenty-six settings, counting the scope constants separately.

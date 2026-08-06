@@ -52,6 +52,7 @@ import (
 type RecordCreateRequest struct {
 	Title  string         `json:"title"`
 	Body   string         `json:"body"`
+	Ref    *string        `json:"ref,omitempty"`
 	Status *record.Status `json:"status,omitempty"`
 	Score  *int           `json:"score,omitempty"`
 	Note   *string        `json:"note,omitempty"`
@@ -70,7 +71,7 @@ type RecordCreateRequest struct {
 // recordCreateRequestTags is the canonical JSON key of every field on
 // RecordCreateRequest, in declaration order. UnmarshalJSON needs the tags as
 // data, not as struct tags, to tell a case variant from an unrelated key.
-var recordCreateRequestTags = []string{"title", "body", "status", "score", "note", "secret"}
+var recordCreateRequestTags = []string{"title", "body", "ref", "status", "score", "note", "secret"}
 
 // UnmarshalJSON records presence, then decodes normally.
 //
@@ -136,6 +137,9 @@ func (r *RecordCreateRequest) HasTitle() bool { return r.has("title") }
 // HasBody reports whether the payload carried "body".
 func (r *RecordCreateRequest) HasBody() bool { return r.has("body") }
 
+// HasRef reports whether the payload carried "ref".
+func (r *RecordCreateRequest) HasRef() bool { return r.has("ref") }
+
 // HasStatus reports whether the payload carried "status".
 func (r *RecordCreateRequest) HasStatus() bool { return r.has("status") }
 
@@ -185,6 +189,9 @@ func (v *ValidRecordCreateRequest) Apply(b *RecordCreate) *RecordCreate {
 	r := v.r
 	b.SetTitle(r.Title)
 	b.SetBody(r.Body)
+	if r.Ref != nil {
+		b.SetRef(*r.Ref)
+	}
 	if r.Status != nil {
 		b.SetStatus(*r.Status)
 	}
@@ -214,6 +221,7 @@ func (v *ValidRecordCreateRequest) Apply(b *RecordCreate) *RecordCreate {
 type RecordPatchRequest struct {
 	Title  *string        `json:"title,omitempty"`
 	Body   *string        `json:"body,omitempty"`
+	Ref    *string        `json:"ref,omitempty"`
 	Status *record.Status `json:"status,omitempty"`
 	Score  *int           `json:"score,omitempty"`
 	Note   *string        `json:"note,omitempty"`
@@ -224,7 +232,7 @@ type RecordPatchRequest struct {
 
 // recordPatchRequestTags is the canonical JSON key of every field on
 // RecordPatchRequest, in declaration order.
-var recordPatchRequestTags = []string{"title", "body", "status", "score", "note", "secret"}
+var recordPatchRequestTags = []string{"title", "body", "ref", "status", "score", "note", "secret"}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from
@@ -270,6 +278,9 @@ func (r *RecordPatchRequest) HasTitle() bool { return r.has("title") }
 
 // HasBody reports whether the payload carried "body".
 func (r *RecordPatchRequest) HasBody() bool { return r.has("body") }
+
+// HasRef reports whether the payload carried "ref".
+func (r *RecordPatchRequest) HasRef() bool { return r.has("ref") }
 
 // HasStatus reports whether the payload carried "status".
 func (r *RecordPatchRequest) HasStatus() bool { return r.has("status") }
@@ -327,6 +338,13 @@ func (v *ValidRecordPatchRequest) Apply(b *RecordUpdateOne) *RecordUpdateOne {
 	if r.HasBody() {
 		b.SetBody(*r.Body)
 	}
+	if r.HasRef() {
+		if r.Ref == nil {
+			b.ClearRef()
+		} else {
+			b.SetRef(*r.Ref)
+		}
+	}
 	if r.HasStatus() {
 		b.SetStatus(*r.Status)
 	}
@@ -364,6 +382,7 @@ type RecordSummary struct {
 	ID        uuid.UUID     `json:"id"`
 	Title     string        `json:"title"`
 	Body      string        `json:"body"`
+	Ref       *string       `json:"ref,omitempty"`
 	Status    record.Status `json:"status"`
 	Score     *int          `json:"score,omitempty"`
 	CreatedAt time.Time     `json:"created_at"`
@@ -380,6 +399,7 @@ func NewRecordSummary(e *Record) *RecordSummary {
 		ID:        e.ID,
 		Title:     e.Title,
 		Body:      e.Body,
+		Ref:       entdomain.PtrOrNil(e.Ref),
 		Status:    e.Status,
 		Score:     e.Score,
 		CreatedAt: e.CreatedAt,
@@ -397,6 +417,7 @@ type RecordResponse struct {
 	ID        uuid.UUID     `json:"id"`
 	Title     string        `json:"title"`
 	Body      string        `json:"body"`
+	Ref       *string       `json:"ref,omitempty"`
 	Status    record.Status `json:"status"`
 	Score     *int          `json:"score,omitempty"`
 	CreatedAt time.Time     `json:"created_at"`
@@ -415,6 +436,7 @@ func NewRecordResponse(e *Record) (*RecordResponse, error) {
 		ID:        e.ID,
 		Title:     e.Title,
 		Body:      e.Body,
+		Ref:       entdomain.PtrOrNil(e.Ref),
 		Status:    e.Status,
 		Score:     e.Score,
 		CreatedAt: e.CreatedAt,

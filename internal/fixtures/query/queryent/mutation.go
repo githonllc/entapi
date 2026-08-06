@@ -370,6 +370,7 @@ type RecordMutation struct {
 	id            *uuid.UUID
 	title         *string
 	body          *string
+	ref           *string
 	status        *record.Status
 	score         *int
 	addscore      *int
@@ -556,6 +557,55 @@ func (m *RecordMutation) OldBody(ctx context.Context) (v string, err error) {
 // ResetBody resets all changes to the "body" field.
 func (m *RecordMutation) ResetBody() {
 	m.body = nil
+}
+
+// SetRef sets the "ref" field.
+func (m *RecordMutation) SetRef(s string) {
+	m.ref = &s
+}
+
+// Ref returns the value of the "ref" field in the mutation.
+func (m *RecordMutation) Ref() (r string, exists bool) {
+	v := m.ref
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRef returns the old "ref" field's value of the Record entity.
+// If the Record object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RecordMutation) OldRef(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRef is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRef requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRef: %w", err)
+	}
+	return oldValue.Ref, nil
+}
+
+// ClearRef clears the value of the "ref" field.
+func (m *RecordMutation) ClearRef() {
+	m.ref = nil
+	m.clearedFields[record.FieldRef] = struct{}{}
+}
+
+// RefCleared returns if the "ref" field was cleared in this mutation.
+func (m *RecordMutation) RefCleared() bool {
+	_, ok := m.clearedFields[record.FieldRef]
+	return ok
+}
+
+// ResetRef resets all changes to the "ref" field.
+func (m *RecordMutation) ResetRef() {
+	m.ref = nil
+	delete(m.clearedFields, record.FieldRef)
 }
 
 // SetStatus sets the "status" field.
@@ -819,12 +869,15 @@ func (m *RecordMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RecordMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.title != nil {
 		fields = append(fields, record.FieldTitle)
 	}
 	if m.body != nil {
 		fields = append(fields, record.FieldBody)
+	}
+	if m.ref != nil {
+		fields = append(fields, record.FieldRef)
 	}
 	if m.status != nil {
 		fields = append(fields, record.FieldStatus)
@@ -853,6 +906,8 @@ func (m *RecordMutation) Field(name string) (ent.Value, bool) {
 		return m.Title()
 	case record.FieldBody:
 		return m.Body()
+	case record.FieldRef:
+		return m.Ref()
 	case record.FieldStatus:
 		return m.Status()
 	case record.FieldScore:
@@ -876,6 +931,8 @@ func (m *RecordMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldTitle(ctx)
 	case record.FieldBody:
 		return m.OldBody(ctx)
+	case record.FieldRef:
+		return m.OldRef(ctx)
 	case record.FieldStatus:
 		return m.OldStatus(ctx)
 	case record.FieldScore:
@@ -908,6 +965,13 @@ func (m *RecordMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBody(v)
+		return nil
+	case record.FieldRef:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRef(v)
 		return nil
 	case record.FieldStatus:
 		v, ok := value.(record.Status)
@@ -989,6 +1053,9 @@ func (m *RecordMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *RecordMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(record.FieldRef) {
+		fields = append(fields, record.FieldRef)
+	}
 	if m.FieldCleared(record.FieldScore) {
 		fields = append(fields, record.FieldScore)
 	}
@@ -1009,6 +1076,9 @@ func (m *RecordMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *RecordMutation) ClearField(name string) error {
 	switch name {
+	case record.FieldRef:
+		m.ClearRef()
+		return nil
 	case record.FieldScore:
 		m.ClearScore()
 		return nil
@@ -1028,6 +1098,9 @@ func (m *RecordMutation) ResetField(name string) error {
 		return nil
 	case record.FieldBody:
 		m.ResetBody()
+		return nil
+	case record.FieldRef:
+		m.ResetRef()
 		return nil
 	case record.FieldStatus:
 		m.ResetStatus()

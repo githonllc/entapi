@@ -24,7 +24,7 @@ func init() {
 	recordFields := schema.Record{}.Fields()
 	_ = recordFields
 	// recordDescCreatedAt is the schema descriptor for created_at field.
-	recordDescCreatedAt := recordFields[5].Descriptor()
+	recordDescCreatedAt := recordFields[6].Descriptor()
 	// record.DefaultCreatedAt holds the default value on creation for the created_at field.
 	record.DefaultCreatedAt = recordDescCreatedAt.Default.(func() time.Time)
 	// recordDescID is the schema descriptor for id field.

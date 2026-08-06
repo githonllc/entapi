@@ -27,7 +27,10 @@ func paramTags(ps []filterParam) []string {
 }
 
 // TestFilterParamsFollowEntsOperatorTable is the unit-level statement of the
-// rule the fixture proves end to end: coverage is ent's, in ent's order.
+// rule the fixture proves end to end: existence is ent's, in ent's order, and
+// the substring class is filtered out of it unless the field is Searchable
+// (ADR-0005, #64). The two string rows are the same ent operator table read
+// through the two marker combinations.
 //
 // The expectations here are the ones reachable without a graph — gen.Field.Ops
 // consults the storage driver only for a field bound to a config, so EqualFold
@@ -41,8 +44,20 @@ func TestFilterParamsFollowEntsOperatorTable(t *testing.T) {
 		want  []string
 	}{
 		{
-			name:  "string",
-			field: newStringField("title", nil),
+			// Filterable only: the cheap class. HasSuffix and Contains are
+			// operators ent derived and this field did not earn.
+			name:  "string/filterable",
+			field: newStringField("title", ptr(DefaultField().AsFilterable())),
+			want: []string{
+				"Title", "TitleNEQ", "TitleIn", "TitleNotIn",
+				"TitleGT", "TitleGTE", "TitleLT", "TitleLTE",
+				"TitleHasPrefix",
+			},
+		},
+		{
+			// The same type, plus AsSearchable: the substring class returns.
+			name:  "string/filterable+searchable",
+			field: newStringField("title", ptr(DefaultField().AsFilterable().AsSearchable())),
 			want: []string{
 				"Title", "TitleNEQ", "TitleIn", "TitleNotIn",
 				"TitleGT", "TitleGTE", "TitleLT", "TitleLTE",

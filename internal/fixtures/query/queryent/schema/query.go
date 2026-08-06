@@ -11,6 +11,10 @@
 //	int, Optional   numericOps + the collapsed null question 8 + 1 parameters
 //	time.Time       numericOps                               8 parameters
 //
+// The class rule (ADR-0005) cuts across that table: those counts are what a
+// Filterable AND Searchable field earns. "ref" is the same string type marked
+// Filterable ONLY, so it earns 13 - 4 substring operators + the null question.
+//
 // Two fields exist to be ABSENT from the generated artifacts: "note" carries a
 // query scope but no marker, and "secret" carries neither. Neither may be
 // filterable, searchable or orderable, and the sort allow-list test names them.
@@ -46,6 +50,12 @@ func (Record) Fields() []ent.Field {
 		// than one field, and search is not a synonym for filter.
 		field.String("body").
 			Annotations(entdomain.DefaultField().AsSearchable()),
+
+		// Filterable WITHOUT Searchable: the cheap operator class only — no
+		// substring parameter exists for this column (ADR-0005).
+		field.String("ref").
+			Optional().
+			Annotations(entdomain.DefaultField().AsFilterable()),
 
 		// enum: four operators, and no substring predicate to generate.
 		field.Enum("status").

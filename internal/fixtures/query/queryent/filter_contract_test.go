@@ -208,9 +208,19 @@ func TestNoSortRequestedOrdersByID(t *testing.T) {
 // derivation shows up as a number rather than as a diff nobody reads.
 // ────────────────────────────────────────────────────────────────────────────
 
-func TestOperatorCoverageIsTheFullSetEntDerives(t *testing.T) {
+// TestOperatorCoverageFollowsTheClassRule pins ADR-0005. Existence is still
+// ent's answer alone — the class rule is a filter over which of the operators
+// ent derived becomes a URL parameter, never a second operator table.
+//
+// title is Filterable AND Searchable, so it carries the full set. ref is
+// Filterable ONLY, so it carries the cheap class and the four substring
+// parameters are absent by name: `LIKE '%x%'` defeats the index exactly like
+// the unchecked sort the allow-list above exists to prevent, and no annotation
+// on ref ever asked for it.
+func TestOperatorCoverageFollowsTheClassRule(t *testing.T) {
 	want := map[string]int{
 		"title":      13, // stringOps (11) + EqualFold + ContainsFold
+		"ref":        10, // the same 13 minus the 4 substring ops, plus the collapsed null question
 		"status":     4,  // enumOps
 		"score":      9,  // numericOps (8) + IsNil/NotNil collapsed into one
 		"created_at": 8,  // numericOps
@@ -238,6 +248,31 @@ func TestOperatorCoverageIsTheFullSetEntDerives(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("filter parameters per field = %v, want %v", got, want)
+	}
+
+	// The counts say how many; these say which. A count alone would pass if the
+	// split had merely renamed a parameter rather than withheld a class.
+	for _, present := range []string{"TitleContains", "TitleContainsFold", "TitleEqualFold", "TitleHasSuffix"} {
+		if _, ok := rt.FieldByName(present); !ok {
+			t.Errorf("RecordFilter.%s is missing; title is Filterable AND Searchable, which is what earns the substring class", present)
+		}
+	}
+	for _, absent := range []string{"RefContains", "RefContainsFold", "RefEqualFold", "RefHasSuffix"} {
+		if _, ok := rt.FieldByName(absent); ok {
+			t.Errorf("RecordFilter.%s exists; ref is Filterable only, and the substring class requires AsSearchable (ADR-0005)", absent)
+		}
+	}
+
+	// And the cheap class is exactly what remains, in ent's own operator order.
+	wantRef := []string{"Ref", "RefNEQ", "RefIn", "RefNotIn", "RefGT", "RefGTE", "RefLT", "RefLTE", "RefHasPrefix", "RefIsNull"}
+	var gotRef []string
+	for i := 0; i < rt.NumField(); i++ {
+		if name := rt.Field(i).Name; strings.HasPrefix(name, "Ref") {
+			gotRef = append(gotRef, name)
+		}
+	}
+	if !reflect.DeepEqual(gotRef, wantRef) {
+		t.Errorf("ref parameters = %v, want exactly the cheap class %v", gotRef, wantRef)
 	}
 }
 

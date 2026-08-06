@@ -304,6 +304,7 @@ func (d DomainField) WithRequired(scope FieldScope) DomainField {
 }
 
 // AsSearchable marks the field as searchable
+// On a Filterable field this also unlocks the substring operator class (ADR-0005).
 func (d DomainField) AsSearchable() DomainField {
 	d.Searchable = true
 	return d
@@ -316,6 +317,7 @@ func (d DomainField) AsSortable() DomainField {
 }
 
 // AsFilterable marks the field as filterable
+// Substring operators (_contains, _icontains, _ieq, _suffix) are NOT granted here — add AsSearchable (ADR-0005).
 func (d DomainField) AsFilterable() DomainField {
 	d.Filterable = true
 	return d

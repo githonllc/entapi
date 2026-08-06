@@ -19,6 +19,8 @@ const (
 	FieldTitle = "title"
 	// FieldBody holds the string denoting the body field in the database.
 	FieldBody = "body"
+	// FieldRef holds the string denoting the ref field in the database.
+	FieldRef = "ref"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldScore holds the string denoting the score field in the database.
@@ -38,6 +40,7 @@ var Columns = []string{
 	FieldID,
 	FieldTitle,
 	FieldBody,
+	FieldRef,
 	FieldStatus,
 	FieldScore,
 	FieldCreatedAt,
@@ -104,6 +107,11 @@ func ByTitle(opts ...sql.OrderTermOption) OrderOption {
 // ByBody orders the results by the body field.
 func ByBody(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBody, opts...).ToFunc()
+}
+
+// ByRef orders the results by the ref field.
+func ByRef(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRef, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

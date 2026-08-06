@@ -815,22 +815,41 @@ golden JSON 测试守着。
 
 | 声明 | 用途 |
 |---|---|
-| `{Entity}Filter` | 每个 `Filterable` 字段按操作符各一个参数；只要有 `Searchable` 字段就额外带 `Q` |
+| `{Entity}Filter` | 每个 `Filterable` 字段按操作符各一个参数——字段若非同时 `Searchable`，则不含子串类；只要有 `Searchable` 字段就额外带 `Q` |
 | `(*{Entity}Filter).Predicates() []predicate.{Entity}` | 生成 ent 谓词，由 `Where(...)` 合取组合 |
 | `{Entity}SortKeys []string` | 排序白名单：恰好是那些 `Sortable` 字段 |
 | `{Entity}Order(entdomain.ListRequest) ([]{entity}.OrderOption, error)` | 用白名单校验请求的排序键，返回 ent 自己的排序构建器，并总以主键收尾 |
 
-**操作符覆盖面就是 ent 为该字段类型推导出的那一套**，取自 `$field.Ops`，而不是本包
-自备的一张表。string 得到 13 个参数，enum 4 个，可选 `int` 8 + 1 个，`time.Time` 8 个。
-生成期多发一个操作符不花任何代价；事后补一个则意味着改模板、重新生成，还可能打破
-消费者已经依赖的 URL 契约。
+**哪些操作符存在，仍然只由 ent 为该字段类型推导决定**，取自 `$field.Ops`，而不是本包
+自备的一张表。而这些操作符中哪些会变成参数，由两个标记按两个类别决定
+（[ADR-0005](docs/adr/0005-contains-operators-gated-by-searchable.md)）：
+
+| 类别 | 标记 | 操作符 |
+|---|---|---|
+| 索引友好类 | `AsFilterable()` | EQ、NEQ、In、NotIn、GT、GTE、LT、LTE、`_prefix`（左锚定 `LIKE` 走索引），以及折叠后的 `_is_null` |
+| 子串类 | `AsFilterable()` **且** `AsSearchable()` | `_contains`、`_icontains`、`_ieq`、`_suffix` |
+
+所以只有 `Filterable` 的 string 得到 10 个参数，`Filterable`+`Searchable` 的得到 13 个；
+enum 4 个，可选 `int` 8 + 1 个，`time.Time` 8 个。这样切分是因为 `LIKE '%x%'` 与
+`LOWER(x) = LOWER(?)` 会像下文白名单所防的未校验排序一样彻底废掉 B-tree 索引——`_ieq`
+在**语义**上是精确匹配，归入昂贵类是按**成本**。生成期多发一个操作符不花任何代价；
+事后补一个则意味着改模板、重新生成，还可能打破消费者已经依赖的 URL 契约——这恰恰是
+昂贵的那一类必须显式开启、而不能默认赠送的理由。
+
+只有 `Searchable` 而没有 `Filterable` 的字段**不获得任何结构化参数**：开门的是
+`Filterable`，`Searchable` 只是把一扇已经打开的门再开宽一点。
 
 ```go
 type RecordFilter struct {
     Title             *string  `form:"title" json:"title,omitempty"`             // EQ
     TitleNEQ          *string  `form:"title_neq" json:"title_neq,omitempty"`
     TitleIn           []string `form:"title_in" json:"title_in,omitempty"`
-    // … GT GTE LT LTE Contains HasPrefix HasSuffix EqualFold ContainsFold
+    // … GT GTE LT LTE HasPrefix——又因为 title 同时是 Searchable，还有
+    //   Contains HasSuffix EqualFold ContainsFold
+
+    Ref    *string `form:"ref" json:"ref,omitempty"`               // 只有 Filterable：
+    RefNEQ *string `form:"ref_neq" json:"ref_neq,omitempty"`       // 没有 ref_contains
+    // … In NotIn GT GTE LT LTE HasPrefix，最后是 RefIsNull
 
     ScoreIsNull *bool `form:"score_is_null" json:"score_is_null,omitempty"`
 
@@ -860,6 +879,34 @@ page, err := entdomain.ListPage(ctx, client.Record.Query(), filter.Predicates(),
 调用：标记加在没有 `ScopeQuery` 的字段上、`Searchable` 加在没有 `Contains` 谓词的
 类型上、`Filterable` 加在完全没有谓词的类型上，以及 `Sortable` 加在因不可比较而被
 ent 排序构建器跳过的类型上。
+
+### 从 `AsFilterable()` 赠送子串操作符迁移
+
+**破坏性变更。** 过去只带 `Filterable` 的 string 字段会拿到 ent 推导出的全部操作符，
+其中包括 `?name_contains=`、`?name_icontains=`、`?name_ieq=` 与 `?name_suffix=`。
+这四个参数现在属于子串类，需要在**同一个字段**上再加 `AsSearchable()`
+（[ADR-0005](docs/adr/0005-contains-operators-gated-by-searchable.md)、
+[#64](https://github.com/githonllc/entdomain/issues/64)）。
+
+重新生成之后，仍然发送 `name_contains=x` 的请求**不会报错**：form 与 JSON 绑定会直接
+丢弃结构体上不存在的键，于是一个本来能用的查询变成了一个**不带过滤的**查询。重新生成
+之前请先在调用方全仓 grep `_contains`、`_icontains`、`_ieq`、`_suffix`——编译器帮不了
+你，它们是 URL 键，不是标识符。
+
+要恢复它们，加上标记：
+
+```go
+field.String("name").
+    Annotations(entdomain.DefaultField().AsFilterable().AsSearchable())
+```
+
+**这个耦合要明说，因为它就是代价：** `AsSearchable()` 同时会把该字段拉进全文检索 `q`
+的析取式。两者无法分别表达，而这是有意的——为一个 `Searchable` 已经编码了的区分再加
+第三个标记只是分类学膨胀。ADR-0005 是知情地接受这笔代价的。既需要结构化 `_contains`
+参数、又必须让字段不进 `q` 的消费者，请直接对 ent 写自己的谓词。
+
+其余一切不变：`_prefix` 仍归 `AsFilterable()`（左锚定 `LIKE` 走索引），null 问题仍在，
+而只有 `Searchable` 的字段依旧不获得任何结构化参数。
 
 ### 从无序的列表结果迁移
 
@@ -1117,8 +1164,8 @@ var (
 | `DomainField.Required` | `WithRequired(ScopeCreate)` 让创建请求强制要求一个 ent 本可以默认或允许缺席的字段；`WithRequired(ScopeUpdate)` 则把该字段从「显式 null 可清空」的集合里拿掉 |
 | `DomainEdge.Scopes`，由 `Edge().InResponse()` 设置 | 把嵌套对象放进响应类型 |
 | `DomainEdge.JSONKey`，由 `.As("key")` 设置 | 覆盖该边的 JSON 键 |
-| `DomainField.Filterable`，由 `.AsFilterable()` 设置 | 按 ent 为该字段类型推导出的每个操作符各生成一个过滤参数 |
-| `DomainField.Searchable`，由 `.AsSearchable()` 设置 | 把字段加入 `q` 全文检索的析取式 |
+| `DomainField.Filterable`，由 `.AsFilterable()` 设置 | 按 ent 为该字段类型推导出的每个操作符各生成一个过滤参数，但不含子串类（`_contains`、`_icontains`、`_ieq`、`_suffix`） |
+| `DomainField.Searchable`，由 `.AsSearchable()` 设置 | 把字段加入 `q` 全文检索的析取式；字段若同时是 `Filterable`，还会额外生成子串类参数 |
 | `DomainField.Sortable`，由 `.AsSortable()` 设置 | 把字段加入排序白名单 `{Entity}SortKeys` |
 
 二十六个设置中的十一个（作用域常量分开计数）。下面其余的全部只是被接受并存储，

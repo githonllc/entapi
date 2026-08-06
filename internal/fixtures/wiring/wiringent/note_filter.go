@@ -27,25 +27,23 @@ import (
 // from ent's own per-type table ($field.Ops) rather than from a curated
 // selection: emitting an operator costs nothing here, whereas adding one later
 // means changing a template, regenerating and possibly breaking a URL contract
-// consumers already depend on.
+// consumers already depend on. Substring-class operators (_contains,
+// _icontains, _ieq, _suffix) additionally require AsSearchable on the field —
+// see docs/adr/0005.
 //
 // Every parameter is a pointer or a slice, because "absent" and "the zero
 // value" are different requests.
 type NoteFilter struct {
 	// body: string
-	Body             *string  `form:"body" json:"body,omitempty"`
-	BodyNEQ          *string  `form:"body_neq" json:"body_neq,omitempty"`
-	BodyIn           []string `form:"body_in" json:"body_in,omitempty"`
-	BodyNotIn        []string `form:"body_not_in" json:"body_not_in,omitempty"`
-	BodyGT           *string  `form:"body_gt" json:"body_gt,omitempty"`
-	BodyGTE          *string  `form:"body_gte" json:"body_gte,omitempty"`
-	BodyLT           *string  `form:"body_lt" json:"body_lt,omitempty"`
-	BodyLTE          *string  `form:"body_lte" json:"body_lte,omitempty"`
-	BodyContains     *string  `form:"body_contains" json:"body_contains,omitempty"`
-	BodyHasPrefix    *string  `form:"body_prefix" json:"body_prefix,omitempty"`
-	BodyHasSuffix    *string  `form:"body_suffix" json:"body_suffix,omitempty"`
-	BodyEqualFold    *string  `form:"body_ieq" json:"body_ieq,omitempty"`
-	BodyContainsFold *string  `form:"body_icontains" json:"body_icontains,omitempty"`
+	Body          *string  `form:"body" json:"body,omitempty"`
+	BodyNEQ       *string  `form:"body_neq" json:"body_neq,omitempty"`
+	BodyIn        []string `form:"body_in" json:"body_in,omitempty"`
+	BodyNotIn     []string `form:"body_not_in" json:"body_not_in,omitempty"`
+	BodyGT        *string  `form:"body_gt" json:"body_gt,omitempty"`
+	BodyGTE       *string  `form:"body_gte" json:"body_gte,omitempty"`
+	BodyLT        *string  `form:"body_lt" json:"body_lt,omitempty"`
+	BodyLTE       *string  `form:"body_lte" json:"body_lte,omitempty"`
+	BodyHasPrefix *string  `form:"body_prefix" json:"body_prefix,omitempty"`
 }
 
 // Predicates converts the filter into ent predicates.
@@ -70,11 +68,7 @@ func (f *NoteFilter) Predicates() []predicate.Note {
 	entdomain.AppendIf(&ps, f.BodyGTE, note.BodyGTE)
 	entdomain.AppendIf(&ps, f.BodyLT, note.BodyLT)
 	entdomain.AppendIf(&ps, f.BodyLTE, note.BodyLTE)
-	entdomain.AppendIf(&ps, f.BodyContains, note.BodyContains)
 	entdomain.AppendIf(&ps, f.BodyHasPrefix, note.BodyHasPrefix)
-	entdomain.AppendIf(&ps, f.BodyHasSuffix, note.BodyHasSuffix)
-	entdomain.AppendIf(&ps, f.BodyEqualFold, note.BodyEqualFold)
-	entdomain.AppendIf(&ps, f.BodyContainsFold, note.BodyContainsFold)
 	return ps
 }
 

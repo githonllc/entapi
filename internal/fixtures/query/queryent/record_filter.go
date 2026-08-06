@@ -29,7 +29,9 @@ import (
 // from ent's own per-type table ($field.Ops) rather than from a curated
 // selection: emitting an operator costs nothing here, whereas adding one later
 // means changing a template, regenerating and possibly breaking a URL contract
-// consumers already depend on.
+// consumers already depend on. Substring-class operators (_contains,
+// _icontains, _ieq, _suffix) additionally require AsSearchable on the field —
+// see docs/adr/0005.
 //
 // Every parameter is a pointer or a slice, because "absent" and "the zero
 // value" are different requests.
@@ -48,6 +50,20 @@ type RecordFilter struct {
 	TitleHasSuffix    *string  `form:"title_suffix" json:"title_suffix,omitempty"`
 	TitleEqualFold    *string  `form:"title_ieq" json:"title_ieq,omitempty"`
 	TitleContainsFold *string  `form:"title_icontains" json:"title_icontains,omitempty"`
+
+	// ref: string, optional
+	Ref          *string  `form:"ref" json:"ref,omitempty"`
+	RefNEQ       *string  `form:"ref_neq" json:"ref_neq,omitempty"`
+	RefIn        []string `form:"ref_in" json:"ref_in,omitempty"`
+	RefNotIn     []string `form:"ref_not_in" json:"ref_not_in,omitempty"`
+	RefGT        *string  `form:"ref_gt" json:"ref_gt,omitempty"`
+	RefGTE       *string  `form:"ref_gte" json:"ref_gte,omitempty"`
+	RefLT        *string  `form:"ref_lt" json:"ref_lt,omitempty"`
+	RefLTE       *string  `form:"ref_lte" json:"ref_lte,omitempty"`
+	RefHasPrefix *string  `form:"ref_prefix" json:"ref_prefix,omitempty"`
+	// IsNil and NotNil are one boolean question. Emitting them as two
+	// parameters would admit a request that contradicts itself.
+	RefIsNull *bool `form:"ref_is_null" json:"ref_is_null,omitempty"`
 
 	// status: record.Status
 	Status      *record.Status  `form:"status" json:"status,omitempty"`
@@ -111,6 +127,22 @@ func (f *RecordFilter) Predicates() []predicate.Record {
 	entdomain.AppendIf(&ps, f.TitleHasSuffix, record.TitleHasSuffix)
 	entdomain.AppendIf(&ps, f.TitleEqualFold, record.TitleEqualFold)
 	entdomain.AppendIf(&ps, f.TitleContainsFold, record.TitleContainsFold)
+	entdomain.AppendIf(&ps, f.Ref, record.RefEQ)
+	entdomain.AppendIf(&ps, f.RefNEQ, record.RefNEQ)
+	entdomain.AppendIfSlice(&ps, f.RefIn, record.RefIn)
+	entdomain.AppendIfSlice(&ps, f.RefNotIn, record.RefNotIn)
+	entdomain.AppendIf(&ps, f.RefGT, record.RefGT)
+	entdomain.AppendIf(&ps, f.RefGTE, record.RefGTE)
+	entdomain.AppendIf(&ps, f.RefLT, record.RefLT)
+	entdomain.AppendIf(&ps, f.RefLTE, record.RefLTE)
+	entdomain.AppendIf(&ps, f.RefHasPrefix, record.RefHasPrefix)
+	if f.RefIsNull != nil {
+		if *f.RefIsNull {
+			ps = append(ps, record.RefIsNil())
+		} else {
+			ps = append(ps, record.RefNotNil())
+		}
+	}
 	entdomain.AppendIf(&ps, f.Status, record.StatusEQ)
 	entdomain.AppendIf(&ps, f.StatusNEQ, record.StatusNEQ)
 	entdomain.AppendIfSlice(&ps, f.StatusIn, record.StatusIn)

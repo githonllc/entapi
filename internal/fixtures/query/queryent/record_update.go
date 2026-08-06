@@ -55,6 +55,26 @@ func (ru *RecordUpdate) SetNillableBody(s *string) *RecordUpdate {
 	return ru
 }
 
+// SetRef sets the "ref" field.
+func (ru *RecordUpdate) SetRef(s string) *RecordUpdate {
+	ru.mutation.SetRef(s)
+	return ru
+}
+
+// SetNillableRef sets the "ref" field if the given value is not nil.
+func (ru *RecordUpdate) SetNillableRef(s *string) *RecordUpdate {
+	if s != nil {
+		ru.SetRef(*s)
+	}
+	return ru
+}
+
+// ClearRef clears the value of the "ref" field.
+func (ru *RecordUpdate) ClearRef() *RecordUpdate {
+	ru.mutation.ClearRef()
+	return ru
+}
+
 // SetStatus sets the "status" field.
 func (ru *RecordUpdate) SetStatus(r record.Status) *RecordUpdate {
 	ru.mutation.SetStatus(r)
@@ -190,6 +210,12 @@ func (ru *RecordUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if value, ok := ru.mutation.Body(); ok {
 		_spec.SetField(record.FieldBody, field.TypeString, value)
 	}
+	if value, ok := ru.mutation.Ref(); ok {
+		_spec.SetField(record.FieldRef, field.TypeString, value)
+	}
+	if ru.mutation.RefCleared() {
+		_spec.ClearField(record.FieldRef, field.TypeString)
+	}
 	if value, ok := ru.mutation.Status(); ok {
 		_spec.SetField(record.FieldStatus, field.TypeEnum, value)
 	}
@@ -256,6 +282,26 @@ func (ruo *RecordUpdateOne) SetNillableBody(s *string) *RecordUpdateOne {
 	if s != nil {
 		ruo.SetBody(*s)
 	}
+	return ruo
+}
+
+// SetRef sets the "ref" field.
+func (ruo *RecordUpdateOne) SetRef(s string) *RecordUpdateOne {
+	ruo.mutation.SetRef(s)
+	return ruo
+}
+
+// SetNillableRef sets the "ref" field if the given value is not nil.
+func (ruo *RecordUpdateOne) SetNillableRef(s *string) *RecordUpdateOne {
+	if s != nil {
+		ruo.SetRef(*s)
+	}
+	return ruo
+}
+
+// ClearRef clears the value of the "ref" field.
+func (ruo *RecordUpdateOne) ClearRef() *RecordUpdateOne {
+	ruo.mutation.ClearRef()
 	return ruo
 }
 
@@ -423,6 +469,12 @@ func (ruo *RecordUpdateOne) sqlSave(ctx context.Context) (_node *Record, err err
 	}
 	if value, ok := ruo.mutation.Body(); ok {
 		_spec.SetField(record.FieldBody, field.TypeString, value)
+	}
+	if value, ok := ruo.mutation.Ref(); ok {
+		_spec.SetField(record.FieldRef, field.TypeString, value)
+	}
+	if ruo.mutation.RefCleared() {
+		_spec.ClearField(record.FieldRef, field.TypeString)
 	}
 	if value, ok := ruo.mutation.Status(); ok {
 		_spec.SetField(record.FieldStatus, field.TypeEnum, value)

@@ -29,7 +29,9 @@ import (
 // from ent's own per-type table ($field.Ops) rather than from a curated
 // selection: emitting an operator costs nothing here, whereas adding one later
 // means changing a template, regenerating and possibly breaking a URL contract
-// consumers already depend on.
+// consumers already depend on. Substring-class operators (_contains,
+// _icontains, _ieq, _suffix) additionally require AsSearchable on the field —
+// see docs/adr/0005.
 //
 // Every parameter is a pointer or a slice, because "absent" and "the zero
 // value" are different requests.

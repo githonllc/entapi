@@ -22,6 +22,8 @@ type Record struct {
 	Title string `json:"title,omitempty"`
 	// Body holds the value of the "body" field.
 	Body string `json:"body,omitempty"`
+	// Ref holds the value of the "ref" field.
+	Ref string `json:"ref,omitempty"`
 	// Status holds the value of the "status" field.
 	Status record.Status `json:"status,omitempty"`
 	// Score holds the value of the "score" field.
@@ -42,7 +44,7 @@ func (*Record) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case record.FieldScore:
 			values[i] = new(sql.NullInt64)
-		case record.FieldTitle, record.FieldBody, record.FieldStatus, record.FieldNote, record.FieldSecret:
+		case record.FieldTitle, record.FieldBody, record.FieldRef, record.FieldStatus, record.FieldNote, record.FieldSecret:
 			values[i] = new(sql.NullString)
 		case record.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -80,6 +82,12 @@ func (r *Record) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field body", values[i])
 			} else if value.Valid {
 				r.Body = value.String
+			}
+		case record.FieldRef:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field ref", values[i])
+			} else if value.Valid {
+				r.Ref = value.String
 			}
 		case record.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -153,6 +161,9 @@ func (r *Record) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("body=")
 	builder.WriteString(r.Body)
+	builder.WriteString(", ")
+	builder.WriteString("ref=")
+	builder.WriteString(r.Ref)
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", r.Status))

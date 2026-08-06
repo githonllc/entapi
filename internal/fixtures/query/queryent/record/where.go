@@ -65,6 +65,11 @@ func Body(v string) predicate.Record {
 	return predicate.Record(sql.FieldEQ(FieldBody, v))
 }
 
+// Ref applies equality check predicate on the "ref" field. It's identical to RefEQ.
+func Ref(v string) predicate.Record {
+	return predicate.Record(sql.FieldEQ(FieldRef, v))
+}
+
 // Score applies equality check predicate on the "score" field. It's identical to ScoreEQ.
 func Score(v int) predicate.Record {
 	return predicate.Record(sql.FieldEQ(FieldScore, v))
@@ -213,6 +218,81 @@ func BodyEqualFold(v string) predicate.Record {
 // BodyContainsFold applies the ContainsFold predicate on the "body" field.
 func BodyContainsFold(v string) predicate.Record {
 	return predicate.Record(sql.FieldContainsFold(FieldBody, v))
+}
+
+// RefEQ applies the EQ predicate on the "ref" field.
+func RefEQ(v string) predicate.Record {
+	return predicate.Record(sql.FieldEQ(FieldRef, v))
+}
+
+// RefNEQ applies the NEQ predicate on the "ref" field.
+func RefNEQ(v string) predicate.Record {
+	return predicate.Record(sql.FieldNEQ(FieldRef, v))
+}
+
+// RefIn applies the In predicate on the "ref" field.
+func RefIn(vs ...string) predicate.Record {
+	return predicate.Record(sql.FieldIn(FieldRef, vs...))
+}
+
+// RefNotIn applies the NotIn predicate on the "ref" field.
+func RefNotIn(vs ...string) predicate.Record {
+	return predicate.Record(sql.FieldNotIn(FieldRef, vs...))
+}
+
+// RefGT applies the GT predicate on the "ref" field.
+func RefGT(v string) predicate.Record {
+	return predicate.Record(sql.FieldGT(FieldRef, v))
+}
+
+// RefGTE applies the GTE predicate on the "ref" field.
+func RefGTE(v string) predicate.Record {
+	return predicate.Record(sql.FieldGTE(FieldRef, v))
+}
+
+// RefLT applies the LT predicate on the "ref" field.
+func RefLT(v string) predicate.Record {
+	return predicate.Record(sql.FieldLT(FieldRef, v))
+}
+
+// RefLTE applies the LTE predicate on the "ref" field.
+func RefLTE(v string) predicate.Record {
+	return predicate.Record(sql.FieldLTE(FieldRef, v))
+}
+
+// RefContains applies the Contains predicate on the "ref" field.
+func RefContains(v string) predicate.Record {
+	return predicate.Record(sql.FieldContains(FieldRef, v))
+}
+
+// RefHasPrefix applies the HasPrefix predicate on the "ref" field.
+func RefHasPrefix(v string) predicate.Record {
+	return predicate.Record(sql.FieldHasPrefix(FieldRef, v))
+}
+
+// RefHasSuffix applies the HasSuffix predicate on the "ref" field.
+func RefHasSuffix(v string) predicate.Record {
+	return predicate.Record(sql.FieldHasSuffix(FieldRef, v))
+}
+
+// RefIsNil applies the IsNil predicate on the "ref" field.
+func RefIsNil() predicate.Record {
+	return predicate.Record(sql.FieldIsNull(FieldRef))
+}
+
+// RefNotNil applies the NotNil predicate on the "ref" field.
+func RefNotNil() predicate.Record {
+	return predicate.Record(sql.FieldNotNull(FieldRef))
+}
+
+// RefEqualFold applies the EqualFold predicate on the "ref" field.
+func RefEqualFold(v string) predicate.Record {
+	return predicate.Record(sql.FieldEqualFold(FieldRef, v))
+}
+
+// RefContainsFold applies the ContainsFold predicate on the "ref" field.
+func RefContainsFold(v string) predicate.Record {
+	return predicate.Record(sql.FieldContainsFold(FieldRef, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

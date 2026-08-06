@@ -117,17 +117,30 @@ var opTagSuffix = map[gen.Op]string{
 	gen.ContainsFold: "_icontains",
 }
 
+// substringOps is the expensive class (ADR-0005): emitted only when the
+// field is also Searchable. EqualFold is exact-match SEMANTICS but sits
+// here for its cost profile — LOWER(x)=LOWER(?) scans without a
+// functional index, exactly like a substring match.
+var substringOps = map[gen.Op]bool{
+	gen.Contains: true, gen.ContainsFold: true,
+	gen.EqualFold: true, gen.HasSuffix: true,
+}
+
 // nullTagSuffix names the one parameter the IsNil/NotNil pair collapses into.
 const nullTagSuffix = "_is_null"
 
 // filterParams returns the parameters a filterable field contributes, in ent's
 // own operator order.
 //
-// Two rules shape the result, and only two:
+// Three rules shape the result, and only three:
 //
-//   - Coverage is whatever ent derived. Emitting an operator costs nothing at
-//     generation time; adding one later means editing a template, regenerating
-//     and possibly breaking a consumer's URL contract.
+//   - Coverage starts as whatever ent derived. Emitting an operator costs
+//     nothing at generation time; adding one later means editing a template,
+//     regenerating and possibly breaking a consumer's URL contract.
+//   - The substring class is withheld unless the field is also Searchable
+//     (ADR-0005). Those operators are the ones whose cost profile matches the
+//     free-text disjunction that marker already owns, and emitting one **is**
+//     a permanent URL contract for a scan the annotation never asked for.
 //   - IsNil and NotNil are one boolean question, so they collapse into one
 //     parameter. Two would admit a request that contradicts itself, and there
 //     is no honest answer to "is null AND is not null".
@@ -146,6 +159,12 @@ func filterParams(f *gen.Field) []filterParam {
 			// that take a value, so the null question reads as a footnote to
 			// the field rather than as another comparison.
 			nullable = true
+			continue
+		}
+
+		if substringOps[op] && !isSearchable(f) {
+			// ADR-0005. Existence is still ent's answer; this only decides
+			// which of the operators ent derived becomes a URL parameter.
 			continue
 		}
 

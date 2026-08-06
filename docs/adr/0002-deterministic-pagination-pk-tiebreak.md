@@ -1,6 +1,12 @@
 # 0002 — Every generated list order ends with a primary-key tiebreak
 
-**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** [#59](https://github.com/githonllc/entdomain/issues/59)
+**Status:** Accepted (2026-08-06, owner-delegated arbitration — panel `[degraded]`:
+Gemini 3.1 Pro + Fable, unanimous; deciding fact: ent emits `ByID` for every
+fixture key shape, and offset paging without a total order loses rows with zero
+concurrent writes) · **Date:** 2026-08-06 · **Tracking issue:** [#59](https://github.com/githonllc/entdomain/issues/59)
+
+**Ratification constraint:** when the requested sort key *is* the primary key,
+the tiebreak is skipped — never `ORDER BY id, id`.
 
 ## Context
 

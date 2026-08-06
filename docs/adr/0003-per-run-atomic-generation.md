@@ -1,6 +1,10 @@
 # 0003 — Generation is atomic per run, not per file
 
-**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** [#61](https://github.com/githonllc/entdomain/issues/61)
+**Status:** Accepted (2026-08-06, owner-delegated arbitration — panel `[degraded]`:
+Gemini 3.1 Pro + Fable, unanimous, as written; cleanup was already staged after
+success, so the two-phase write completes an existing symmetry, and the
+SIGKILL residue is honestly priced) · **Date:** 2026-08-06 ·
+**Tracking issue:** [#61](https://github.com/githonllc/entdomain/issues/61)
 
 ## Context
 

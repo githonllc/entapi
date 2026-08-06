@@ -1,6 +1,17 @@
 # 0004 — The ownership marker, not the current schema, decides what cleanup may delete
 
-**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** [#63](https://github.com/githonllc/entdomain/issues/63)
+**Status:** Accepted (2026-08-06, owner-delegated arbitration — panel `[degraded]`:
+Gemini 3.1 Pro + Fable, unanimous; the two candidate shared-dir scenarios do not
+survive scrutiny — two graphs cannot share a Target because ent's own fixed
+filenames collide first, and a verbatim-vendored marker file is exactly what
+the documented marker-removal opt-out is for) · **Date:** 2026-08-06 ·
+**Tracking issue:** [#63](https://github.com/githonllc/entdomain/issues/63)
+
+**Ratification constraint:** the scan is **top-level only, never recursive** —
+ent's target directory contains generated subpackages (`migrate/`, `hook/`,
+`predicate/`, `enttest/`, `runtime/`, one per entity), and recursing widens the
+deletion surface for zero benefit. Non-recursion is pinned by a test, not just
+by this sentence.
 
 ## Context
 

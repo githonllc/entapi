@@ -1,6 +1,15 @@
 # 0001 — Request key matching is strict: a case-variant key is an error, never a silent no-op
 
-**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** [#58](https://github.com/githonllc/entdomain/issues/58)
+**Status:** Accepted (2026-08-06, owner-delegated arbitration — panel `[degraded]`:
+Gemini 3.1 Pro + Fable, unanimous; deciding fact: the silent-loss path means a
+"working" case-variant client cannot exist, so rejection breaks nobody) ·
+**Date:** 2026-08-06 · **Tracking issue:** [#58](https://github.com/githonllc/entdomain/issues/58)
+
+**Ratification constraint:** the rejection's fold must remain a **superset** of
+the decoder's field matching, or the silent path reopens for exotic folds.
+`strings.EqualFold` (Unicode simple folding, which includes the Kelvin-sign
+class) satisfies this for every historical variant of `encoding/json`'s
+matching; anything narrower than the decoder's fold voids rationale 3.
 
 ## Context
 

@@ -13,10 +13,10 @@ the ADR carries the decision and its rationale.
 
 | # | Title | Status | Tracking issue |
 |---|---|---|---|
-| [0001](0001-presence-follows-encoding-json-key-matching.md) | Request key matching is strict: a case-variant key is an error, never a silent no-op | Proposed | [#58](https://github.com/githonllc/entdomain/issues/58) |
-| [0002](0002-deterministic-pagination-pk-tiebreak.md) | Every generated list order ends with a primary-key tiebreak | Proposed | [#59](https://github.com/githonllc/entdomain/issues/59) |
-| [0003](0003-per-run-atomic-generation.md) | Generation is atomic per run, not per file | Proposed | [#61](https://github.com/githonllc/entdomain/issues/61) |
-| [0004](0004-cleanup-ownership-by-marker.md) | The ownership marker, not the current schema, decides what cleanup may delete | Proposed | [#63](https://github.com/githonllc/entdomain/issues/63) |
+| [0001](0001-presence-follows-encoding-json-key-matching.md) | Request key matching is strict: a case-variant key is an error, never a silent no-op | **Accepted** | [#58](https://github.com/githonllc/entdomain/issues/58) |
+| [0002](0002-deterministic-pagination-pk-tiebreak.md) | Every generated list order ends with a primary-key tiebreak | **Accepted** | [#59](https://github.com/githonllc/entdomain/issues/59) |
+| [0003](0003-per-run-atomic-generation.md) | Generation is atomic per run, not per file | **Accepted** | [#61](https://github.com/githonllc/entdomain/issues/61) |
+| [0004](0004-cleanup-ownership-by-marker.md) | The ownership marker, not the current schema, decides what cleanup may delete | **Accepted** | [#63](https://github.com/githonllc/entdomain/issues/63) |
 | [0005](0005-contains-operators-gated-by-searchable.md) | Substring operators require the Searchable marker, not just Filterable | **Accepted** | [#64](https://github.com/githonllc/entdomain/issues/64) |
 
 Review-only findings without an ADR (plain bugs or documentation): [#60](https://github.com/githonllc/entdomain/issues/60) offset overflow, [#62](https://github.com/githonllc/entdomain/issues/62) reserved generated names, [#65](https://github.com/githonllc/entdomain/issues/65) `{Entity}ListResponse` role (owner decision), [#66](https://github.com/githonllc/entdomain/issues/66) stale dto.tmpl header, [#67](https://github.com/githonllc/entdomain/issues/67) no-op builder godoc.

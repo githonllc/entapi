@@ -53,6 +53,8 @@ var fixtures = []fixtureCase{
 	{dir: "selfref", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Tree.children", "Tree.parent", "chained", "edge.From(", "entdomain.Edge()"}},
 	{dir: "selfrefpartial", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
 	{dir: "presence", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "query", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "queryconflict", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Bad.tags", "Sortable", "Bad.count", "Searchable", "Bad.meta", "Filterable", "Bad.token", `scope "query"`}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the

@@ -59,10 +59,20 @@ Scopes control which **handler-layer DTOs** include a field. They do NOT restric
 
 ### Fluent Methods
 
-- `.WithRequired(scope)` — required in that scope's DTO
-- `.AsSearchable()`, `.AsFilterable()`, `.AsSortable()` — query capabilities
-- `.AsUniqueLookup()`, `.AsRangeLookup()` — generate FindBy methods
-- `.WithDescription(desc)`, `.WithExample(val)` — OpenAPI metadata
+- `.WithRequired(scope)` — required in that scope's DTO. **The only fluent
+  method besides the scope builders that changes generated output.**
+
+Everything below is accepted and stored but generates nothing today. See the
+README's "Annotation surface" section for the issue tracking each:
+
+- `.AsSearchable()`, `.AsFilterable()`, `.AsSortable()` — pending #27
+- `.WithDescription(desc)`, `.WithExample(val)` — no reader, disposition undecided (#17)
+- `.WithTitle()`, `.WithFormat()`, `.WithPattern()`, `.WithRange()`,
+  `.WithLength()`, `.WithEnum()`, `.AsReadOnly()`, `.AsWriteOnly()`,
+  `.AsDeprecated()`, `.WithTags()` — RESERVED for spec generation
+
+`.AsUniqueLookup()` and `.AsRangeLookup()` were **removed** on #17; nothing ever
+generated the `FindByX` methods they promised.
 
 ## Generated Files Per Entity
 

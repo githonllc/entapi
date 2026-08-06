@@ -57,8 +57,54 @@ import (
 // reason must name an issue, so "documented as pending" cannot degrade into
 // "documented as permanent".
 var pendingKnobs = map[string]string{
-	// Deliberately empty: this is the state of the published surface as #17
-	// found it. Every entry added here is a claim that has to be justified.
+	// Decided on #17 (2026-07-30): implemented by #27, not removed. Translating
+	// query-string parameters into typed predicates is schema-determined, and
+	// the sortable allow-list is load-bearing security — an unchecked sort
+	// field is an injection site, an unindexed-scan trigger and, combined with
+	// paging, an ordering oracle.
+	"DomainField.Searchable": "implemented by #27 (filter/search/sort generation); kept per the #17 verdict",
+	"DomainField.Sortable":   "implemented by #27 (sort allow-list); kept per the #17 verdict",
+	"DomainField.Filterable": "implemented by #27 (filter structs and predicates); kept per the #17 verdict",
+
+	// Decided on #17 (2026-07-30): kept. Its real consumer is #27, which
+	// carries two binding constraints — ScopeQuery must not enter any tagged
+	// release before #27 lands, and #27 must not close until ScopeQuery has a
+	// reachable consumer.
+	"FieldScope.ScopeQuery": "consumer arrives with #27; must not ship in a tagged release before it (#17 verdict)",
+
+	// Decided on #17 (2026-07-30): kept. annotations.go labels these RESERVED
+	// for OpenAPI/Swagger spec generation, which is a stated forward contract
+	// rather than an unfalsifiable promise. No issue implements spec generation
+	// yet; #17 is the record of the decision to keep them until one does.
+	"DomainField.Metadata":     "RESERVED for spec generation; kept as a stated forward contract per the #17 verdict",
+	"FieldMetadata.Title":      "RESERVED for spec generation (#17)",
+	"FieldMetadata.Format":     "RESERVED for spec generation (#17)",
+	"FieldMetadata.Pattern":    "RESERVED for spec generation (#17)",
+	"FieldMetadata.Minimum":    "RESERVED for spec generation (#17)",
+	"FieldMetadata.Maximum":    "RESERVED for spec generation (#17)",
+	"FieldMetadata.MinLength":  "RESERVED for spec generation (#17)",
+	"FieldMetadata.MaxLength":  "RESERVED for spec generation (#17)",
+	"FieldMetadata.Enum":       "RESERVED for spec generation (#17)",
+	"FieldMetadata.ReadOnly":   "RESERVED for spec generation (#17)",
+	"FieldMetadata.WriteOnly":  "RESERVED for spec generation (#17)",
+	"FieldMetadata.Deprecated": "RESERVED for spec generation (#17)",
+	"FieldMetadata.Tags":       "RESERVED for spec generation (#17)",
+
+	// Landed by #24 as library API ahead of the generation that uses it. Their
+	// readers (responseEdgesV2, edgeJSONKey) exist but are deliberately not
+	// registered yet, because registering a helper no template invokes fails
+	// TestTemplateInvocationsAreRegistered.
+	"DomainEdge.Scopes":  "consumed by #25 (response and summary types); readers exist, registration lands with the template",
+	"DomainEdge.JSONKey": "consumed by #25 (response and summary types); readers exist, registration lands with the template",
+
+	// NOT COVERED by the #17 verdict, which enumerated the query knobs, the
+	// metadata block, EntityName and the identifier types but not these three.
+	// They are recorded here so the surface is fully accounted for, and raised
+	// on #17 for the owner: their disposition is an annotation-surface decision
+	// and is not this test's to make.
+	"DomainField.Validation":  "UNDECIDED — no reader; disposition not covered by the #17 verdict, raised there for the owner",
+	"DomainField.Description": "UNDECIDED — no reader; disposition not covered by the #17 verdict, raised there for the owner",
+	"DomainField.Example":     "UNDECIDED — no reader; disposition not covered by the #17 verdict, raised there for the owner",
 }
 
 // annotationKnob is one exported setting a schema author can write, together

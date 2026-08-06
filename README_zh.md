@@ -493,6 +493,41 @@ var (
 | `ScopeCreate` | 字段出现在 `CreateRequest` 中 |
 | `ScopeUpdate` | 字段出现在 `UpdateRequest` 中 |
 | `ScopeResponse` | 字段出现在 `Response` 中 |
+| `ScopeQuery` | **目前什么都不做。** 预留给 [#27](https://github.com/githonllc/entdomain/issues/27) 生成的查询参数。大多数预设构建器都会授予它，但它今天不改变任何生成的字节 |
+
+## 注解表面：哪些被消费，哪些没有
+
+下面列出了每一个导出的注解设置，而且这份清单不是手工维护的。
+`TestEveryAnnotationKnobIsConsumedOrDeclaredPending` 用反射从注解类型推导出所有设置，
+再逐个开关、检查是否有任何**已注册**的模板函数返回了不同结果，以此判定可达性。
+于是「到达生成」和「没到达生成」的设置从外部就能区分——这正是重点，因为
+默默接受一个设置然后忽略它，正是这张表要防住的事。
+
+**今天真正被生成消费的：**
+
+| 设置 | 效果 |
+|---|---|
+| `DomainField.Scopes` | 决定字段进入哪个请求/响应结构体 |
+| `DomainField.Required` | 为对应作用域生成 `validate:"required"` 与 `Validate()` 检查 |
+
+就这两个。下面其余的全部只是被接受并存储，不改变任何生成结果。
+
+**已接受但尚未消费。** 每一项都有明确的保留理由与跟踪 issue；一旦某项悄悄变得可达
+而本表未同步，上面那个测试就会失败：
+
+| 设置 | 等待 |
+|---|---|
+| `Searchable`、`Sortable`、`Filterable` | [#27](https://github.com/githonllc/entdomain/issues/27)——过滤结构体、全文检索与排序白名单 |
+| `ScopeQuery` | [#27](https://github.com/githonllc/entdomain/issues/27)。在它落地之前，不得进入任何打了 tag 的发布 |
+| `Metadata` 及 `FieldMetadata` 全部字段（`Title`、`Format`、`Pattern`、`Minimum`、`Maximum`、`MinLength`、`MaxLength`、`Enum`、`ReadOnly`、`WriteOnly`、`Deprecated`、`Tags`），经由 `WithTitle`、`WithFormat`、`WithPattern`、`WithRange`、`WithLength`、`WithEnum`、`AsReadOnly`、`AsWriteOnly`、`AsDeprecated`、`WithTags` 设置 | OpenAPI/Swagger spec 生成，目前尚无 issue 实现。`annotations.go` 中已标注 RESERVED |
+| `DomainEdge.Scopes`、`DomainEdge.JSONKey`，经由 `Edge().InResponse()` 与 `.As()` 设置 | [#25](https://github.com/githonllc/entdomain/issues/25)——生成响应与摘要类型 |
+| `Validation`、`Description`、`Example` | 未决。它们既没有读取方也没有后继方案；已在 [#17](https://github.com/githonllc/entdomain/issues/17) 上提出 |
+
+**已删除。** `AsUniqueLookup()` / `AsRangeLookup()` 及其 `UniqueLookup` / `RangeLookup`
+字段已删除，`DomainConfig.EntityName` 亦然。这两个 lookup 标记本意是生成 `FindByX`
+方法，但从来没有任何东西生成过它们；而 [#27](https://github.com/githonllc/entdomain/issues/27)
+的操作符集合直接取自 ent 自己的按类型操作符表，因此它们是**冗余**而不只是未实现。
+`EntityName` 既无读取方也无后继。删掉这些调用不会改变任何行为，因为它们本来就没有行为。
 
 ## 字段形态：ent 修饰符与作用域如何相互作用
 
@@ -513,6 +548,8 @@ var (
 | 底层为切片或映射的 `field.JSON(...)` | 正常生成；可选字段用 `entdomain.PtrNilSafe` 转换，因为 `entdomain.PtrOrNil` 约束是 `[T comparable]` |
 | 底层为切片或映射的具名 `GoType` | 同上。判定依据是类型的 reflect kind 而不是它的书写形式，因此 `type Tags []string` 会被识别为切片 |
 | 底层可比较的具名 `GoType`（string、int、成员皆可比较的 struct） | 正常生成，走 `entdomain.PtrOrNil` |
+| 非 `uuid.UUID` 主键，**且启用了 `WithBaseService` 或 `WithBaseHandler`** | **生成失败。** 这两个模板把所有标识符都声明为 `uuid.UUID`，生成的 service 无法针对该实体编译。拒绝信息会点名实体与它真实的 id 类型。改用 `field.UUID("id", uuid.UUID{})` 主键，或只生成 DTO |
+| 非 `uuid.UUID` 主键，仅生成 DTO | 正常生成。`dto.tmpl` 通过 `$.ID.Type` 渲染 id，对任何标识符类型都正确 |
 
 注意 `DefaultField()` 会授予 `ScopeUpdate`，所以带默认注解的 immutable 字段
 必然触发上面的拒绝。这是有意的：另一种做法——悄悄把该字段从更新请求里剔除——
@@ -534,24 +571,25 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 
 以下全部核对过源码，不是从文档推断的。每条附带跟踪它的 issue。
 
-**大约二十个导出的注解字段被接受、存储、然后忽略。** API 照单全收不报错，
-所以从外面看不出哪些是有效的。只有 scope 列表和 required 映射真正到达模板
+**三十个导出的注解设置里，有二十五个被接受、存储、然后忽略。** 只有 `Scopes` 与
+`Required` 真正到达模板。但哪些有效不再需要猜：上面的「注解表面」一节列出了每一个，
+而且这份清单由测试推导而非手工维护，所以任何设置都无法悄悄进出它
 （[#17](https://github.com/githonllc/entdomain/issues/17)）。
 
-**`ScopeQuery` 被大多数预设构建器授予，却没有任何消费者。** 它被文档描述为
-「把字段放进查询参数结构体」，而没有模板生成那个结构体。
-
 **除 `InputOnlyField` 外，每个预设构建器都会把字段标成 searchable / filterable /
-sortable。** 今天无害。但它对下一步有影响：按任意列排序是全表扫描的触发点，
-配合分页还是一个排序预言机。这些标记一旦实现，默认全开会让白名单失去意义
-（[#27](https://github.com/githonllc/entdomain/issues/27)）。
+sortable，并授予 `ScopeQuery`。** 今天无害。但它对下一步有影响：按任意列排序是全表
+扫描的触发点，配合分页还是一个排序预言机。这些标记一旦实现，默认全开会让白名单
+失去意义（[#27](https://github.com/githonllc/entdomain/issues/27)）。
 
 **软删除会静默废掉下游的删除钩子。** 生成的删除被改写成更新，携带的是更新操作标志。
 消费者按删除操作注册的钩子因此**根本不会触发**——这不是两套机制打架，
 是一套静默替换了另一套（[#12](https://github.com/githonllc/entdomain/issues/12)）。
 
-**生成的 service 只支持一种主键类型。** 方法签名里硬编码了 `uuid.UUID`，
-非 UUID 主键不受支持（[#29](https://github.com/githonllc/entdomain/issues/29)）。
+**生成的 service 只支持一种主键类型：`uuid.UUID`。** 它被硬编码进 `base_service.tmpl`
+与 `base_handler.tmpl` 的每个钩子签名、每个 CRUD 方法以及游标往返。其他主键类型现在会在
+**生成阶段被拒绝**，并点名实体与它真实的 id 类型，而不再生成一个编译不过的 service。
+只生成 DTO 不受影响。放宽支持范围是
+[#29](https://github.com/githonllc/entdomain/issues/29)。
 
 **钩子派发用错时静默失败。** 忘记调用 `SetSelf`，或者钩子方法名拼错，
 都能正常编译，而钩子永远不执行（[#16](https://github.com/githonllc/entdomain/issues/16)）。
@@ -562,10 +600,10 @@ sortable。** 今天无害。但它对下一步有影响：按任意列排序是
 
 **只有带 fixture 的字段形态才是「已知能编译」的。** `TestCodegenFixtures` 会生成并
 编译 `internal/fixtures/` 下的每个 schema，现已覆盖上表中的 nillable、immutable、
-枚举、JSON/映射与具名 `GoType` 形态
+枚举、JSON/映射与具名 `GoType` 形态，以及非 UUID 主键的拒绝路径
 （[#8](https://github.com/githonllc/entdomain/issues/8)、
-[#10](https://github.com/githonllc/entdomain/issues/10)）。边、非 UUID 主键与软删除
-尚无 fixture；在补上之前，触及它们的模板改动仍属未验证。
+[#10](https://github.com/githonllc/entdomain/issues/10)）。边与软删除尚无 fixture；
+在补上之前，触及它们的模板改动仍属未验证。
 
 ## 贡献
 

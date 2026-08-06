@@ -1,66 +1,9 @@
 package entdomain
 
 import (
+	"reflect"
 	"testing"
 )
-
-// --- UniqueLookup and RangeLookup builders ---
-
-func TestAsUniqueLookup(t *testing.T) {
-	t.Run("sets UniqueLookup to true", func(t *testing.T) {
-		field := NewDomainField().AsUniqueLookup()
-		if !field.UniqueLookup {
-			t.Error("AsUniqueLookup() should set UniqueLookup to true")
-		}
-	})
-
-	t.Run("does not affect RangeLookup", func(t *testing.T) {
-		field := NewDomainField().AsUniqueLookup()
-		if field.RangeLookup {
-			t.Error("AsUniqueLookup() should not set RangeLookup")
-		}
-	})
-}
-
-func TestAsRangeLookup(t *testing.T) {
-	t.Run("sets RangeLookup to true", func(t *testing.T) {
-		field := NewDomainField().AsRangeLookup()
-		if !field.RangeLookup {
-			t.Error("AsRangeLookup() should set RangeLookup to true")
-		}
-	})
-
-	t.Run("does not affect UniqueLookup", func(t *testing.T) {
-		field := NewDomainField().AsRangeLookup()
-		if field.UniqueLookup {
-			t.Error("AsRangeLookup() should not set UniqueLookup")
-		}
-	})
-}
-
-func TestLookupChaining(t *testing.T) {
-	field := DefaultField().AsUniqueLookup().AsRangeLookup()
-
-	if !field.UniqueLookup {
-		t.Error("Chained field should have UniqueLookup=true")
-	}
-	if !field.RangeLookup {
-		t.Error("Chained field should have RangeLookup=true")
-	}
-	// DefaultField sets Searchable, Filterable, Sortable and all scopes
-	if !field.Searchable {
-		t.Error("Chained field should retain Searchable from DefaultField")
-	}
-	if !field.Filterable {
-		t.Error("Chained field should retain Filterable from DefaultField")
-	}
-	if !field.Sortable {
-		t.Error("Chained field should retain Sortable from DefaultField")
-	}
-	if len(field.Scopes) != len(AllFieldScopes) {
-		t.Errorf("Chained field should have all scopes, got %d", len(field.Scopes))
-	}
-}
 
 // --- Metadata builders ---
 
@@ -688,21 +631,13 @@ func TestDomainConfigName(t *testing.T) {
 	}
 }
 
-func TestDomainConfigAllFields(t *testing.T) {
-	config := DomainConfig{
-		EntityName: "Patient",
-	}
-
-	if config.EntityName != "Patient" {
-		t.Errorf("EntityName = %q, want %q", config.EntityName, "Patient")
-	}
-}
-
-func TestDomainConfigDefaults(t *testing.T) {
-	config := DomainConfig{}
-
-	if config.EntityName != "" {
-		t.Errorf("Default EntityName should be empty, got %q", config.EntityName)
+// TestDomainConfigCarriesNoOptions pins what is left of DomainConfig after
+// #17 removed EntityName: an annotation with no settings at all. If a field is
+// added back, it needs a reader and a test that proves generation observes it,
+// not just a round-trip through the struct.
+func TestDomainConfigCarriesNoOptions(t *testing.T) {
+	if n := reflect.TypeOf(DomainConfig{}).NumField(); n != 0 {
+		t.Errorf("DomainConfig has %d field(s), want 0; see the #17 verdict on EntityName", n)
 	}
 }
 
@@ -712,7 +647,6 @@ func TestComplexBuilderChaining(t *testing.T) {
 	t.Run("DefaultField with full chain", func(t *testing.T) {
 		field := DefaultField().
 			WithRequired(ScopeCreate).
-			AsUniqueLookup().
 			WithFormat("email").
 			WithTitle("Email")
 
@@ -733,11 +667,6 @@ func TestComplexBuilderChaining(t *testing.T) {
 		// From WithRequired
 		if field.Required == nil || !field.Required[ScopeCreate] {
 			t.Error("Should be required for ScopeCreate")
-		}
-
-		// From AsUniqueLookup
-		if !field.UniqueLookup {
-			t.Error("Should have UniqueLookup=true")
 		}
 
 		// From WithFormat and WithTitle (metadata)
@@ -802,7 +731,6 @@ func TestComplexBuilderChaining(t *testing.T) {
 
 	t.Run("OutputOnlyField with range and deprecation", func(t *testing.T) {
 		field := OutputOnlyField().
-			AsRangeLookup().
 			AsDeprecated().
 			WithRange(floatPtr(0), floatPtr(1000)).
 			WithDescription("Legacy score field").
@@ -812,10 +740,6 @@ func TestComplexBuilderChaining(t *testing.T) {
 		expectedScopes := []FieldScope{ScopeQuery, ScopeResponse}
 		if len(field.Scopes) != len(expectedScopes) {
 			t.Errorf("Should have %d scopes, got %d", len(expectedScopes), len(field.Scopes))
-		}
-
-		if !field.RangeLookup {
-			t.Error("Should have RangeLookup=true")
 		}
 
 		if field.Metadata == nil {
@@ -880,7 +804,6 @@ func TestComplexBuilderChaining(t *testing.T) {
 		field := DomainFieldWithScopes(ScopeCreate, ScopeResponse).
 			AsSearchable().
 			AsFilterable().
-			AsUniqueLookup().
 			WithMetadata(FieldMetadata{
 				Title:    "Custom Field",
 				Format:   "custom",
@@ -896,9 +819,6 @@ func TestComplexBuilderChaining(t *testing.T) {
 		}
 		if !field.Filterable {
 			t.Error("Should be Filterable")
-		}
-		if !field.UniqueLookup {
-			t.Error("Should have UniqueLookup=true")
 		}
 		if field.Metadata == nil {
 			t.Fatal("Should have Metadata set")

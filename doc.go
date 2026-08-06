@@ -55,6 +55,28 @@
 // Run go generate to produce {entity}_dto.go, {entity}_base_service.go,
 // and {entity}_base_handler.go for each annotated schema.
 //
+// # Supported identifier types
+//
+// The generated base service and base handler support exactly one primary key
+// type: uuid.UUID. It is hardcoded in every hook signature, every CRUD method
+// and the cursor round-trip, because text/template cannot express generics.
+// Generating them for an entity with any other primary key is refused at
+// generation time, naming the entity and its actual id type, rather than
+// emitting a service that does not compile.
+//
+// This is a limitation of those two templates only. DTO generation renders the
+// id through the schema's own type and is correct for any identifier, as is the
+// runtime below.
+//
+// # What the annotations actually do
+//
+// Only [DomainField.Scopes] and [DomainField.Required] reach a template. Every
+// other exported setting — the searchable/sortable/filterable markers,
+// [ScopeQuery], the whole [FieldMetadata] block, and the [DomainEdge] settings
+// — is accepted and stored but changes nothing that is generated yet. The
+// README's "Annotation surface" section lists each one with the issue that will
+// consume it; that list is derived by a test, so it cannot drift from the code.
+//
 // # Runtime
 //
 // [ListPage] runs a filtered, ordered, paginated query against anything

@@ -113,12 +113,6 @@ type DomainField struct {
 	// Filterable marks the field as filterable in query APIs
 	Filterable bool `json:"filterable,omitempty"`
 
-	// UniqueLookup marks the field for generating a FindByX method returning a single result
-	UniqueLookup bool `json:"unique_lookup,omitempty"`
-
-	// RangeLookup marks the field for generating FindByXRange methods (for time/numeric fields)
-	RangeLookup bool `json:"range_lookup,omitempty"`
-
 	// Metadata contains additional field metadata for documentation and API spec generation
 	Metadata *FieldMetadata `json:"metadata,omitempty"`
 }
@@ -129,12 +123,17 @@ func (DomainField) Name() string {
 }
 
 // DomainConfig is the entity-level configuration annotation.
-// Currently used only for entity naming. Feature flags (soft delete, caching, etc.)
-// will be added when templates actually consume them.
-type DomainConfig struct {
-	// EntityName overrides the default entity name derived from the schema.
-	EntityName string `json:"entity_name,omitempty"`
-}
+//
+// It carries no options. Its only field, EntityName, was removed on #17: it
+// had zero readers outside its own tests, and no successor — generation names
+// every emitted type from gen.Type.Name, and an override would have had to be
+// threaded through three templates to mean anything.
+//
+// Nothing reads this annotation today. Attaching it to a schema changes no
+// generated output. It is kept as a type only because whether to publish an
+// entity-level annotation at all is a surface decision on #17, not a
+// consequence of removing the field; do not add options to it without one.
+type DomainConfig struct{}
 
 // Name implements the schema.Annotation interface.
 func (DomainConfig) Name() string {
@@ -336,18 +335,6 @@ func (d DomainField) AsSortable() DomainField {
 // AsFilterable marks the field as filterable
 func (d DomainField) AsFilterable() DomainField {
 	d.Filterable = true
-	return d
-}
-
-// AsUniqueLookup marks this field for generating a FindByX lookup method
-func (d DomainField) AsUniqueLookup() DomainField {
-	d.UniqueLookup = true
-	return d
-}
-
-// AsRangeLookup marks this field for generating FindByXRange methods
-func (d DomainField) AsRangeLookup() DomainField {
-	d.RangeLookup = true
 	return d
 }
 

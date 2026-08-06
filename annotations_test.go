@@ -227,15 +227,9 @@ func TestDomainFieldAnnotationName(t *testing.T) {
 }
 
 func TestDomainConfigAnnotation(t *testing.T) {
-	config := DomainConfig{
-		EntityName: "TestEntity",
-	}
+	config := DomainConfig{}
 
 	if config.Name() != "DomainConfig" {
 		t.Errorf("Name() = %v, want %v", config.Name(), "DomainConfig")
-	}
-
-	if config.EntityName != "TestEntity" {
-		t.Errorf("EntityName = %v, want %v", config.EntityName, "TestEntity")
 	}
 }

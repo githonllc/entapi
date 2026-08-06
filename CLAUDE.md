@@ -124,7 +124,9 @@ mechanical. Narrowing it needs a new annotation, and that is a separate issue.
 
 ## Annotation model
 
-`annotations.go` defines `DomainField` plus value-receiver fluent builders (`WithRequired`, `AsSearchable`, `AsUniqueLookup`, `WithFormat`, …). Every builder **returns a copy** — chaining works, mutating in place does not.
+`annotations.go` defines `DomainField` plus value-receiver fluent builders (`WithRequired`, `AsSearchable`, `WithFormat`, …). Every builder **returns a copy** — chaining works, mutating in place does not.
+
+**Only `Scopes` and `Required` reach a template.** The other 25 of the 30 exported knobs are accepted, stored and ignored. That is allowed but not free: `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` (`annotation_surface_test.go`) derives the knob list by reflection and reachability by toggling each knob against the registered template funcs, so a new knob fails CI until it is either wired up or given a `pendingKnobs` entry naming its issue. It also fails when a listed knob *becomes* reachable — the entry is a claim with a deadline, not an exemption. See "Dead code is now a test failure" below; this is the same contract one level up.
 
 Preset builders (`DefaultField`, `InputOnlyField`, `OutputOnlyField`, `CreateOnlyField`, `IdField`, `AuditLogField`) are just scope combinations layered on `DomainFieldWithScopes`.
 
@@ -148,12 +150,20 @@ slices are expected to follow:
 > both facts. Anything that can be generated correctly is generated, not
 > refused.
 
-The one contradiction detected today is an ent-`Immutable()` field carrying
+Two problems are detected today. The first is an ent-`Immutable()` field carrying
 `ScopeUpdate` (which `DefaultField()` grants). ent's update builders iterate
 `MutableFields`, which excludes immutable fields, so `Set<X>` does not exist on
 `<Entity>UpdateOne` and no template can emit a call that compiles. Dropping the
 field silently was rejected: it would vanish from the PATCH API where neither
 `encoding/json` nor `Validate()` can observe the missing key.
+
+The second is an entity whose primary key does not render as `uuid.UUID`, and
+it is **conditional on the config**: `base_service.tmpl` and `base_handler.tmpl`
+hardcode `uuid.UUID`, so the refusal applies only when one of them is being
+generated. `dto.tmpl` renders the id through `$.ID.Type` and is correct for any
+identifier, so DTO-only generation is never refused on this ground. The check is
+also skipped for a node with no domain fields, matching the condition the
+generation loop itself uses. Widening the supported set is #29.
 
 Conversely, `Optional().Nillable()` and named `GoType`s over slices/maps *are*
 generated, because correct output exists for them — `*T` in the create request
@@ -201,7 +211,7 @@ always stay qualified.
 
 ### Baseline state
 
-`make check` and `gofmt -l .` are green; the red suite and dirty formatting the initial commit shipped with were fixed in #2/#4/#5. `make lint` still exits 2 on four `unused` findings in `annotations_edge.go` — those functions are awaiting the tests in #24. Anything else is yours.
+`make check`, `gofmt -l .` and `make lint` are all green. The red suite and dirty formatting the initial commit shipped with were fixed in #2/#4/#5, and the four `unused` findings in `annotations_edge.go` cleared when #24 landed their tests. Anything you see is yours.
 
 `golangci-lint` and `goimports` are not on the default PATH; run lint as `PATH=$PATH:$HOME/go/bin make lint`.
 

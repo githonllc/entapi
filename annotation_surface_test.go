@@ -1,0 +1,436 @@
+package entdomain
+
+import (
+	"fmt"
+	"reflect"
+	"sort"
+	"strings"
+	"testing"
+
+	"entgo.io/ent/entc/gen"
+)
+
+// This file is the drift detector for the published annotation surface, in the
+// same spirit as template_funcs_consistency_test.go is for the function
+// registry. #17 existed because roughly twenty exported annotation fields were
+// accepted, stored and ignored, with no way for a caller to tell which ones did
+// anything. Fixing that once is worth little: the surface rotted in the first
+// place because nothing failed when it did.
+//
+// The assertion is that every exported annotation knob is either consumed by
+// generation or carries a written, issue-referenced pending status. Both
+// halves are checked, in both directions.
+//
+// # How reachability is decided
+//
+// Not by a name list, and not by grepping. A knob is "reachable" iff toggling
+// it changes what at least one *registered* template function returns.
+//
+// That is the right bar because of a property proved elsewhere:
+// TestTemplateInvocationsAreRegistered requires templateFuncs() and the set of
+// functions the embedded templates actually invoke to be the same set, derived
+// from the parsed template trees. So "some registered function observes this
+// knob" composes with "every registered function is invoked by a template" to
+// give "some template observes this knob" — which is what a consumer means by
+// asking whether an annotation does anything.
+//
+// The composition is why this test does not render templates itself. It also
+// means the bar cannot be met by a helper that reads a knob but that no
+// template calls: that is precisely the shape #17's verdict found for
+// queryFields, and it would still fail here, because an unregistered helper is
+// never probed.
+//
+// # How the knob list is derived
+//
+// By reflection over the annotation types, not by enumeration. A new exported
+// field on DomainField, FieldMetadata, DomainEdge or DomainConfig enters this
+// test the moment it is declared, and fails it until it is either wired to
+// generation or written down as pending. That is the anti-rot property; a
+// hardcoded list would rot exactly the way the surface did.
+
+// pendingKnobs records the knobs that generation does not consume today, each
+// with the reason it is still published and the issue that tracks it.
+//
+// An entry is a claim with a deadline, not a permanent exemption: the test
+// below fails when an entry becomes reachable (the entry is now stale and must
+// be deleted) just as loudly as when a knob is unreachable and unlisted. Every
+// reason must name an issue, so "documented as pending" cannot degrade into
+// "documented as permanent".
+var pendingKnobs = map[string]string{
+	// Deliberately empty: this is the state of the published surface as #17
+	// found it. Every entry added here is a claim that has to be justified.
+}
+
+// annotationKnob is one exported setting a schema author can write, together
+// with the mutation that turns it on.
+type annotationKnob struct {
+	name  string
+	apply func(*surfaceProbe)
+}
+
+// surfaceProbe is the graph the registered functions are run against: one
+// entity, one annotated field, one annotated edge. Everything a knob can
+// influence is reachable from it.
+//
+// The same probe is reused for the control and the toggled observation, so the
+// knob under test is provably the only difference between the two runs.
+type surfaceProbe struct {
+	node  *gen.Type
+	field *gen.Field
+	edge  *gen.Edge
+
+	df     DomainField
+	de     DomainEdge
+	config DomainConfig
+}
+
+func newSurfaceProbe() *surfaceProbe {
+	p := &surfaceProbe{}
+
+	p.field = newStringField("label", &p.df)
+	p.node = newTestType("Probe", p.field)
+	p.node.ID = newUUIDField("id", nil)
+	p.edge = &gen.Edge{
+		Name:        "owner",
+		Type:        p.node,
+		Annotations: gen.Annotations{"DomainEdge": &p.de},
+	}
+	p.node.Edges = []*gen.Edge{p.edge}
+	p.node.Annotations = gen.Annotations{"DomainConfig": &p.config}
+
+	return p
+}
+
+// reset returns the probe to the control state: every annotation present but
+// every knob at its zero value. The annotations must be present, or the
+// difference a knob makes would be confounded with the difference the
+// annotation itself makes.
+func (p *surfaceProbe) reset() {
+	p.df = DomainField{}
+	p.de = DomainEdge{}
+	p.config = DomainConfig{}
+}
+
+// observe runs every registered template function over the probe and returns a
+// digest of everything they produce.
+func (p *surfaceProbe) observe(t *testing.T) string {
+	t.Helper()
+
+	funcs := templateFuncs()
+	names := make([]string, 0, len(funcs))
+	for name := range funcs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var out strings.Builder
+	for _, name := range names {
+		fn := reflect.ValueOf(funcs[name])
+		for _, args := range p.argSets(t, name, fn.Type()) {
+			results := fn.Call(args)
+			fmt.Fprintf(&out, "%s(%s) = ", name, describeArgs(args))
+			for _, r := range results {
+				out.WriteString(renderResult(r))
+				out.WriteByte('|')
+			}
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
+}
+
+var (
+	typeGenType    = reflect.TypeOf((*gen.Type)(nil))
+	typeGenField   = reflect.TypeOf((*gen.Field)(nil))
+	typeFieldScope = reflect.TypeOf(FieldScope(""))
+)
+
+// argSets builds every argument combination a registered function should be
+// called with. An unrecognised parameter type fails the test rather than being
+// skipped: a silently skipped function observes nothing, which would make a
+// live knob look dead.
+func (p *surfaceProbe) argSets(t *testing.T, name string, ft reflect.Type) [][]reflect.Value {
+	t.Helper()
+
+	n := ft.NumIn()
+	if ft.IsVariadic() {
+		// Call the variadic tail empty; no registered function gives it
+		// meaning, and a knob cannot reach it.
+		n--
+	}
+
+	sets := [][]reflect.Value{nil}
+	for i := 0; i < n; i++ {
+		var candidates []reflect.Value
+		switch pt := ft.In(i); {
+		case pt == typeGenType:
+			candidates = []reflect.Value{reflect.ValueOf(p.node)}
+		case pt == typeGenField:
+			candidates = []reflect.Value{reflect.ValueOf(p.field), reflect.ValueOf(p.node.ID)}
+		case pt == typeFieldScope:
+			for _, s := range AllFieldScopes {
+				candidates = append(candidates, reflect.ValueOf(s))
+			}
+		case pt.Kind() == reflect.String:
+			candidates = []reflect.Value{reflect.ValueOf(p.field.Name)}
+		default:
+			t.Fatalf("templateFuncs() entry %q takes parameter %d of unhandled type %s; "+
+				"teach surfaceProbe.argSets how to supply it, or this function observes nothing "+
+				"and every knob it reads will look unreachable", name, i, pt)
+		}
+
+		var grown [][]reflect.Value
+		for _, base := range sets {
+			for _, c := range candidates {
+				next := make([]reflect.Value, len(base), len(base)+1)
+				copy(next, base)
+				grown = append(grown, append(next, c))
+			}
+		}
+		sets = grown
+	}
+	return sets
+}
+
+func describeArgs(args []reflect.Value) string {
+	parts := make([]string, 0, len(args))
+	for _, a := range args {
+		switch v := a.Interface().(type) {
+		case *gen.Type:
+			parts = append(parts, "type:"+v.Name)
+		case *gen.Field:
+			parts = append(parts, "field:"+v.Name)
+		default:
+			parts = append(parts, fmt.Sprintf("%v", v))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// renderResult projects a returned value onto something comparable across two
+// runs. Fields and edges are compared by name: the probe reuses one graph, but
+// naming them keeps the digest readable when a difference has to be diagnosed.
+func renderResult(v reflect.Value) string {
+	switch out := v.Interface().(type) {
+	case []*gen.Field:
+		names := make([]string, len(out))
+		for i, f := range out {
+			names[i] = f.Name
+		}
+		return "[" + strings.Join(names, " ") + "]"
+	case []*gen.Edge:
+		names := make([]string, len(out))
+		for i, e := range out {
+			names[i] = e.Name
+		}
+		return "[" + strings.Join(names, " ") + "]"
+	default:
+		return fmt.Sprintf("%v", out)
+	}
+}
+
+// annotationKnobs derives the full surface: every exported field of every
+// annotation type, plus every value of the scope vocabulary.
+func annotationKnobs(t *testing.T) []annotationKnob {
+	t.Helper()
+
+	var knobs []annotationKnob
+
+	for _, f := range exportedFields(reflect.TypeOf(DomainField{})) {
+		field := f
+		knobs = append(knobs, annotationKnob{
+			name: "DomainField." + field.Name,
+			apply: func(p *surfaceProbe) {
+				reflect.ValueOf(&p.df).Elem().FieldByIndex(field.Index).Set(probeValue(t, field.Type))
+			},
+		})
+	}
+
+	// FieldMetadata is reached through DomainField.Metadata, so each of its
+	// fields is toggled on an otherwise empty metadata block.
+	for _, f := range exportedFields(reflect.TypeOf(FieldMetadata{})) {
+		field := f
+		knobs = append(knobs, annotationKnob{
+			name: "FieldMetadata." + field.Name,
+			apply: func(p *surfaceProbe) {
+				md := &FieldMetadata{}
+				reflect.ValueOf(md).Elem().FieldByIndex(field.Index).Set(probeValue(t, field.Type))
+				p.df.Metadata = md
+			},
+		})
+	}
+
+	for _, f := range exportedFields(reflect.TypeOf(DomainEdge{})) {
+		field := f
+		knobs = append(knobs, annotationKnob{
+			name: "DomainEdge." + field.Name,
+			apply: func(p *surfaceProbe) {
+				reflect.ValueOf(&p.de).Elem().FieldByIndex(field.Index).Set(probeValue(t, field.Type))
+			},
+		})
+	}
+
+	for _, f := range exportedFields(reflect.TypeOf(DomainConfig{})) {
+		field := f
+		knobs = append(knobs, annotationKnob{
+			name: "DomainConfig." + field.Name,
+			apply: func(p *surfaceProbe) {
+				reflect.ValueOf(&p.config).Elem().FieldByIndex(field.Index).Set(probeValue(t, field.Type))
+			},
+		})
+	}
+
+	// The scope vocabulary. A scope is a knob in its own right: it is published,
+	// documented and settable, and DomainField.Scopes being reachable says
+	// nothing about whether any particular scope value is.
+	for _, s := range AllFieldScopes {
+		scope := s
+		knobs = append(knobs, annotationKnob{
+			name: "FieldScope." + scopeConstName(scope),
+			apply: func(p *surfaceProbe) {
+				p.df.Scopes = []FieldScope{scope}
+			},
+		})
+	}
+
+	return knobs
+}
+
+func exportedFields(t reflect.Type) []reflect.StructField {
+	var out []reflect.StructField
+	for i := 0; i < t.NumField(); i++ {
+		if f := t.Field(i); f.IsExported() {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// scopeConstName maps a scope value back to its Go constant name, so a failure
+// names the identifier a reader would search for.
+func scopeConstName(s FieldScope) string {
+	switch s {
+	case ScopeCreate:
+		return "ScopeCreate"
+	case ScopeUpdate:
+		return "ScopeUpdate"
+	case ScopeQuery:
+		return "ScopeQuery"
+	case ScopeResponse:
+		return "ScopeResponse"
+	default:
+		return string(s)
+	}
+}
+
+// probeValue produces a value that a real schema author might set, which is
+// stricter than "non-zero": a nonsense value would make a live knob look dead.
+// FieldScope is the case that matters — a generic string would produce
+// FieldScope("probe"), which no selector matches, and DomainField.Scopes would
+// be misreported as unreachable.
+func probeValue(t *testing.T, ft reflect.Type) reflect.Value {
+	t.Helper()
+
+	if ft == typeFieldScope {
+		return reflect.ValueOf(ScopeCreate)
+	}
+
+	switch ft.Kind() {
+	case reflect.Bool:
+		return reflect.ValueOf(true)
+	case reflect.String:
+		return reflect.ValueOf("probe").Convert(ft)
+	case reflect.Int, reflect.Int64:
+		return reflect.ValueOf(int64(7)).Convert(ft)
+	case reflect.Float64:
+		return reflect.ValueOf(7.0).Convert(ft)
+	case reflect.Interface:
+		return reflect.ValueOf("probe").Convert(ft)
+	case reflect.Pointer:
+		p := reflect.New(ft.Elem())
+		p.Elem().Set(probeValue(t, ft.Elem()))
+		return p
+	case reflect.Slice:
+		s := reflect.MakeSlice(ft, 1, 1)
+		s.Index(0).Set(probeValue(t, ft.Elem()))
+		return s
+	case reflect.Map:
+		m := reflect.MakeMap(ft)
+		m.SetMapIndex(probeValue(t, ft.Key()), probeValue(t, ft.Elem()))
+		return m
+	case reflect.Struct:
+		v := reflect.New(ft).Elem()
+		for _, f := range exportedFields(ft) {
+			v.FieldByIndex(f.Index).Set(probeValue(t, f.Type))
+		}
+		return v
+	default:
+		t.Fatalf("no probe value for type %s (kind %s); teach probeValue about it, "+
+			"or the knob using it cannot be tested", ft, ft.Kind())
+		return reflect.Value{}
+	}
+}
+
+// TestEveryAnnotationKnobIsConsumedOrDeclaredPending is the assertion #17
+// closes on. See the file comment for how reachability and the knob list are
+// derived.
+func TestEveryAnnotationKnobIsConsumedOrDeclaredPending(t *testing.T) {
+	probe := newSurfaceProbe()
+	knobs := annotationKnobs(t)
+
+	if len(knobs) == 0 {
+		t.Fatal("no annotation knobs were derived; this test would pass vacuously")
+	}
+
+	probe.reset()
+	control := probe.observe(t)
+
+	seen := make(map[string]bool, len(knobs))
+	for _, k := range knobs {
+		if seen[k.name] {
+			t.Errorf("knob %q derived twice; the enumeration is ambiguous", k.name)
+		}
+		seen[k.name] = true
+
+		probe.reset()
+		k.apply(probe)
+		reachable := probe.observe(t) != control
+
+		reason, declared := pendingKnobs[k.name]
+
+		switch {
+		case reachable && declared:
+			t.Errorf("knob %q now changes generated output, but is still listed in pendingKnobs as %q.\n"+
+				"delete the pendingKnobs entry: it is a claim with a deadline, and the deadline has passed",
+				k.name, reason)
+
+		case !reachable && !declared:
+			t.Errorf("knob %q is exported and settable, but toggling it changes nothing any registered "+
+				"template function returns, and pendingKnobs does not mention it.\n"+
+				"a caller has no way to discover that it does nothing. Wire it to generation, delete it, "+
+				"or add a pendingKnobs entry naming the issue that will consume it",
+				k.name)
+
+		case !reachable && declared && !strings.Contains(reason, "#"):
+			t.Errorf("knob %q is declared pending as %q, which names no issue.\n"+
+				"a pending status without a tracking issue is a permanent exemption in disguise",
+				k.name, reason)
+		}
+	}
+
+	// The reverse direction: an entry for a knob that no longer exists is a
+	// stale exemption, and a typo in a knob name would silently exempt nothing
+	// while appearing to exempt something.
+	var stale []string
+	for name := range pendingKnobs {
+		if !seen[name] {
+			stale = append(stale, name)
+		}
+	}
+	sort.Strings(stale)
+	if len(stale) > 0 {
+		t.Errorf("pendingKnobs has %d entry/entries naming no existing knob: %s\n"+
+			"delete them, or fix the name — an entry that matches nothing exempts nothing",
+			len(stale), strings.Join(stale, ", "))
+	}
+}

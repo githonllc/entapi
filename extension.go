@@ -198,7 +198,7 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 		// Only once every file is on disk: a run that failed partway must not
 		// delete anything, or a template bug would take the previous output
 		// with it.
-		if err := removeStaleArtifacts(g.Config.Target, g.Nodes, written); err != nil {
+		if err := removeStaleArtifacts(g.Config.Target, written); err != nil {
 			return err
 		}
 

@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"entgo.io/ent/entc/gen"
 )
 
 // generatedMarker is the ownership marker. Every file this extension writes
@@ -44,82 +42,55 @@ const softDeleteFileName = "entdomain_softdelete.go"
 // Same prefix rule as above: entdomain_ cannot collide with ent's own output.
 const errorMapFileName = "entdomain_errors.go"
 
-// graphFileNames returns the file names this extension can write for the graph
-// as a whole, whether or not this run wrote them.
-//
-// Cleanup has to consider them unconditionally, unlike the per-entity names:
-// there is no node to hang them off. The last schema dropping
-// entdomain.SoftDeleteMixin is exactly the case that leaves a
-// RegisterSoftDelete behind which registers a filter for entities that no
-// longer have a tombstone column, and the last entity losing its annotations is
-// the case that leaves an ErrorMap behind with no wiring left to use it.
-func graphFileNames() []string {
-	return []string{softDeleteFileName, errorMapFileName}
-}
-
-// generatedFileNames returns the file names this extension can write for node,
-// whether or not this run wrote them.
-//
-// The last two are names it can no longer write and must still delete. #29
-// removed the base service and base handler templates, so a consumer upgrading
-// past it is holding two files per entity that this extension wrote and will
-// never write again. This list is the only thing that removes them: drop the
-// names and the removal becomes a collision, leaving code that compiles against
-// a service the library no longer describes. TestRemovedTemplatesStayRemoved
-// pins both halves.
-func generatedFileNames(node *gen.Type) []string {
-	base := strings.ToLower(node.Name)
-	return []string{
-		base + "_dto.go",
-		base + "_filter.go",
-		base + "_wiring.go",
-		base + "_base_service.go",
-		base + "_base_handler.go",
-	}
-}
-
 // removeStaleArtifacts deletes files this extension wrote on an earlier run and
-// did not write on this one — the entity lost its annotations, or the generator
-// that produced the file was switched off.
+// did not write on this one — the entity lost its annotations, was deleted from
+// the schema outright, or the template that produced the file was removed from
+// the library.
 //
-// This deletes files from the consumer's repository, so it is fenced in three
-// ways, and all three have to hold:
+// The marker, not the current schema, decides what may be deleted
+// (docs/adr/0004-cleanup-ownership-by-marker.md, #63). Every file this
+// extension writes opens with the marker, so a marked file is one it wrote;
+// deriving candidate names from the graph instead left a deleted entity's
+// output behind, referencing builders ent no longer generates, and told the
+// consumer not to edit it. This deletes files from a consumer's repository, so
+// both rules have to hold:
 //
-//  1. Only file names this extension itself can produce, for entities present
-//     in the schema this run examined. A file for an entity that has been
-//     deleted from the schema outright is never considered — the generator has
-//     no way to tell it apart from a consumer's own file.
-//  2. Only files carrying the entdomain marker in their header. A hand-written
-//     file that happens to occupy one of those names survives, as does one
-//     whose header has been edited into something else.
-//  3. Never a path this run just wrote.
+//  1. Only files carrying the entdomain marker on their FIRST line. A
+//     hand-written file survives, as does one whose header has been edited into
+//     something else, as does every file ent itself generated.
+//  2. Never a path this run just wrote.
 //
-// Files left in place because of rule 2 are reported rather than silently
+// A consumer who wants to keep a generated file as their own deletes its marker
+// line. That is the documented way out (see README.md), and it is an action —
+// where the previous rule made keeping stale files the default and removing
+// them a manual chore announced by a broken build.
+//
+// The scan is TOP-LEVEL ONLY and must stay that way: ent generates a
+// subpackage per entity below this same directory, plus predicate/, migrate/,
+// hook/ and enttest/, and recursing would widen the deletion surface for
+// nothing — this extension never writes below the target directory.
+//
+// Files left in place because of rule 1 are reported rather than silently
 // ignored: from the outside they look exactly like output that failed to be
 // cleaned up.
-func removeStaleArtifacts(dir string, nodes []*gen.Type, written map[string]bool) error {
-	for _, node := range nodes {
-		for _, name := range generatedFileNames(node) {
-			if err := removeIfStale(dir, name, node.Name, written); err != nil {
-				return err
-			}
-		}
+func removeStaleArtifacts(dir string, written map[string]bool) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to scan %s for stale generated files: %w", dir, err)
 	}
-	// Rule 1 reads differently for a graph-level file: there is no entity to
-	// still be present in the schema, so the name itself is the fence. It is
-	// one this extension alone produces (see softDeleteFileName), and rules 2
-	// and 3 still apply unchanged.
-	for _, name := range graphFileNames() {
-		if err := removeIfStale(dir, name, "the schema", written); err != nil {
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		if err := removeIfStale(dir, entry.Name(), written); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// removeIfStale applies rules 2 and 3 to one candidate path. owner names what
-// stopped generating the file, for the log line.
-func removeIfStale(dir, name, owner string, written map[string]bool) error {
+// removeIfStale applies both rules to one candidate path.
+func removeIfStale(dir, name string, written map[string]bool) error {
 	path := filepath.Join(dir, name)
 	if written[path] {
 		return nil
@@ -136,7 +107,7 @@ func removeIfStale(dir, name, owner string, written map[string]bool) error {
 	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("failed to remove stale generated file %s: %w", path, err)
 	}
-	log.Printf("entdomain: removed stale generated file %s (%s no longer generates it)", path, owner)
+	log.Printf("entdomain: removed stale generated file %s (no longer generated this run)", path)
 	return nil
 }
 

@@ -83,12 +83,12 @@ func TestEveryEmbeddedTemplateIsLoaded(t *testing.T) {
 
 // TestRemovedTemplatesStayRemoved pins #29's deletion in both halves.
 //
-// The templates are gone, but the FILE NAMES they used to produce are not
-// forgotten: a consumer who generated with WithBaseService is holding two files
-// per entity that this extension wrote and will never write again. Keeping the
-// names in generatedFileNames is what makes the next generation run delete
-// them, instead of leaving code that compiles against a service the library no
-// longer describes. Dropping the names would turn the removal into a collision.
+// The templates are gone, but their OUTPUT is not forgotten: a consumer who
+// generated with WithBaseService is holding two files per entity that this
+// extension wrote and will never write again. Cleanup is the only thing that
+// removes them from that tree, so what has to stay true is that it still does —
+// not how it decides. Since #63 it decides by the marker those files carry, so
+// this half is asserted as behaviour: seed them, run cleanup, they are gone.
 func TestRemovedTemplatesStayRemoved(t *testing.T) {
 	for _, name := range []string{"base_service", "base_handler"} {
 		if _, err := templateFS.ReadFile("templates/" + name + ".tmpl"); err == nil {
@@ -96,14 +96,19 @@ func TestRemovedTemplatesStayRemoved(t *testing.T) {
 		}
 	}
 
-	names := generatedFileNames(newTestType("Widget"))
-	index := make(map[string]bool, len(names))
-	for _, n := range names {
-		index[n] = true
+	dir := t.TempDir()
+	legacy := []string{
+		seed(t, dir, "widget_base_service.go", entdomainHeader),
+		seed(t, dir, "widget_base_handler.go", entdomainHeader),
 	}
-	for _, legacy := range []string{"widget_base_service.go", "widget_base_handler.go"} {
-		if !index[legacy] {
-			t.Errorf("generatedFileNames() no longer lists %q; removeStaleArtifacts is the only thing that deletes it from a consumer's tree, so the name has to outlive the template", legacy)
+
+	if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {
+		t.Fatalf("removeStaleArtifacts: %v", err)
+	}
+
+	for _, path := range legacy {
+		if exists(path) {
+			t.Errorf("%s survived cleanup; no template writes it any more, so leaving it behind leaves code that compiles against a service the library no longer describes", path)
 		}
 	}
 }

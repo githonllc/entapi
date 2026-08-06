@@ -1,11 +1,12 @@
 package entdomain
 
 import (
+	"bytes"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-
-	"entgo.io/ent/entc/gen"
 )
 
 // entdomainHeader is a realistic generated header — the thing cleanup keys on.
@@ -41,8 +42,7 @@ func TestRemoveStaleArtifacts_RemovesOwnedFilesNotWrittenThisRun(t *testing.T) {
 	svc := seed(t, dir, "widget_base_service.go", entdomainHeader)
 	handler := seed(t, dir, "widget_base_handler.go", entdomainHeader)
 
-	nodes := []*gen.Type{newTestType("Widget")}
-	if err := removeStaleArtifacts(dir, nodes, map[string]bool{}); err != nil {
+	if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {
 		t.Fatalf("removeStaleArtifacts: %v", err)
 	}
 
@@ -57,8 +57,7 @@ func TestRemoveStaleArtifacts_KeepsFilesWrittenThisRun(t *testing.T) {
 	dir := t.TempDir()
 	dto := seed(t, dir, "widget_dto.go", entdomainHeader)
 
-	nodes := []*gen.Type{newTestType("Widget")}
-	if err := removeStaleArtifacts(dir, nodes, map[string]bool{dto: true}); err != nil {
+	if err := removeStaleArtifacts(dir, map[string]bool{dto: true}); err != nil {
 		t.Fatalf("removeStaleArtifacts: %v", err)
 	}
 
@@ -82,8 +81,7 @@ func TestRemoveStaleArtifacts_KeepsUnmarkedFiles(t *testing.T) {
 			dir := t.TempDir()
 			path := seed(t, dir, "widget_dto.go", content)
 
-			nodes := []*gen.Type{newTestType("Widget")}
-			if err := removeStaleArtifacts(dir, nodes, map[string]bool{}); err != nil {
+			if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {
 				t.Fatalf("removeStaleArtifacts: %v", err)
 			}
 
@@ -94,48 +92,75 @@ func TestRemoveStaleArtifacts_KeepsUnmarkedFiles(t *testing.T) {
 	}
 }
 
-// TestRemoveStaleArtifacts_IgnoresUnrelatedFiles pins the first fence: only
-// names this extension can produce, for entities in the current schema.
-func TestRemoveStaleArtifacts_IgnoresUnrelatedFiles(t *testing.T) {
+// TestRemoveStaleArtifacts_IgnoresNonGoFiles pins the only thing that narrows
+// the scan besides the marker. This extension writes Go source and nothing
+// else, so a marked file under any other extension — documentation quoting a
+// generated header, a checked-in golden copy — was not written by it.
+func TestRemoveStaleArtifacts_IgnoresNonGoFiles(t *testing.T) {
 	dir := t.TempDir()
-	// Same marker, but not a name this extension produces for Widget.
-	other := seed(t, dir, "widget_service.go", entdomainHeader)
-	// A name it does produce, but for an entity the schema no longer has at
-	// all — indistinguishable from a consumer's file, so it is left alone.
-	gone := seed(t, dir, "gadget_dto.go", entdomainHeader)
+	doc := seed(t, dir, "widget_dto.go.md", entdomainHeader)
 
-	nodes := []*gen.Type{newTestType("Widget")}
-	if err := removeStaleArtifacts(dir, nodes, map[string]bool{}); err != nil {
+	if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {
 		t.Fatalf("removeStaleArtifacts: %v", err)
 	}
 
-	if !exists(other) {
-		t.Error("cleanup deleted widget_service.go, which is not a name this extension produces")
-	}
-	if !exists(gone) {
-		t.Error("cleanup deleted gadget_dto.go: the entity is not in the schema this run examined")
+	if !exists(doc) {
+		t.Errorf("cleanup deleted %s; this extension only ever writes .go files", doc)
 	}
 }
 
-func TestRemoveStaleArtifacts_MissingFilesAreNotAnError(t *testing.T) {
+func TestRemoveStaleArtifacts_EmptyDirectoryIsNotAnError(t *testing.T) {
 	dir := t.TempDir()
-	nodes := []*gen.Type{newTestType("Widget")}
-	if err := removeStaleArtifacts(dir, nodes, map[string]bool{}); err != nil {
+	if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {
 		t.Fatalf("removeStaleArtifacts on an empty directory: %v", err)
 	}
 }
 
-func TestGeneratedFileNames(t *testing.T) {
-	got := generatedFileNames(newTestType("UserProfile"))
-	want := []string{"userprofile_dto.go", "userprofile_filter.go", "userprofile_wiring.go", "userprofile_base_service.go", "userprofile_base_handler.go"}
+// TestCleanupRemovesDeletedEntityArtifacts is the deleted-entity case
+// (#63, docs/adr/0004-cleanup-ownership-by-marker.md). An entity removed from
+// the schema outright has no node in this run's graph, so nothing derived from
+// the graph can name its files — and those files reference builders ent no
+// longer generates, so leaving them breaks the consumer's build. The marker is
+// what makes them identifiable without a node.
+//
+// The three negatives are the whole reason the scan is safe: a hand-written
+// file, one of ent's own, and anything below the target directory.
+func TestCleanupRemovesDeletedEntityArtifacts(t *testing.T) {
+	dir := t.TempDir()
 
-	if len(got) != len(want) {
-		t.Fatalf("generatedFileNames() = %v, want %v", got, want)
+	// The entity is gone from the schema; its output still carries our marker.
+	deleted := seed(t, dir, "sprocket_dto.go", entdomainHeader)
+	// A consumer's own file. No marker, so never a candidate.
+	handWritten := seed(t, dir, "trinket_dto.go", "package ent\n\ntype Trinket struct{}\n")
+	// ent's own output for the same entity. Its header is deliberately not ours.
+	entOwned := seed(t, dir, "sprocket.go", entHeader)
+	// ent generates one subpackage per entity, plus predicate/, migrate/, hook/…
+	// The scan is top-level only, so a marked file down there is out of reach.
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("seeding %s: %v", sub, err)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("generatedFileNames()[%d] = %q, want %q", i, got[i], want[i])
+	nested := seed(t, sub, "marked_dto.go", entdomainHeader)
+
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previous)
+
+	if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {
+		t.Fatalf("removeStaleArtifacts: %v", err)
+	}
+
+	if exists(deleted) {
+		t.Errorf("%s survived: the entity is gone from the schema, but the file carries the entdomain marker and this run did not write it", deleted)
+	}
+	for _, path := range []string{handWritten, entOwned, nested} {
+		if !exists(path) {
+			t.Errorf("cleanup deleted %s, which this extension did not write into the directory it scans", path)
 		}
+	}
+	if !strings.Contains(logs.String(), handWritten) {
+		t.Errorf("cleanup left %s in place without saying so; from the outside that is indistinguishable from output it failed to clean up.\nlog:\n%s", handWritten, logs.String())
 	}
 }
 
@@ -150,9 +175,9 @@ func TestRemoveStaleArtifacts_GraphLevelFile(t *testing.T) {
 		dir := t.TempDir()
 		path := seed(t, dir, softDeleteFileName, entdomainHeader)
 
-		// No nodes at all: the graph file is not hung off any entity, so its
-		// removal must not depend on one being present.
-		if err := removeStaleArtifacts(dir, nil, map[string]bool{}); err != nil {
+		// Nothing else in the directory: the graph file is not hung off any
+		// entity, so its removal must not depend on one being present.
+		if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {
 			t.Fatalf("removeStaleArtifacts: %v", err)
 		}
 		if exists(path) {
@@ -164,7 +189,7 @@ func TestRemoveStaleArtifacts_GraphLevelFile(t *testing.T) {
 		dir := t.TempDir()
 		path := seed(t, dir, softDeleteFileName, entdomainHeader)
 
-		if err := removeStaleArtifacts(dir, nil, map[string]bool{path: true}); err != nil {
+		if err := removeStaleArtifacts(dir, map[string]bool{path: true}); err != nil {
 			t.Fatalf("removeStaleArtifacts: %v", err)
 		}
 		if !exists(path) {
@@ -176,7 +201,7 @@ func TestRemoveStaleArtifacts_GraphLevelFile(t *testing.T) {
 		dir := t.TempDir()
 		path := seed(t, dir, softDeleteFileName, entHeader)
 
-		if err := removeStaleArtifacts(dir, nil, map[string]bool{}); err != nil {
+		if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {
 			t.Fatalf("removeStaleArtifacts: %v", err)
 		}
 		if !exists(path) {

@@ -21,7 +21,7 @@ import (
 // unchanged. An import goimports has to ADD is one the template failed to
 // declare; one it has to REMOVE is one the template declared under the wrong
 // condition. Either way the file only compiles because the formatter rewrote
-// it — and writeFile now aborts when the formatter fails, so a template that
+// it — and formatFile now aborts when the formatter fails, so a template that
 // depends on the repair has no fallback.
 func TestTemplatesDeclareTheirImports(t *testing.T) {
 	root := repoRoot(t)
@@ -192,7 +192,7 @@ func TestSoftDeleteTemplateDeclaresItsImports(t *testing.T) {
 // graph-level template. It has exactly one import and no conditional at all,
 // which is precisely why it is worth pinning: the file is short enough that a
 // future edit adding a helper would be tempted to lean on goimports, and
-// writeFile aborts rather than repairing.
+// formatFile aborts rather than repairing.
 func TestErrorMapTemplateDeclaresItsImports(t *testing.T) {
 	root := repoRoot(t)
 	schemaDir := fixtureSchemaDir(root, "basic")

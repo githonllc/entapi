@@ -24,7 +24,7 @@ import (
 // internal/fixtures/basic/ent.
 //
 // The files that get rewritten are written by ENT's generator, not by this
-// package's writeFile, so nothing this extension passes to imports.Process can
+// package's formatFile, so nothing this extension passes to imports.Process can
 // reach them. The only fix available from here is to stop the collision
 // existing: no package in this repository may be named `ent`.
 //

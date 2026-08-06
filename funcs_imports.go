@@ -112,7 +112,7 @@ func wiringImports(node *gen.Type) []string {
 //
 // The condition has to match the template's emission exactly in both
 // directions: an import declared without a use is as fatal as a use without an
-// import, because writeFile aborts on a formatting failure and
+// import, because formatFile aborts on a formatting failure and
 // TestTemplatesDeclareTheirImports fails on either.
 func enumValidatorImport(node *gen.Type) string {
 	if node.Config == nil {

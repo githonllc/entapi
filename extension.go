@@ -71,7 +71,30 @@ func (e *Extension) Templates() []*gen.Template {
 	return []*gen.Template{} // removed legacy GraphTemplate generation
 }
 
+// pendingFile is one rendered, formatted file waiting to be written. Holding it
+// in memory is what makes the run atomic: see generatePerTypeFiles.
+type pendingFile struct {
+	path    string
+	content []byte
+}
+
 // generatePerTypeFiles is the core Hook that generates separate files for each Type.
+//
+// Generation runs in two phases, and the split is the whole atomicity story
+// (#61, docs/adr/0003-per-run-atomic-generation.md). Phase 1 renders AND
+// formats every file of the run into memory; phase 2 writes them. Because
+// imports.Process is a pure function of the bytes, every deterministic failure
+// — a template bug, a missing import, a refused schema — is raised in phase 1,
+// with not a single path on disk touched. The previous run's output survives a
+// failed run intact and entire, rather than being replaced up to the entity
+// that failed.
+//
+// What remains is the phase-2 rename loop. A hard kill (SIGKILL, power loss)
+// between two renames still leaves a mix of two generations. That window is
+// milliseconds wide and unreachable by any failure the process survives, and
+// closing it would need a directory swap that is not atomic across platforms;
+// ADR-0003 accepts it deliberately. Do not read "atomic per run" as more than
+// that.
 func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 	return gen.GenerateFunc(func(g *gen.Graph) error {
 		// Reject annotations that contradict the ent schema before anything is
@@ -88,11 +111,15 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			return err
 		}
 
-		// Generate separate files for each Type that has entdomain annotations.
-		// Entities without annotations are skipped to avoid empty generated files.
+		// PHASE 1 — render and format everything, write nothing.
+		//
+		// Separate files are produced for each Type that has entdomain
+		// annotations. Entities without annotations are skipped to avoid empty
+		// generated files.
 		//
 		// written records this run's output set, which is what tells a file
 		// left over from an earlier run apart from one just produced.
+		var pending []pendingFile
 		written := make(map[string]bool)
 		wiredAny := false
 		for _, node := range g.Nodes {
@@ -101,26 +128,29 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			}
 			wiredAny = true
 
-			// Generate DTO file → ent/{entity}_dto.go
-			path, err := e.generateDTOFile(g, node)
+			// DTO file → ent/{entity}_dto.go
+			file, err := e.renderDTOFile(g, node)
 			if err != nil {
 				return fmt.Errorf("failed to generate %s DTO: %w", node.Name, err)
 			}
-			written[path] = true
+			pending = append(pending, file)
+			written[file.path] = true
 
-			// Generate the query surface → ent/{entity}_filter.go
-			path, err = e.generateFilterFile(g, node)
+			// The query surface → ent/{entity}_filter.go
+			file, err = e.renderFilterFile(g, node)
 			if err != nil {
 				return fmt.Errorf("failed to generate %s filter: %w", node.Name, err)
 			}
-			written[path] = true
+			pending = append(pending, file)
+			written[file.path] = true
 
-			// Generate the wiring → ent/{entity}_wiring.go
-			path, err = e.generateWiringFile(g, node)
+			// The wiring → ent/{entity}_wiring.go
+			file, err = e.renderWiringFile(g, node)
 			if err != nil {
 				return fmt.Errorf("failed to generate %s wiring: %w", node.Name, err)
 			}
-			written[path] = true
+			pending = append(pending, file)
+			written[file.path] = true
 		}
 
 		// The error classifier is generated once per GRAPH for the reason the
@@ -132,11 +162,12 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 		// else would reference it, and an ErrorMap alone in a package is a
 		// public name this extension cannot explain.
 		if wiredAny {
-			path, err := e.generateErrorMapFile(g)
+			file, err := e.renderErrorMapFile(g)
 			if err != nil {
 				return fmt.Errorf("failed to generate the error classifier: %w", err)
 			}
-			written[path] = true
+			pending = append(pending, file)
+			written[file.path] = true
 		}
 
 		// The soft-delete traverser is generated once per GRAPH, not per type:
@@ -146,12 +177,22 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 		// and soft delete is a property of the ent schema rather than of the
 		// HTTP surface, so an entity with no annotated field at all still has
 		// to be filtered.
-		path, err := e.generateSoftDeleteFile(g)
+		softDelete, err := e.renderSoftDeleteFile(g)
 		if err != nil {
 			return fmt.Errorf("failed to generate the soft-delete traverser: %w", err)
 		}
-		if path != "" {
-			written[path] = true
+		if softDelete.path != "" {
+			pending = append(pending, softDelete)
+			written[softDelete.path] = true
+		}
+
+		// PHASE 2 — write. Everything above succeeded, so the only errors left
+		// here are the ones no amount of staging can pre-empt: ENOSPC, EACCES,
+		// a target directory that vanished mid-run.
+		for _, file := range pending {
+			if err := writeFormatted(file.path, file.content); err != nil {
+				return err
+			}
 		}
 
 		// Only once every file is on disk: a run that failed partway must not
@@ -165,63 +206,66 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 	})
 }
 
-// generateDTOFile generates a DTO file for a single Type.
+// renderDTOFile renders and formats the DTO file for a single Type. It does not
+// write: see generatePerTypeFiles for why every render*File stops at memory.
 // Output: ent/{entity}_dto.go
-func (e *Extension) generateDTOFile(g *gen.Graph, node *gen.Type) (string, error) {
+func (e *Extension) renderDTOFile(g *gen.Graph, node *gen.Type) (pendingFile, error) {
 	tmpl, err := template.New("dto").
 		Funcs(e.templateFuncMap()).
 		Parse(dtoTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse DTO template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to parse DTO template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, node); err != nil {
-		return "", fmt.Errorf("failed to render DTO template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to render DTO template: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s_dto.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
 
-	if err := writeFile(outputPath, buf.Bytes()); err != nil {
-		return "", err
+	formatted, err := formatFile(outputPath, buf.Bytes())
+	if err != nil {
+		return pendingFile{}, err
 	}
-	return outputPath, nil
+	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
-// generateFilterFile generates the query surface for a single Type: the filter
-// struct, its predicates and the sort allow-list.
+// renderFilterFile renders and formats the query surface for a single Type: the
+// filter struct, its predicates and the sort allow-list.
 // Output: ent/{entity}_filter.go
 //
 // It is emitted for every annotated entity, including one that marks no field
 // filterable, searchable or sortable. Such an entity gets an empty filter type
 // and an empty allow-list, which is the honest answer — and the safe one, since
 // an empty allow-list makes the entity orderable by nothing at all.
-func (e *Extension) generateFilterFile(g *gen.Graph, node *gen.Type) (string, error) {
+func (e *Extension) renderFilterFile(g *gen.Graph, node *gen.Type) (pendingFile, error) {
 	tmpl, err := template.New("filter").
 		Funcs(e.templateFuncMap()).
 		Parse(filterTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse filter template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to parse filter template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, node); err != nil {
-		return "", fmt.Errorf("failed to render filter template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to render filter template: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s_filter.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
 
-	if err := writeFile(outputPath, buf.Bytes()); err != nil {
-		return "", err
+	formatted, err := formatFile(outputPath, buf.Bytes())
+	if err != nil {
+		return pendingFile{}, err
 	}
-	return outputPath, nil
+	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
-// generateWiringFile generates the wiring for a single Type: one free function
-// per operation, each handing this entity's generated artifacts to a routine in
-// the runtime.
+// renderWiringFile renders and formats the wiring for a single Type: one free
+// function per operation, each handing this entity's generated artifacts to a
+// routine in the runtime.
 // Output: ent/{entity}_wiring.go
 //
 // It is emitted unconditionally, like the filter file and for the same reason:
@@ -229,92 +273,98 @@ func (e *Extension) generateFilterFile(g *gen.Graph, node *gen.Type) (string, er
 // filter and a sort allow-list, so every one of them can be read, listed and
 // deleted. The create and update functions are the two that depend on the
 // scopes — an entity with no create-scoped field gets no Create.
-func (e *Extension) generateWiringFile(g *gen.Graph, node *gen.Type) (string, error) {
+func (e *Extension) renderWiringFile(g *gen.Graph, node *gen.Type) (pendingFile, error) {
 	tmpl, err := template.New("wiring").
 		Funcs(e.templateFuncMap()).
 		Parse(wiringTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse wiring template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to parse wiring template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, node); err != nil {
-		return "", fmt.Errorf("failed to render wiring template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to render wiring template: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s_wiring.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
 
-	if err := writeFile(outputPath, buf.Bytes()); err != nil {
-		return "", err
+	formatted, err := formatFile(outputPath, buf.Bytes())
+	if err != nil {
+		return pendingFile{}, err
 	}
-	return outputPath, nil
+	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
-// generateErrorMapFile generates the package-level error classifier the wiring
-// returns every error through.
+// renderErrorMapFile renders and formats the package-level error classifier the
+// wiring returns every error through.
 // Output: ent/entdomain_errors.go
 //
 // It names ent's own IsNotFound and IsConstraintError, which are generated into
 // the consumer's package rather than exported by the framework — so this one
 // line is the only place where the two halves can meet, and it is why the
 // runtime takes predicates as function values instead of importing ent.
-func (e *Extension) generateErrorMapFile(g *gen.Graph) (string, error) {
+func (e *Extension) renderErrorMapFile(g *gen.Graph) (pendingFile, error) {
 	tmpl, err := template.New("errors").
 		Funcs(e.templateFuncMap()).
 		Parse(errorMapTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse error classifier template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to parse error classifier template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, g); err != nil {
-		return "", fmt.Errorf("failed to render error classifier template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to render error classifier template: %w", err)
 	}
 
 	outputPath := filepath.Join(g.Config.Target, errorMapFileName)
 
-	if err := writeFile(outputPath, buf.Bytes()); err != nil {
-		return "", err
+	formatted, err := formatFile(outputPath, buf.Bytes())
+	if err != nil {
+		return pendingFile{}, err
 	}
-	return outputPath, nil
+	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
-// generateSoftDeleteFile generates the soft-delete traverser, the
+// renderSoftDeleteFile renders and formats the soft-delete traverser, the
 // delete-rewriting hook and the single registration function, for the whole
 // graph at once.
 // Output: ent/entdomain_softdelete.go
 //
-// It returns "" when no entity embeds entdomain.SoftDeleteMixin, in which case
-// nothing is written and removeStaleArtifacts deletes any file an earlier run
-// left. A file holding an empty type switch would compile, but it would also
-// publish a RegisterSoftDelete that quietly does nothing.
-func (e *Extension) generateSoftDeleteFile(g *gen.Graph) (string, error) {
+// It returns the zero pendingFile — an empty path — when no entity embeds
+// entdomain.SoftDeleteMixin, in which case nothing is written and
+// removeStaleArtifacts deletes any file an earlier run left. A file holding an
+// empty type switch would compile, but it would also publish a
+// RegisterSoftDelete that quietly does nothing.
+func (e *Extension) renderSoftDeleteFile(g *gen.Graph) (pendingFile, error) {
 	if len(softDeleteTypes(g)) == 0 {
-		return "", nil
+		return pendingFile{}, nil
 	}
 
 	tmpl, err := template.New("softdelete").
 		Funcs(e.templateFuncMap()).
 		Parse(softDeleteTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse soft-delete template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to parse soft-delete template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, g); err != nil {
-		return "", fmt.Errorf("failed to render soft-delete template: %w", err)
+		return pendingFile{}, fmt.Errorf("failed to render soft-delete template: %w", err)
 	}
 
 	outputPath := filepath.Join(g.Config.Target, softDeleteFileName)
 
-	if err := writeFile(outputPath, buf.Bytes()); err != nil {
-		return "", err
+	formatted, err := formatFile(outputPath, buf.Bytes())
+	if err != nil {
+		return pendingFile{}, err
 	}
-	return outputPath, nil
+	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
-// writeFile formats the generated Go source with goimports and writes it to disk.
+// formatFile runs the generated Go source through goimports. It is a pure
+// function of the bytes — it touches no disk — which is what lets phase 1 of
+// generatePerTypeFiles catch a template bug before any file is replaced.
 //
 // A formatting failure aborts. imports.Process only fails on source it cannot
 // parse, which for a generator means a template emitted invalid Go — a bug in
@@ -322,16 +372,24 @@ func (e *Extension) generateSoftDeleteFile(g *gen.Graph) (string, error) {
 // an unexplained compile error in the consumer's repository, with a successful
 // exit code on the generation run.
 //
-// The write is atomic: the content goes to a temporary file in the target
-// directory and is renamed into place only after formatting succeeded. A run
-// that fails partway therefore leaves the previous run's output untouched
-// rather than a half-written file.
-func writeFile(path string, content []byte) error {
-	formatted, err := imports.Process(path, content, nil)
+// path is passed for two reasons: imports.Process resolves imports relative to
+// it, and it is what names the offending file in the error.
+func formatFile(path string, raw []byte) ([]byte, error) {
+	formatted, err := imports.Process(path, raw, nil)
 	if err != nil {
-		return fmt.Errorf("goimports failed for %s (generated source is not valid Go): %w", path, err)
+		return nil, fmt.Errorf("goimports failed for %s (generated source is not valid Go): %w", path, err)
 	}
+	return formatted, nil
+}
 
+// writeFormatted writes already-formatted source to disk, atomically for that
+// one file: the content goes to a temporary file in the target directory and is
+// renamed into place, so no reader ever observes a partial file and a failure
+// here leaves the previous content of THIS path intact.
+//
+// Run-level atomicity is a separate property and belongs to its caller; see
+// generatePerTypeFiles.
+func writeFormatted(path string, formatted []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)

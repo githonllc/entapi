@@ -24,12 +24,12 @@ const validSource = `package ent
 type Widget struct{}
 `
 
-func TestWriteFile_FormattingFailureReturnsError(t *testing.T) {
+func TestFormatFile_FormattingFailureReturnsError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "widget_dto.go")
 
-	err := writeFile(path, []byte(unparseableSource))
+	_, err := formatFile(path, []byte(unparseableSource))
 	if err == nil {
-		t.Fatal("writeFile returned nil for source goimports cannot parse; " +
+		t.Fatal("formatFile returned nil for source goimports cannot parse; " +
 			"a formatting failure must abort generation")
 	}
 	if !strings.Contains(err.Error(), path) {
@@ -37,57 +37,40 @@ func TestWriteFile_FormattingFailureReturnsError(t *testing.T) {
 	}
 }
 
-func TestWriteFile_FormattingFailureWritesNoFile(t *testing.T) {
+// TestFormatFile_TouchesNoDisk is what makes formatFile usable as phase 1's
+// gate: it is handed the path only so imports.Process can resolve against it
+// and so the error can name the file. Writing there — on success or failure —
+// would put the run's atomicity back where it was before #61.
+func TestFormatFile_TouchesNoDisk(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "widget_dto.go")
 
-	_ = writeFile(path, []byte(unparseableSource))
-
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		got, _ := os.ReadFile(path)
-		t.Fatalf("writeFile left a file behind after a formatting failure: %s\n%s", path, got)
+	if _, err := formatFile(path, []byte(validSource)); err != nil {
+		t.Fatalf("formatFile on valid source: %v", err)
 	}
+	_, _ = formatFile(path, []byte(unparseableSource))
+
 	assertOnlyFiles(t, dir)
 }
 
-func TestWriteFile_FormattingFailureLeavesPreviousOutputIntact(t *testing.T) {
+func TestWriteFormatted_SuccessLeavesNoTempFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "widget_dto.go")
 
-	if err := os.WriteFile(path, []byte(validSource), 0o644); err != nil {
-		t.Fatalf("seeding the previous run's output: %v", err)
-	}
-
-	_ = writeFile(path, []byte(unparseableSource))
-
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("previous output disappeared: %v", err)
-	}
-	if string(got) != validSource {
-		t.Fatalf("a failed run overwrote the previous output.\nwant:\n%s\ngot:\n%s", validSource, got)
+	if err := writeFormatted(path, []byte(validSource)); err != nil {
+		t.Fatalf("writeFormatted on valid source: %v", err)
 	}
 	assertOnlyFiles(t, dir, "widget_dto.go")
 }
 
-func TestWriteFile_SuccessLeavesNoTempFiles(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "widget_dto.go")
-
-	if err := writeFile(path, []byte(validSource)); err != nil {
-		t.Fatalf("writeFile on valid source: %v", err)
-	}
-	assertOnlyFiles(t, dir, "widget_dto.go")
-}
-
-// TestWriteFile_CreatesMissingDirectory covers the MkdirAll prerequisite: the
-// writer used os.WriteFile directly, so generating into a directory that does
-// not exist yet failed on the first run.
-func TestWriteFile_CreatesMissingDirectory(t *testing.T) {
+// TestWriteFormatted_CreatesMissingDirectory covers the MkdirAll prerequisite:
+// the writer used os.WriteFile directly, so generating into a directory that
+// does not exist yet failed on the first run.
+func TestWriteFormatted_CreatesMissingDirectory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dto", "widget_dto.go")
 
-	if err := writeFile(path, []byte(validSource)); err != nil {
-		t.Fatalf("writeFile into a missing directory: %v", err)
+	if err := writeFormatted(path, []byte(validSource)); err != nil {
+		t.Fatalf("writeFormatted into a missing directory: %v", err)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected %s to exist: %v", path, err)

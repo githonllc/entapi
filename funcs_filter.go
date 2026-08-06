@@ -219,7 +219,7 @@ func filterParams(f *gen.Field) []filterParam {
 //
 // The rest follow from the types of the filterable fields, exactly as
 // dtoImports follows from the rendered DTO fields. Both exist because
-// generation must not depend on goimports inventing an import block: writeFile
+// generation must not depend on goimports inventing an import block: formatFile
 // aborts when the formatter fails, so a template that relies on the repair has
 // no fallback.
 func filterImports(node *gen.Type) []string {

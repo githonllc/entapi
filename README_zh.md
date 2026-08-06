@@ -708,6 +708,37 @@ builder 的唯一入口：
 `DisallowUnknownFields`，那属于使用方的 handler——这是本切片里唯一无法在生成器
 内部闭合的情况。
 
+### 从大小写不敏感的 JSON 键迁移
+
+**只在大小写上与字段 JSON tag 不同的 payload 键，现在是一个校验错误。** 它此前
+会被接受，而它命名的那个字段被静默丢弃
+（[#58](https://github.com/githonllc/entdomain/issues/58)、
+[ADR-0001](docs/adr/0001-presence-follows-encoding-json-key-matching.md)）。
+
+`encoding/json` 在精确匹配**或**大小写不敏感匹配时都会填充结构体字段，而存在性
+是按原始 payload 键记录的。任何大小写变体都会让二者产生分歧：`{"Nickname":"sam"}`
+解码进了带 `nickname` tag 的字段，`HasNickname()` 却仍是 `false`，`Apply` 什么都
+没写——更新返回成功，却没有改动任何一行。同时携带两种拼写的 payload 更糟：后一个
+键把字段覆盖成了 `nil`，而存在性看到的是精确键，于是一个携带了值的 patch 反而
+**清空**了该字段。
+
+```go
+// 此前——没有错误，行也没有变化
+_ = json.Unmarshal([]byte(`{"Nickname":"sam"}`), &req)  // req.Nickname == "sam"
+req.Validate()                                          // 通过
+valid.Apply(b)                                          // 什么都没写
+
+// 此后——errors.Is(err, entdomain.ErrValidation)
+// validation failed: unknown key "Nickname" (did you mean "nickname"?)
+err := json.Unmarshal([]byte(`{"Nickname":"sam"}`), &req)
+```
+
+`UnmarshalJSON` 会点名拒绝该键并给出规范拼写，而且发生在解码进结构体之前，所以被
+拒绝的请求保证不会碰到接收者。折叠后**不匹配任何** tag 的键保持原有行为、继续被
+忽略——拒绝那些键是 `DisallowUnknownFields`，仍归使用方的 handler，与上面
+`Immutable()` 的情况完全一致。迁移不需要改任何代码：大小写写错的客户端本来就在
+丢数据，这个错误是它第一次得到的诚实回答。
+
 ### 响应类型、摘要类型与预加载计划
 
 `{entity}_dto.go` 的响应部分由这几个声明构成：

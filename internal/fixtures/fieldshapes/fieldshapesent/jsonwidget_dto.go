@@ -7,6 +7,7 @@ package fieldshapesent
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	entdomain "github.com/githonllc/entdomain/runtime"
 	"github.com/google/uuid"
@@ -62,17 +63,37 @@ type JSONWidgetCreateRequest struct {
 	present map[string]bool
 }
 
+// jSONWidgetCreateRequestTags is the canonical JSON key of every field on
+// JSONWidgetCreateRequest, in declaration order. UnmarshalJSON needs the tags as
+// data, not as struct tags, to tell a case variant from an unrelated key.
+var jSONWidgetCreateRequestTags = []string{"tags", "meta", "required_tags", "required_meta"}
+
 // UnmarshalJSON records presence, then decodes normally.
 //
 // The wire format is unchanged: every exported field keeps its ordinary type
 // and tag, so marshalling, form binders, validators and spec generators all see
 // the struct they saw before. That is the property a generic Optional[T]
 // wrapper could not keep.
+//
+// A key that case-folds to a canonical tag without matching it exactly is
+// rejected (#58, ADR-0001): encoding/json would fill the field from it while
+// presence — recorded by raw key — would not, so the value decoded and then
+// went unwritten. The check runs after raw decodes and BEFORE the alias decode,
+// so a rejected request leaves the receiver untouched. A key that folds to no
+// tag keeps its old behaviour and is ignored; refusing those is
+// DisallowUnknownFields, which stays the consumer handler's decision.
 func (r *JSONWidgetCreateRequest) UnmarshalJSON(b []byte) error {
 	type alias JSONWidgetCreateRequest // breaks the UnmarshalJSON recursion
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
+	}
+	for k := range raw {
+		for _, t := range jSONWidgetCreateRequestTags {
+			if k != t && strings.EqualFold(k, t) {
+				return fmt.Errorf("%w: unknown key %q (did you mean %q?)", entdomain.ErrValidation, k, t)
+			}
+		}
 	}
 	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
 		return err
@@ -177,14 +198,33 @@ type JSONWidgetPatchRequest struct {
 	present map[string]bool
 }
 
+// jSONWidgetPatchRequestTags is the canonical JSON key of every field on
+// JSONWidgetPatchRequest, in declaration order.
+var jSONWidgetPatchRequestTags = []string{"tags", "meta", "required_tags", "required_meta"}
+
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from
 // the create request, where a null has nothing to clear.
+//
+// A key that case-folds to a canonical tag without matching it exactly is
+// rejected (#58, ADR-0001). The patch side is where that mattered most: a
+// case-variant key decoded into the field while Has<Field>() stayed false, so
+// Apply wrote nothing and the update reported success having changed no row —
+// and a payload carrying BOTH spellings could clear a field the exact key had
+// just set. The check runs after raw decodes and BEFORE the alias decode, so a
+// rejected request leaves the receiver untouched.
 func (r *JSONWidgetPatchRequest) UnmarshalJSON(b []byte) error {
 	type alias JSONWidgetPatchRequest // breaks the UnmarshalJSON recursion
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
+	}
+	for k := range raw {
+		for _, t := range jSONWidgetPatchRequestTags {
+			if k != t && strings.EqualFold(k, t) {
+				return fmt.Errorf("%w: unknown key %q (did you mean %q?)", entdomain.ErrValidation, k, t)
+			}
+		}
 	}
 	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
 		return err

@@ -771,6 +771,40 @@ any validator can see it. Rejecting that needs `DisallowUnknownFields`, which
 lives in the consumer's handler — it is the one case here that cannot be closed
 from the generator.
 
+### Migrating from case-insensitive JSON keys
+
+**A payload key that differs from a field's JSON tag only in case is now a
+validation error.** It used to be accepted, and the field it named was silently
+dropped ([#58](https://github.com/githonllc/entdomain/issues/58),
+[ADR-0001](docs/adr/0001-presence-follows-encoding-json-key-matching.md)).
+
+`encoding/json` fills a struct field on an exact match *or* a case-insensitive
+one, while presence is recorded by raw payload key. The two disagreed for every
+case variant: `{"Nickname":"sam"}` decoded into the `nickname`-tagged field,
+`HasNickname()` stayed `false`, `Apply` wrote nothing — and the update returned
+success having changed no row. A payload carrying both spellings was worse
+still: the later key overwrote the field to `nil` while presence saw the exact
+key, so a patch that carried a value **cleared** it.
+
+```go
+// before — no error, and the row is unchanged
+_ = json.Unmarshal([]byte(`{"Nickname":"sam"}`), &req)  // req.Nickname == "sam"
+req.Validate()                                          // ok
+valid.Apply(b)                                          // writes nothing
+
+// after — errors.Is(err, entdomain.ErrValidation)
+// validation failed: unknown key "Nickname" (did you mean "nickname"?)
+err := json.Unmarshal([]byte(`{"Nickname":"sam"}`), &req)
+```
+
+`UnmarshalJSON` refuses the key by name and gives the canonical spelling, and it
+does so before decoding into the struct, so a rejected request leaves the
+receiver untouched. A key that case-folds to **no** tag keeps its old behaviour
+and is ignored — refusing those is `DisallowUnknownFields`, which stays in the
+consumer's handler exactly as for the `Immutable()` case above. Nothing needs
+editing to migrate: a client sending the wrong case was already losing its data,
+so this error is the first honest answer it has ever had.
+
 ### Responses, summaries and eager-load plans
 
 The response half of `{entity}_dto.go` is four declarations:

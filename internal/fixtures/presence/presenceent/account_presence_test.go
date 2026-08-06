@@ -212,6 +212,68 @@ func TestPatchDropsAnImmutableFieldBeforeAnyValidatorRuns(t *testing.T) {
 	}
 }
 
+// TestCaseVariantKeysAreRejected is #58 / ADR-0001. encoding/json fills a struct
+// field on an exact match OR a case-insensitive one, while presence is recorded
+// by raw payload key. The two disagreed for every case variant: {"Nickname":"sam"}
+// decoded into the field, HasNickname() stayed false, Apply wrote nothing, and
+// the update reported success having changed no row. The duplicate row is worse
+// still — the later case-variant key overwrote the field to nil while presence
+// saw the exact key, so a patch carrying a value CLEARED it.
+//
+// UnmarshalJSON now refuses any key that case-folds to a canonical tag without
+// matching it exactly, naming both spellings. A key that folds to no tag is
+// still ignored: rejecting those is DisallowUnknownFields, the consumer's call.
+func TestCaseVariantKeysAreRejected(t *testing.T) {
+	unmarshalCreate := func(body string) error {
+		var r AccountCreateRequest
+		return json.Unmarshal([]byte(body), &r)
+	}
+	unmarshalPatch := func(body string) error {
+		var r AccountPatchRequest
+		return json.Unmarshal([]byte(body), &r)
+	}
+
+	for _, tc := range []struct {
+		name      string
+		body      string
+		decode    func(string) error
+		variant   string
+		canonical string
+	}{
+		{
+			"create key differing only in case",
+			`{"Email":"a@example.com","seats":3,"accepted_terms":true,"origin":"cli"}`,
+			unmarshalCreate, "Email", "email",
+		},
+		{
+			"patch key differing only in case",
+			`{"Nickname":"sam"}`,
+			unmarshalPatch, "Nickname", "nickname",
+		},
+		{
+			"patch carrying both spellings",
+			`{"nickname":"a","Nickname":null}`,
+			unmarshalPatch, "Nickname", "nickname",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.decode(tc.body)
+			if err == nil {
+				t.Fatalf("decoding %s succeeded; %q folds to the tag %q, so the field decodes while presence does not record it", tc.body, tc.variant, tc.canonical)
+			}
+			if !errors.Is(err, entdomain.ErrValidation) {
+				t.Errorf("error %v does not wrap entdomain.ErrValidation", err)
+			}
+			if !strings.Contains(err.Error(), tc.variant) {
+				t.Errorf("error %q does not name the offending key %q", err, tc.variant)
+			}
+			if !strings.Contains(err.Error(), tc.canonical) {
+				t.Errorf("error %q does not name the canonical tag %q", err, tc.canonical)
+			}
+		})
+	}
+}
+
 // TestApplyIsReachableOnlyThroughValidate is the compile-time half of the
 // contract, asserted structurally because a test cannot contain code that does
 // not compile. Apply lives on the validated type and nowhere else, so a caller

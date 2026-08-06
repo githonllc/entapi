@@ -5,7 +5,6 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -152,8 +151,8 @@ func TestWiringMapsEveryExportedOperation(t *testing.T) {
 
 	for _, fixture := range []string{"wiring", "edges", "intid", "query"} {
 		t.Run(fixture, func(t *testing.T) {
-			schemaDir := filepath.Join(root, "internal", "fixtures", fixture, "ent", "schema")
-			pkgPath := modulePath + "/internal/fixtures/" + fixture + "/ent"
+			schemaDir := fixtureSchemaDir(root, fixture)
+			pkgPath := fixtureEntPkgPath(fixture)
 
 			checked := 0
 			for _, node := range loadFixtureNodes(t, schemaDir, pkgPath) {

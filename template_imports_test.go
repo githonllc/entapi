@@ -3,7 +3,6 @@ package entdomain
 import (
 	"go/parser"
 	"go/token"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"testing"
@@ -34,16 +33,16 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 	}{
 		{
 			name:      "basic",
-			schemaDir: filepath.Join(root, "internal", "fixtures", "basic", "ent", "schema"),
-			pkgPath:   modulePath + "/internal/fixtures/basic/ent",
+			schemaDir: fixtureSchemaDir(root, "basic"),
+			pkgPath:   fixtureEntPkgPath("basic"),
 		},
 		{
 			// Enums, whose Go type lives in the entity's own subpackage, and
 			// named JSON types, whose Go type lives in the schema package —
 			// neither of which any template used to name.
 			name:      "fieldshapes",
-			schemaDir: filepath.Join(root, "internal", "fixtures", "fieldshapes", "ent", "schema"),
-			pkgPath:   modulePath + "/internal/fixtures/fieldshapes/ent",
+			schemaDir: fixtureSchemaDir(root, "fieldshapes"),
+			pkgPath:   fixtureEntPkgPath("fieldshapes"),
 		},
 		{
 			// Edges, and — through Secret — an entity with no response-scoped
@@ -51,8 +50,8 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			// anyway, carrying only the ID, so the ID's import is needed on a
 			// path where responseFields is empty.
 			name:      "edges",
-			schemaDir: filepath.Join(root, "internal", "fixtures", "edges", "ent", "schema"),
-			pkgPath:   modulePath + "/internal/fixtures/edges/ent",
+			schemaDir: fixtureSchemaDir(root, "edges"),
+			pkgPath:   fixtureEntPkgPath("edges"),
 		},
 		{
 			// An enum in a create AND a patch request, which is what makes the
@@ -60,8 +59,8 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			// the entity's own subpackage, so this is the one path where the
 			// DTO names a package no field TYPE required it to import.
 			name:      "presence",
-			schemaDir: filepath.Join(root, "internal", "fixtures", "presence", "ent", "schema"),
-			pkgPath:   modulePath + "/internal/fixtures/presence/ent",
+			schemaDir: fixtureSchemaDir(root, "presence"),
+			pkgPath:   fixtureEntPkgPath("presence"),
 		},
 		{
 			// The query surface: an enum, a time field and an optional int in
@@ -69,8 +68,8 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			// filter file therefore names only the three unconditional
 			// imports.
 			name:      "query",
-			schemaDir: filepath.Join(root, "internal", "fixtures", "query", "ent", "schema"),
-			pkgPath:   modulePath + "/internal/fixtures/query/ent",
+			schemaDir: fixtureSchemaDir(root, "query"),
+			pkgPath:   fixtureEntPkgPath("query"),
 		},
 		{
 			// An int primary key, which is the one identifier shape that needs
@@ -80,8 +79,8 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			// so this direction needs its own case now that a non-UUID key is
 			// generated rather than refused (#29).
 			name:      "intid",
-			schemaDir: filepath.Join(root, "internal", "fixtures", "intid", "ent", "schema"),
-			pkgPath:   modulePath + "/internal/fixtures/intid/ent",
+			schemaDir: fixtureSchemaDir(root, "intid"),
+			pkgPath:   fixtureEntPkgPath("intid"),
 		},
 		// The refused fixtures ("immutable", "selfref", "queryconflict") are
 		// deliberately absent: the generator stops before rendering anything for
@@ -96,8 +95,8 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 		// "edges" covers.
 		{
 			name:      "softdelete",
-			schemaDir: filepath.Join(root, "internal", "fixtures", "softdelete", "ent", "schema"),
-			pkgPath:   modulePath + "/internal/fixtures/softdelete/ent",
+			schemaDir: fixtureSchemaDir(root, "softdelete"),
+			pkgPath:   fixtureEntPkgPath("softdelete"),
 		},
 	}
 
@@ -156,8 +155,8 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 // empty.
 func TestSoftDeleteTemplateDeclaresItsImports(t *testing.T) {
 	root := repoRoot(t)
-	schemaDir := filepath.Join(root, "internal", "fixtures", "softdelete", "ent", "schema")
-	pkgPath := modulePath + "/internal/fixtures/softdelete/ent"
+	schemaDir := fixtureSchemaDir(root, "softdelete")
+	pkgPath := fixtureEntPkgPath("softdelete")
 
 	g := loadFixtureGraph(t, schemaDir, pkgPath)
 	if len(softDeleteTypes(g)) == 0 {
@@ -196,8 +195,8 @@ func TestSoftDeleteTemplateDeclaresItsImports(t *testing.T) {
 // writeFile aborts rather than repairing.
 func TestErrorMapTemplateDeclaresItsImports(t *testing.T) {
 	root := repoRoot(t)
-	schemaDir := filepath.Join(root, "internal", "fixtures", "basic", "ent", "schema")
-	pkgPath := modulePath + "/internal/fixtures/basic/ent"
+	schemaDir := fixtureSchemaDir(root, "basic")
+	pkgPath := fixtureEntPkgPath("basic")
 
 	g := loadFixtureGraph(t, schemaDir, pkgPath)
 

@@ -136,6 +136,132 @@ func TestCheckGraphConflicts_UnannotatedEntityIsNotCheckedForID(t *testing.T) {
 	}
 }
 
+// selfRefPair hangs a self-referential edge pair off node, the way gen resolves
+// one: the assoc edge, then the inverse edge naming it through Inverse and
+// pointing at it through Ref. assocRaw and inverseRaw are the raw DomainEdge
+// annotation values, nil meaning the end carries none.
+func selfRefPair(node *gen.Type, assocRaw, inverseRaw any) {
+	assoc := newEdgeTo("children", node, false, assocRaw)
+	inverse := newEdgeTo("parent", node, true, inverseRaw)
+	inverse.Inverse = assoc.Name
+	inverse.Ref = assoc
+	node.Edges = []*gen.Edge{assoc, inverse}
+}
+
+func TestCheckGraphConflicts_AsymmetricSelfReferentialEdgePair(t *testing.T) {
+	node := newTestType("Tree", newStringField("name", ptr(DefaultField())))
+	selfRefPair(node, nil, Edge().InResponse()) // the chained form's result
+
+	err := checkGraphConflicts(graphOf(node), nil)
+	if err == nil {
+		t.Fatal("expected an error for a self-referential pair annotated on one end only, got nil")
+	}
+
+	// The message is the whole product of the check. It has to name both ends,
+	// say which one carries what, and spell out the fix — the author is looking
+	// at a relation that is simply absent, with no other clue.
+	for _, want := range []string{
+		"Tree.children", "Tree.parent",
+		"no DomainEdge annotation at all",
+		"chained form",
+		`edge.To("children", Tree.Type)`,
+		`edge.From("parent", Tree.Type).Ref("children")`,
+		"entdomain.Edge()",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q\ngot: %v", want, err)
+		}
+	}
+}
+
+// TestCheckGraphConflicts_AsymmetricSelfEdgeReportedFromEitherEnd covers the
+// mirror image: the assoc end annotated and the inverse forgotten. The chained
+// form cannot produce it, so the message must not blame the chained form.
+func TestCheckGraphConflicts_AsymmetricSelfEdgeReportedFromEitherEnd(t *testing.T) {
+	node := newTestType("Tree", newStringField("name", ptr(DefaultField())))
+	selfRefPair(node, Edge().InResponse(), nil)
+
+	err := checkGraphConflicts(graphOf(node), nil)
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if strings.Contains(err.Error(), "chained form") {
+		t.Errorf("the chained form cannot annotate the assoc end, so it must not be named as the cause\ngot: %v", err)
+	}
+	for _, want := range []string{"Tree.children", "Tree.parent", "forgotten"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q\ngot: %v", want, err)
+		}
+	}
+}
+
+// TestCheckGraphConflicts_SymmetricSelfReferentialEdgePairIsAccepted is the
+// legal case the fixture internal/fixtures/edges also generates and compiles. A
+// guard that rejects it is worse than no guard.
+func TestCheckGraphConflicts_SymmetricSelfReferentialEdgePairIsAccepted(t *testing.T) {
+	node := newTestType("Category", newStringField("name", ptr(DefaultField())))
+	selfRefPair(node, Edge().InResponse(), Edge().InResponse())
+
+	if err := checkGraphConflicts(graphOf(node), nil); err != nil {
+		t.Fatalf("a pair annotated on both ends must be accepted, got: %v", err)
+	}
+}
+
+// TestCheckGraphConflicts_UnannotatedSelfReferentialEdgePairIsAccepted: two bare
+// ends are one decision — do not expose the relationship — not a disagreement.
+func TestCheckGraphConflicts_UnannotatedSelfReferentialEdgePairIsAccepted(t *testing.T) {
+	node := newTestType("Category", newStringField("name", ptr(DefaultField())))
+	selfRefPair(node, nil, nil)
+
+	if err := checkGraphConflicts(graphOf(node), nil); err != nil {
+		t.Fatalf("a pair with no annotation on either end must be accepted, got: %v", err)
+	}
+}
+
+// TestCheckGraphConflicts_BareEdgeAnnotationExpressesOneSidedIntent pins the
+// escape hatch the refusal message recommends. A bare entdomain.Edge() grants no
+// scope, so the generated output is identical to the unannotated end's — the
+// only thing it changes is that the decision is on the page.
+//
+// internal/fixtures/selfrefpartial is the same shape run through real
+// generation, which is what proves an empty annotation survives the schema
+// load's JSON round-trip rather than marshalling away to nothing.
+func TestCheckGraphConflicts_BareEdgeAnnotationExpressesOneSidedIntent(t *testing.T) {
+	node := newTestType("Node", newStringField("label", ptr(DefaultField())))
+	selfRefPair(node, Edge(), Edge().InResponse())
+
+	if err := checkGraphConflicts(graphOf(node), nil); err != nil {
+		t.Fatalf("a bare entdomain.Edge() must express deliberate non-exposure, got: %v", err)
+	}
+	if hasEdgeScope(node.Edges[0], ScopeResponse) {
+		t.Error("a bare entdomain.Edge() must not put the edge in the response")
+	}
+}
+
+// TestCheckGraphConflicts_CrossEntityPairIsNotChecked is the boundary. The check
+// is deliberately confined to pairs whose two ends sit in one Edges() slice: the
+// chained declaration can only produce those, and across two entities exposing
+// one direction only is the ordinary case, not a symptom.
+func TestCheckGraphConflicts_CrossEntityPairIsNotChecked(t *testing.T) {
+	df := ptr(DefaultField())
+	user := newTestType("User", newStringField("name", df))
+	post := newTestType("Post", newStringField("title", df))
+
+	posts := newEdgeTo("posts", post, false, Edge().InResponse())
+	posts.Owner = user
+	user.Edges = []*gen.Edge{posts}
+
+	author := newEdgeTo("author", user, true, nil)
+	author.Inverse = posts.Name
+	author.Ref = posts
+	author.Owner = post
+	post.Edges = []*gen.Edge{author}
+
+	if err := checkGraphConflicts(graphOf(user, post), nil); err != nil {
+		t.Fatalf("a cross-entity pair annotated on one side only must not be refused, got: %v", err)
+	}
+}
+
 func TestCheckGraphConflicts_Clean(t *testing.T) {
 	df := ptr(DefaultField())
 	output := ptr(OutputOnlyField())     // no ScopeUpdate

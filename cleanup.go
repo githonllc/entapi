@@ -32,6 +32,7 @@ func generatedFileNames(node *gen.Type) []string {
 	return []string{
 		base + "_dto.go",
 		base + "_filter.go",
+		base + "_wiring.go",
 		base + "_base_service.go",
 		base + "_base_handler.go",
 	}

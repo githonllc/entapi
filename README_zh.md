@@ -222,6 +222,16 @@ func GetOne[E, R, ID any](
     to func(*E) (*R, error),
     id ID,
 ) (*R, error)
+
+// Saver 是变更构建器的子集。*<T>Create 与 *<T>UpdateOne 都满足它，
+// 所以创建与更新共用同一个例程。
+type Saver[E any] interface {
+    Save(context.Context) (*E, error)
+}
+
+func SaveOne[B Saver[E], E, R any](
+    ctx context.Context, b B, to func(*E) (*R, error),
+) (*R, error)
 ```
 
 类型实参在调用点由推导得出，一个都不用手写：
@@ -421,12 +431,13 @@ graph TD
 
 ## 生成的代码
 
-为每个带注解的 schema 最多生成四个文件（均在 `ent/` 包中）：
+为每个带注解的 schema 最多生成五个文件（均在 `ent/` 包中）：
 
 | 文件 | 内容 |
 |------|------|
 | `{entity}_dto.go` | `CreateRequest`、`PatchRequest`、它们的 `Validate()`/`Apply` 组合，以及下述响应部分 |
 | `{entity}_filter.go` | `{Entity}Filter` 及其 `Predicates()`、`{Entity}SortKeys`、`{Entity}Order`——下述查询部分 |
+| `{entity}_wiring.go` | 每个操作一个自由函数，把本实体的产物交给运行时——下述接线部分 |
 | `{entity}_base_service.go` | 带 CRUD、Before/After 钩子、`EntToResponse` 的 `BaseService` |
 | `{entity}_base_handler.go` | 带 `ToResponse`、`ToResponseList`、`PartialUpdate` 的 `BaseHandler` |
 
@@ -561,6 +572,42 @@ page, err := entdomain.ListPage(ctx, client.Record.Query(), filter.Predicates(),
 调用：标记加在没有 `ScopeQuery` 的字段上、`Searchable` 加在没有 `Contains` 谓词的
 类型上、`Filterable` 加在完全没有谓词的类型上，以及 `Sortable` 加在因不可比较而被
 ent 排序构建器跳过的类型上。
+
+### 接线（wiring）
+
+`{entity}_wiring.go` 把上面的产物接到运行时。它是**自由函数，不是生成结构体上的方法**：
+没有东西要嵌入，没有自引用要安装，也没有一组固定的覆盖点。
+
+| 声明 | 函数体 |
+|---|---|
+| `Get{Entity}(ctx, db, id)` | `entdomain.GetOne(ctx, {entity}ByID(db), New{Entity}Response, id)` |
+| `List{Entities}(ctx, db, f, r)` | 先 `{Entity}Order(r)`，再 `entdomain.ListPage(ctx, {Entity}QueryWithResponseEdges(db.{Entity}.Query()), f.Predicates(), order, r, New{Entity}Response)` |
+| `Create{Entity}(ctx, db, v)` | `entdomain.SaveOne(ctx, v.Apply(db.{Entity}.Create()), …)` |
+| `Update{Entity}(ctx, db, id, v)` | `entdomain.SaveOne(ctx, v.Apply(db.{Entity}.UpdateOneID(id)), …)` |
+| `Delete{Entity}(ctx, db, id)` | `db.{Entity}.DeleteOneID(id).Exec(ctx)` |
+
+标识符类型来自 schema，没有一处是为某一种类型写死的。创建与更新收的是**已校验**的
+请求，因为 `Apply` 只定义在那个类型上——跳过校验是编译错误，不是纪律问题。读取走
+`Query` 加生成的预加载计划，而不是 `{Entity}Client.Get`：后者不应用任何计划，因此
+无法服务声明了边的响应类型；同理，带响应边的实体在保存后会把行重新读回来再转换。
+
+五个函数里有四个的函数体是单次调用。`List` 是例外，原因值得写明而不是藏起来：
+`{Entity}Order` 会失败，而 `ListPage` 收的是已解析的排序选项、不是一个可能失败的
+生产者，所以白名单校验只能是独立的一条语句。
+
+**要替换某一个操作，就写自己的函数并停止调用生成的那个。** 其余操作照常工作，没有
+契约要满足，也没有东西要重新注册：
+
+```go
+func listMyArticles(ctx context.Context, db *ent.Client, f *ent.ArticleFilter, r entdomain.ListRequest) (*entdomain.Page[ent.ArticleResponse], error) {
+    q := ent.ArticleQueryWithResponseEdges(db.Article.Query())
+    ps := append(f.Predicates(), article.TenantID(tenantFrom(ctx)))   // schema 里不可能有的策略
+    return entdomain.ListPage(ctx, q, ps, []article.OrderOption{article.ByTitle()}, r, ent.NewArticleResponse)
+}
+```
+
+错误分类是刻意缺席的：把驱动错误映射成 `ErrNotFound` 或 `ErrAlreadyExists` 属于
+运行时，是 issue #13。这些函数原样返回 ent 返回的错误。
 
 ### BaseService 模式
 

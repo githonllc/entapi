@@ -73,6 +73,40 @@ func dtoImports(node *gen.Type) []string {
 	return out
 }
 
+// wiringImports returns the import specs the wiring file needs.
+//
+// All three are unconditional, because every operation the wiring template
+// emits is emitted for every annotated entity:
+//
+//	context                    every operation takes one
+//	<the identifier's package>  the id parameter's type, e.g. github.com/google/uuid
+//	<pkg>/<entity>             IDEQ, in the by-id lookup
+//
+// The identifier's package is asked for by field rather than hardcoded: the id
+// type comes from the schema, and a builtin one (int, string) needs no import
+// at all — fieldImportSpec returns "" for those, and adding an unused import
+// would fail generation just as loudly as omitting a needed one.
+func wiringImports(node *gen.Type) []string {
+	if node == nil {
+		return nil
+	}
+
+	specs := map[string]bool{`"context"`: true}
+	if spec := fieldImportSpec(node, node.ID); spec != "" {
+		specs[spec] = true
+	}
+	if node.Config != nil {
+		specs[quoteImport("", node.Config.Package+"/"+node.Package())] = true
+	}
+
+	out := make([]string, 0, len(specs))
+	for spec := range specs {
+		out = append(out, spec)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // enumValidatorImport returns the import spec for the entity's own subpackage
 // when a create or patch request carries an enum, and "" otherwise.
 //

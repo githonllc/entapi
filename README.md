@@ -235,6 +235,16 @@ func GetOne[E, R, ID any](
     to func(*E) (*R, error),
     id ID,
 ) (*R, error)
+
+// Saver is the mutation-builder subset. Both *<T>Create and *<T>UpdateOne
+// carry it, so one routine serves create and update.
+type Saver[E any] interface {
+    Save(context.Context) (*E, error)
+}
+
+func SaveOne[B Saver[E], E, R any](
+    ctx context.Context, b B, to func(*E) (*R, error),
+) (*R, error)
 ```
 
 Type arguments are inferred at the call site — none are written by hand:
@@ -447,12 +457,13 @@ graph TD
 
 ## Generated Code
 
-For each annotated schema, up to four files are generated (all in the `ent/` package):
+For each annotated schema, up to five files are generated (all in the `ent/` package):
 
 | File | Contains |
 |------|----------|
 | `{entity}_dto.go` | `CreateRequest`, `PatchRequest`, their `Validate()`/`Apply` pair, and the response half below |
 | `{entity}_filter.go` | `{Entity}Filter` with its `Predicates()`, `{Entity}SortKeys` and `{Entity}Order` — the query half below |
+| `{entity}_wiring.go` | one free function per operation, each handing this entity's artifacts to the runtime — the wiring half below |
 | `{entity}_base_service.go` | `BaseService` with CRUD, Before/After hooks, `EntToResponse` |
 | `{entity}_base_handler.go` | `BaseHandler` with `ToResponse`, `ToResponseList`, `PartialUpdate` |
 
@@ -605,6 +616,49 @@ than emitting a call ent never wrote: a marker on a field withholding
 `ScopeQuery`, `Searchable` on a type with no `Contains` predicate, `Filterable`
 on a type with no predicates at all, and `Sortable` on a type ent's order
 builders skip because it is not comparable.
+
+### Wiring
+
+`{entity}_wiring.go` connects the artifacts above to the runtime. It is **free
+functions, not methods on a generated struct**: there is nothing to embed, no
+self-reference to install and no fixed set of override points.
+
+| Declaration | Body |
+|---|---|
+| `Get{Entity}(ctx, db, id)` | `entdomain.GetOne(ctx, {entity}ByID(db), New{Entity}Response, id)` |
+| `List{Entities}(ctx, db, f, r)` | `{Entity}Order(r)`, then `entdomain.ListPage(ctx, {Entity}QueryWithResponseEdges(db.{Entity}.Query()), f.Predicates(), order, r, New{Entity}Response)` |
+| `Create{Entity}(ctx, db, v)` | `entdomain.SaveOne(ctx, v.Apply(db.{Entity}.Create()), …)` |
+| `Update{Entity}(ctx, db, id, v)` | `entdomain.SaveOne(ctx, v.Apply(db.{Entity}.UpdateOneID(id)), …)` |
+| `Delete{Entity}(ctx, db, id)` | `db.{Entity}.DeleteOneID(id).Exec(ctx)` |
+
+The identifier's type comes from the schema; nothing is written for a particular
+one. Create and update take the **validated** request, because `Apply` is
+defined on that type alone — skipping validation is a compile error, not a
+discipline problem. Reads go through `Query` with the generated eager-load plan
+rather than through `{Entity}Client.Get`, which applies no plan and therefore
+cannot serve a response type that declares edges; for the same reason, an entity
+with response edges converts a just-saved row by reading it back.
+
+Four of the five bodies are a single call. `List` is the exception, and the
+reason is worth stating rather than hiding: `{Entity}Order` can fail, and
+`ListPage` takes resolved order options rather than a fallible producer of them,
+so the allow-list check is a statement of its own.
+
+**To replace one operation, write your own function and stop calling the
+generated one.** The others keep working; there is no contract to satisfy and
+nothing to re-register:
+
+```go
+func listMyArticles(ctx context.Context, db *ent.Client, f *ent.ArticleFilter, r entdomain.ListRequest) (*entdomain.Page[ent.ArticleResponse], error) {
+    q := ent.ArticleQueryWithResponseEdges(db.Article.Query())
+    ps := append(f.Predicates(), article.TenantID(tenantFrom(ctx)))   // policy the schema cannot contain
+    return entdomain.ListPage(ctx, q, ps, []article.OrderOption{article.ByTitle()}, r, ent.NewArticleResponse)
+}
+```
+
+Error classification is deliberately absent: mapping a driver error onto
+`ErrNotFound` or `ErrAlreadyExists` belongs to the runtime, and is issue #13.
+These functions return what ent returned.
 
 ### BaseService Pattern
 

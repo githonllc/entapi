@@ -25,7 +25,6 @@ var runtimeFiles = []string{
 	"types.go",
 	"errors.go",
 	"errors_map.go",
-	"cursor.go",
 }
 
 // TestRuntimeCoreImportsOnlyStdlib is criterion 5 of #24.

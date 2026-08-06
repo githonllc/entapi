@@ -309,6 +309,59 @@ if err := req.Validate(); err != nil { /* ... */ }
 `Validate()` 也不再拒绝超范围的 `Size` / `Page`——它们是被夹取而不是被拒绝。
 如果你的 API 此前对 `size=5000` 返回 `400`，请自己拿它和 `MaxPageSize` 比较。
 
+### 从游标编解码器与 `PageInfo` 迁移
+
+**`Cursor`、`PageInfo`、`EncodeCursor`、`DecodeCursor` 以及 `ListRequest.Cursor`
+字段全部删除，生成的 `{Entity}ListResponse` 也不再带 `PageInfo` 字段。**
+本包发布的分页只有偏移分页，没有第二种
+（[#6](https://github.com/githonllc/entdomain/issues/6)）。
+
+它们从来没有起过作用。没有任何生成代码调用过这套编解码器；唯一会编码游标的生成
+lister——base service 上的 `ListWithCursor`——已经随 base service 一起消失。
+`ListRequest.Cursor` 的注释写着「当 `Cursor` 被设置时使用 keyset 分页」，而
+**没有任何代码分支读过它**：设了它的调用方每次都静默拿到偏移分页的第一页。这正是
+这次删除针对的失败。`DecodeCursor` 另有 2^53 以上的精度损失——`ID any` 经
+`json.Unmarshal` 回来已是 `float64`，而用来修复它的 `f == float64(int64(f))` 判据
+对已经截断的值同样成立，所以它检测不到自己的缺陷。
+
+```go
+// 之前
+req := entdomain.ListRequest{Cursor: token, Size: 20}   // token 被忽略
+page, err := ent.ListArticles(ctx, db, filter, req)
+
+// 之后
+req := entdomain.ListRequest{Page: 2, Size: 20}
+page, err := ent.ListArticles(ctx, db, filter, req)
+```
+
+**线格式。** `{Entity}ListResponse` 少了第五个字段：
+
+```jsonc
+// 之前                                  // 之后
+{                                      {
+  "data": [ /* … */ ],                   "data": [ /* … */ ],
+  "total": 42,                           "total": 42,
+  "page": 1,                             "page": 1,
+  "size": 20,                            "size": 20
+  "pageInfo": {                        }
+    "hasNextPage": true,
+    "endCursor": "eyJpZCI6…"
+  }
+}
+```
+
+该字段是 `json:"pageInfo,omitempty"`，而**没有任何生成代码给它赋过值**，所以本库
+实际发出的响应里从未出现过 `pageInfo` 键。这次破坏针对的是已发布的 Go 结构体，
+不是任何真正发出过的报文：读 `resp.PageInfo` 的代码编译不过，读 JSON 的代码毫无
+变化。`{Entity}ListResponse` 保持与 `entdomain.Page[{Entity}Response]` 相同的四个
+字段，而后者正是 `ent.List{Entities}` 的返回类型。
+
+**如果你确实需要 keyset 分页**，自己写那条查询——生成的 filter、排序选项与转换器
+都还在，可以直接交给它，写法见
+[从 `BaseService` 与 `BaseHandler` 迁移](#从-baseservice-与-basehandler-迁移)。
+不要复活被删的编解码器：它从来没有需要兼容的调用方，而日后再加回游标是纯加法改动
+——正是这个不对称使得「删掉」是便宜的那个方向。
+
 ### 错误映射
 
 `ErrorMapper` 把持久层的错误翻译成本包的哨兵值。它以函数值的形式接收谓词，
@@ -898,19 +951,12 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 `ErrNotFound` 或 `ErrAlreadyExists` 是 `entdomain.ErrorMapper` 的职责，而接线还没有
 调用它（[#13](https://github.com/githonllc/entdomain/issues/13)）。
 
-**生成代码里的分页只有偏移分页。** `ent.List{Entities}` 走 `entdomain.ListPage`，
-深翻是 O(n)，每页还要付一次 `COUNT`。导出的游标编解码器（`Cursor`、`EncodeCursor`、
-`DecodeCursor`、`PageInfo`）虽然在公开 API 上可达，却没有任何生成代码使用它，
-并且它在 2^53 以上会丢精度（[#6](https://github.com/githonllc/entdomain/issues/6)）。
-
-**生成的代码不做任何错误分类。** 接线原样返回 ent 返回的错误；把驱动错误映射成
-`ErrNotFound` 或 `ErrAlreadyExists` 是 `entdomain.ErrorMapper` 的职责，而接线还没有
-调用它（[#13](https://github.com/githonllc/entdomain/issues/13)）。
-
-**生成代码里的分页只有偏移分页。** `ent.List{Entities}` 走 `entdomain.ListPage`，
-深翻是 O(n)，每页还要付一次 `COUNT`。导出的游标编解码器（`Cursor`、`EncodeCursor`、
-`DecodeCursor`、`PageInfo`）虽然在公开 API 上可达，却没有任何生成代码使用它，
-并且它在 2^53 以上会丢精度（[#6](https://github.com/githonllc/entdomain/issues/6)）。
+**分页只有偏移分页，全库如此。** `ent.List{Entities}` 走 `entdomain.ListPage`，
+深翻是 O(n)，每页还要付一次 `COUNT`，并发写入下还可能跳过或重复行。包内没有 keyset
+这条替代路径：导出的游标编解码器（`Cursor`、`EncodeCursor`、`DecodeCursor`、
+`PageInfo`）与 `ListRequest.Cursor` 字段，在生成代码不再引用它们之后已被删除
+（[#6](https://github.com/githonllc/entdomain/issues/6)）——见
+[从游标编解码器与 `PageInfo` 迁移](#从游标编解码器与-pageinfo-迁移)。
 
 **在 Windows 上导入本包会 panic。** 模板查找用操作系统分隔符拼路径，
 而嵌入文件系统恒用正斜杠，因此在包初始化阶段就加载失败

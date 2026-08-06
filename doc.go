@@ -10,8 +10,8 @@
 //
 //   - At runtime, it provides the types and helpers that the generated
 //     code depends on: the generic CRUD operations [ListPage], [GetOne] and
-//     [SaveOne], [Page], [ListRequest], [PageInfo], error sentinel values, and
-//     pointer utilities.
+//     [SaveOne], [Page], [ListRequest], error sentinel values, and pointer
+//     utilities.
 //
 // The runtime half imports no ent package. Its entity-specific parts arrive as
 // type parameters and function values supplied by generated wiring, so a
@@ -110,7 +110,11 @@
 //	resp, err := entdomain.SaveOne(ctx, v.Apply(db.User.Create()), NewUserResponse)
 //
 // [ListPage] uses offset pagination, which is O(n) deep, costs a COUNT per
-// page, and can skip or repeat rows under concurrent writes.
+// page, and can skip or repeat rows under concurrent writes. It is also the
+// only pagination this package has: Cursor, PageInfo, EncodeCursor,
+// DecodeCursor and ListRequest.Cursor have been removed, and generated
+// {Entity}ListResponse no longer carries a PageInfo field — see the README for
+// the migration note.
 //
 // [MaxPageSize] is the single place the page-size ceiling is decided, with a
 // single reaction to crossing it: [ListRequest.Limit] clamps. [ListRequest.Validate]

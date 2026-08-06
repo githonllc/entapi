@@ -37,7 +37,7 @@ package "entdomain (this repo)" {
   [Extension\nextension.go] as EXT
   [templateFuncs()\nfuncs*.go] as FUNCS
   [templates/*.tmpl\n//go:embed] as TMPL
-  [runtime types\ntypes.go · errors.go · cursor.go] as RT
+  [runtime types\ntypes.go · errors.go · query.go] as RT
   [annotations\nannotations.go] as ANN
 }
 
@@ -54,7 +54,7 @@ EXT --> IMP : format before write
 EXT --> DTO
 EXT --> FLT
 EXT --> WIR
-DTO ..> RT : Err* · PtrOrNil · PtrNilSafe · PageInfo
+DTO ..> RT : Err* · PtrOrNil · PtrNilSafe
 FLT ..> RT : ListRequest · ErrValidation
 WIR ..> RT : GetOne · ListPage · SaveOne · Page
 WIR ..> DTO
@@ -62,7 +62,7 @@ WIR ..> FLT
 @enduml
 ```
 
-The package has **two runtime identities that share one import path**. At codegen time it is a plugin loaded by `entc`; at application runtime it is the small library the emitted code links against (`entdomain.ErrNotFound`, `entdomain.PageInfo`, `entdomain.PtrOrNil`). `doc.go` states this explicitly, and the code confirms it: nothing in `extension.go` is reachable from a running server, and nothing in `errors.go`/`types.go` is reachable from codegen.
+The package has **two runtime identities that share one import path**. At codegen time it is a plugin loaded by `entc`; at application runtime it is the small library the emitted code links against (`entdomain.ErrNotFound`, `entdomain.Page`, `entdomain.PtrOrNil`). `doc.go` states this explicitly, and the code confirms it: nothing in `extension.go` is reachable from a running server, and nothing in `errors.go`/`types.go` is reachable from codegen.
 
 Two invariants carry the design:
 
@@ -81,7 +81,7 @@ Modules are file-level, not directory-level — the whole thing is `package entd
 | Template store | `template_loader.go`, `template_index.go`, `templates/*.tmpl` | embed + load templates at init | (unexported vars) | `embed` |
 | Template funcs | `funcs.go` + `funcs_fields.go`, `funcs_scope.go`, `funcs_typechecks.go`, `funcs_codegen.go`, `funcs_strings.go` | the FuncMap templates call | `templateFuncs()` (unexported) | annotations, `gen` |
 | Annotations | `annotations.go` | `DomainField`, `FieldScope`, fluent builders | ~30 exported builders | — |
-| Runtime | `types.go`, `errors.go`, `cursor.go` | types the emitted code links against | `ListRequest`, `PageInfo`, `Cursor`, `Err*`, `Ptr*` | stdlib only |
+| Runtime | `types.go`, `errors.go`, `errors_map.go`, `query.go`, `filter.go` | types the emitted code links against | `ListRequest`, `Page`, `ListPage`, `GetOne`, `SaveOne`, `Err*`, `Ptr*` | stdlib only |
 
 ```plantuml
 @startuml
@@ -103,7 +103,7 @@ package "shared" {
 package "runtime side" {
   [types.go] as T
   [errors.go] as E
-  [cursor.go] as C
+  [query.go] as C
 }
 EXT --> IDX
 EXT --> F
@@ -167,19 +167,15 @@ class ExtensionConfig {
   EntDomainPackage string
 }
 note bottom of ExtensionConfig : GenerateBaseService and\nGenerateBaseHandler removed in #29
-class PageInfo <<runtime>> {
-  HasNextPage bool
-  EndCursor string
-}
-class Cursor <<runtime>> {
-  ID any
-  Value any
-}
 DomainField *-- FieldMetadata
 DomainField --> FieldScope
 Extension *-- ExtensionConfig
-Cursor ..> PageInfo : EndCursor =\nEncodeCursor(c)
-note bottom of Cursor : ⚠️ no generated code\nreferences this — see §7
+note as N6
+  PageInfo and Cursor were runtime
+  classes here until #6. Nothing
+  generated referenced them once
+  base_service.tmpl went (#29).
+end note
 @enduml
 ```
 
@@ -208,13 +204,12 @@ type {{ $.Name }}UpdateRequest struct {
 ```
 
 ```go
-// templates/dto.tmpl — {{ $.Name }}ListResponse (only place PageInfo is emitted)
+// templates/dto.tmpl — {{ $.Name }}ListResponse (the same four fields as entdomain.Page)
 type {{ $.Name }}ListResponse struct {
-	Data     []*{{ $.Name }}Response  `json:"data"`
-	Total    int                      `json:"total"`
-	Page     int                      `json:"page"`
-	Size     int                      `json:"size"`
-	PageInfo *entdomain.PageInfo      `json:"pageInfo,omitempty"`
+	Data  []*{{ $.Name }}Response  `json:"data"`
+	Total int                      `json:"total"`
+	Page  int                      `json:"page"`
+	Size  int                      `json:"size"`
 }
 ```
 
@@ -383,7 +378,7 @@ The route it took is the route any new field capability takes:
 
 | Finding | Evidence | Impact |
 |---|---|---|
-| **`cursor.go` is orphaned from generated code** | `EncodeCursor`/`DecodeCursor`/`Cursor` appear in no template; the one generated cursor lister went with `base_service.tmpl` (#29) | the codec is exported, unused and lossy above 2^53. `dto.tmpl` still emits `PageInfo` in `{Entity}ListResponse`, which is the last generated reference and what #6 must remove |
+| ~~`cursor.go` is orphaned from generated code~~ **resolved (#6)** | `cursor.go` and `cursor_test.go` deleted; `ListRequest.Cursor` and the `PageInfo` field in `{Entity}ListResponse` removed with them | pagination is offset-only in the published API as well as in generated code. `TestCursorSymbolsStayOutOfThePackage` and `TestNoTemplateEmitsCursorMetadata` pin it |
 | **`{Entity}ListResponse` is emitted but unused** | `dto.tmpl`; the wiring returns `entdomain.Page[…]` instead | two list-response shapes ship, only one of which any generated function produces |
 | Formatting failure is non-fatal | `extension.go:170` logs a warning and writes unformatted source | a broken template yields a broken-but-written `.go` file |
 

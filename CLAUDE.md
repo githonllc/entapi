@@ -22,7 +22,7 @@ Note: the Makefile overrides `GOPATH=/tmp/gopath` and `GOMODCACHE=/tmp/gomodcach
 A single Go package (`entdomain`) that plays **two distinct roles**, both from the same package:
 
 1. **Code-generation time** — an [Ent](https://entgo.io) extension. Consumers wire it into their `entc.go`; it reads `DomainField` annotations off `gen.Field`s and writes `{entity}_dto.go`, `{entity}_filter.go`, `{entity}_wiring.go` into the consumer's `ent/` package.
-2. **Runtime** — the types the generated code links against: `PageInfo`/`Cursor`, `ListRequest`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, and `Ptr`/`PtrOrNil`/`PtrNilSafe`.
+2. **Runtime** — the types the generated code links against: `Page`/`ListRequest`, the generic `ListPage`/`GetOne`/`SaveOne`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, and `Ptr`/`PtrOrNil`/`PtrNilSafe`. There is no cursor type: `Cursor`, `PageInfo`, `EncodeCursor`, `DecodeCursor` and `ListRequest.Cursor` were removed on #6, and pagination is offset-only.
 
 There is no `main`, no example app, and no downstream ent project in this repo. Anything about *generated* code can only be verified by generating into a real ent project.
 

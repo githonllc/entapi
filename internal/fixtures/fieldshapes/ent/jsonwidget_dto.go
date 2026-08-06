@@ -336,11 +336,16 @@ func JSONWidgetQueryWithResponseEdges(q *JSONWidgetQuery) *JSONWidgetQuery {
 	return q
 }
 
-// JSONWidgetListResponse represents the list response for JSONWidget
+// JSONWidgetListResponse represents the list response for JSONWidget.
+//
+// Its four fields are offset pagination in full, and match entdomain.Page —
+// which is what ListJSONWidgets actually returns. A fifth field,
+// PageInfo, held a has-next-page flag and an opaque cursor. Nothing ever set
+// it: the cursor lister that would have left with the base service (#29), so
+// it left with the rest of the cursor surface on #6.
 type JSONWidgetListResponse struct {
-	Data     []*JSONWidgetResponse `json:"data"`
-	Total    int                   `json:"total"`
-	Page     int                   `json:"page"`
-	Size     int                   `json:"size"`
-	PageInfo *entdomain.PageInfo   `json:"pageInfo,omitempty"`
+	Data  []*JSONWidgetResponse `json:"data"`
+	Total int                   `json:"total"`
+	Page  int                   `json:"page"`
+	Size  int                   `json:"size"`
 }

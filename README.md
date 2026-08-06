@@ -844,6 +844,44 @@ if err != nil {
 resp, err := ent.NewPostResponse(p) // err is non-nil only if an edge was not loaded
 ```
 
+### The named list shape, and why it exists
+
+`List{Entities}` returns `*entdomain.Page[{Entity}Response]`, and that stays the
+wiring's signature. Alongside it `{entity}_dto.go` emits a named, non-generic
+twin plus its converter:
+
+| Declaration | Purpose |
+|---|---|
+| `{Entity}ListResponse` | the same four offset-pagination fields, under a name that lives in your `package ent` |
+| `New{Entity}ListResponse(p) *{Entity}ListResponse` | the conversion; `nil` in, `nil` out |
+
+The name is the point. OpenAPI annotation tooling of the swaggo class has no
+syntax for a generic instantiation — there is no way to write
+`entdomain.Page[CourierResponse]` in a `@Success` line — so a handler converts at
+the transport boundary and annotates the named type:
+
+```go
+// ListCouriers godoc
+// @Success 200 {object} ent.CourierListResponse
+func (h *Handler) ListCouriers(c echo.Context) error {
+    page, err := ent.ListCouriers(c.Request().Context(), h.db, filter, req)
+    if err != nil {
+        return err
+    }
+    resp := ent.NewCourierListResponse(page)
+    return c.JSON(http.StatusOK, resp)
+}
+```
+
+Converting costs nothing on the wire: `{Entity}ListResponse(*p)` is a plain Go
+type conversion, so the payload is byte-for-byte what marshalling the page
+produces (asserted in `internal/fixtures/wiring/e2e`). It also carries the shape
+contract — a conversion is legal only while the two structs agree on field set,
+type and order, so any drift between `Page` and `{Entity}ListResponse` stops
+every generated package from compiling. Struct tags are the one thing a
+conversion does not check; the golden-JSON test in `internal/fixtures/basic`
+guards those.
+
 ### Filters, free-text search and the sort allow-list
 
 `{entity}_filter.go` is one artifact for three dimensions of one list endpoint.

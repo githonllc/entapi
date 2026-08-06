@@ -377,16 +377,28 @@ func NamedTypeWidgetQueryWithResponseEdges(q *NamedTypeWidgetQuery) *NamedTypeWi
 	return q
 }
 
-// NamedTypeWidgetListResponse represents the list response for NamedTypeWidget.
-//
-// Its four fields are offset pagination in full, and match entdomain.Page —
-// which is what ListNamedTypeWidgets actually returns. A fifth field,
-// PageInfo, held a has-next-page flag and an opaque cursor. Nothing ever set
-// it: the cursor lister that would have left with the base service (#29), so
-// it left with the rest of the cursor surface on #6.
+// NamedTypeWidgetListResponse is the NAMED, non-generic shape of one list page —
+// for OpenAPI/swaggo-class annotation tooling, which cannot express the
+// generic entdomain.Page[NamedTypeWidgetResponse] that ListNamedTypeWidgets returns.
+// Convert at the handler boundary with NewNamedTypeWidgetListResponse.
+// (A fifth field, PageInfo, carried cursor metadata until #6 removed it.)
 type NamedTypeWidgetListResponse struct {
 	Data  []*NamedTypeWidgetResponse `json:"data"`
 	Total int                        `json:"total"`
 	Page  int                        `json:"page"`
 	Size  int                        `json:"size"`
+}
+
+// NewNamedTypeWidgetListResponse converts the page ListNamedTypeWidgets returns into
+// the named list shape. The conversion expression is the shape contract:
+// if NamedTypeWidgetListResponse and entdomain.Page ever diverge in field set,
+// type or order, this line stops compiling in every generated package.
+// JSON tags are outside what a conversion checks; the wire-format golden
+// test in the basic fixture guards those.
+func NewNamedTypeWidgetListResponse(p *entdomain.Page[NamedTypeWidgetResponse]) *NamedTypeWidgetListResponse {
+	if p == nil {
+		return nil
+	}
+	r := NamedTypeWidgetListResponse(*p)
+	return &r
 }

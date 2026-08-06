@@ -351,16 +351,28 @@ func EnumWidgetQueryWithResponseEdges(q *EnumWidgetQuery) *EnumWidgetQuery {
 	return q
 }
 
-// EnumWidgetListResponse represents the list response for EnumWidget.
-//
-// Its four fields are offset pagination in full, and match entdomain.Page —
-// which is what ListEnumWidgets actually returns. A fifth field,
-// PageInfo, held a has-next-page flag and an opaque cursor. Nothing ever set
-// it: the cursor lister that would have left with the base service (#29), so
-// it left with the rest of the cursor surface on #6.
+// EnumWidgetListResponse is the NAMED, non-generic shape of one list page —
+// for OpenAPI/swaggo-class annotation tooling, which cannot express the
+// generic entdomain.Page[EnumWidgetResponse] that ListEnumWidgets returns.
+// Convert at the handler boundary with NewEnumWidgetListResponse.
+// (A fifth field, PageInfo, carried cursor metadata until #6 removed it.)
 type EnumWidgetListResponse struct {
 	Data  []*EnumWidgetResponse `json:"data"`
 	Total int                   `json:"total"`
 	Page  int                   `json:"page"`
 	Size  int                   `json:"size"`
+}
+
+// NewEnumWidgetListResponse converts the page ListEnumWidgets returns into
+// the named list shape. The conversion expression is the shape contract:
+// if EnumWidgetListResponse and entdomain.Page ever diverge in field set,
+// type or order, this line stops compiling in every generated package.
+// JSON tags are outside what a conversion checks; the wire-format golden
+// test in the basic fixture guards those.
+func NewEnumWidgetListResponse(p *entdomain.Page[EnumWidgetResponse]) *EnumWidgetListResponse {
+	if p == nil {
+		return nil
+	}
+	r := EnumWidgetListResponse(*p)
+	return &r
 }

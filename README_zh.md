@@ -773,6 +773,40 @@ if err != nil {
 resp, err := ent.NewPostResponse(p) // 仅当某条边未加载时 err 才非 nil
 ```
 
+### 具名列表类型，以及它存在的理由
+
+`List{Entities}` 返回 `*entdomain.Page[{Entity}Response]`，接线签名保持不变。与它
+并列，`{entity}_dto.go` 还发射一个具名的、非泛型的孪生类型及其转换函数：
+
+| 声明 | 作用 |
+|---|---|
+| `{Entity}ListResponse` | 同样的四个偏移分页字段，但类型名落在你自己的 `package ent` 里 |
+| `New{Entity}ListResponse(p) *{Entity}ListResponse` | 转换函数；传 `nil` 得 `nil` |
+
+要的就是这个名字。swaggo 一类的 OpenAPI 注解工具没有表达泛型实例化的语法——
+`@Success` 那一行里写不出 `entdomain.Page[CourierResponse]`——所以 handler 在传输
+边界上转换一次，再对具名类型下注解：
+
+```go
+// ListCouriers godoc
+// @Success 200 {object} ent.CourierListResponse
+func (h *Handler) ListCouriers(c echo.Context) error {
+    page, err := ent.ListCouriers(c.Request().Context(), h.db, filter, req)
+    if err != nil {
+        return err
+    }
+    resp := ent.NewCourierListResponse(page)
+    return c.JSON(http.StatusOK, resp)
+}
+```
+
+转换在线格式上零代价：`{Entity}ListResponse(*p)` 是一次普通的 Go 类型转换，产出的
+载荷与直接 marshal 那个 page 逐字节相同（`internal/fixtures/wiring/e2e` 中有断言）。
+它同时承载形状契约——只有当两个结构体的字段集、类型、顺序都一致时转换才合法，所以
+`Page` 与 `{Entity}ListResponse` 之间的任何漂移都会让**每一个**生成包编译失败。
+类型转换唯一不检查的是 struct tag；那一半由 `internal/fixtures/basic` 的
+golden JSON 测试守着。
+
 ### 过滤、全文检索与排序白名单
 
 `{entity}_filter.go` 把一个列表端点的三个维度收进同一个产物。字段必须**同时**带有

@@ -1,7 +1,9 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -181,6 +183,34 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 		}
 		if got, want := titles(p), []string{"gamma"}; !equal(got, want) {
 			t.Errorf("second page = %v, want %v", got, want)
+		}
+	})
+
+	// #65: the named, non-generic list shape a consumer annotates for
+	// OpenAPI/swaggo is a plain conversion of the page the wiring returns, so
+	// the two must be indistinguishable on the wire. The conversion already
+	// makes a field-set, type or order drift a compile error; this asserts the
+	// remaining half — that converting changes no byte of the payload.
+	t.Run("the named list shape marshals byte-identically to the page", func(t *testing.T) {
+		p, err := ent.ListArticles(ctx, c, nil, entdomain.ListRequest{SortBy: "title"})
+		if err != nil {
+			t.Fatalf("ListArticles: %v", err)
+		}
+
+		fromPage, err := json.Marshal(p)
+		if err != nil {
+			t.Fatalf("marshal page: %v", err)
+		}
+		fromNamed, err := json.Marshal(ent.NewArticleListResponse(p))
+		if err != nil {
+			t.Fatalf("marshal list response: %v", err)
+		}
+		if !bytes.Equal(fromPage, fromNamed) {
+			t.Errorf("ArticleListResponse marshals to\n  %s\npage marshals to\n  %s", fromNamed, fromPage)
+		}
+
+		if ent.NewArticleListResponse(nil) != nil {
+			t.Error("NewArticleListResponse(nil) must be nil, matching the nil convention of NewArticleResponse")
 		}
 	})
 

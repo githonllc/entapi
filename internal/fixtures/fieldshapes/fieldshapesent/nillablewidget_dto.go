@@ -360,16 +360,28 @@ func NillableWidgetQueryWithResponseEdges(q *NillableWidgetQuery) *NillableWidge
 	return q
 }
 
-// NillableWidgetListResponse represents the list response for NillableWidget.
-//
-// Its four fields are offset pagination in full, and match entdomain.Page —
-// which is what ListNillableWidgets actually returns. A fifth field,
-// PageInfo, held a has-next-page flag and an opaque cursor. Nothing ever set
-// it: the cursor lister that would have left with the base service (#29), so
-// it left with the rest of the cursor surface on #6.
+// NillableWidgetListResponse is the NAMED, non-generic shape of one list page —
+// for OpenAPI/swaggo-class annotation tooling, which cannot express the
+// generic entdomain.Page[NillableWidgetResponse] that ListNillableWidgets returns.
+// Convert at the handler boundary with NewNillableWidgetListResponse.
+// (A fifth field, PageInfo, carried cursor metadata until #6 removed it.)
 type NillableWidgetListResponse struct {
 	Data  []*NillableWidgetResponse `json:"data"`
 	Total int                       `json:"total"`
 	Page  int                       `json:"page"`
 	Size  int                       `json:"size"`
+}
+
+// NewNillableWidgetListResponse converts the page ListNillableWidgets returns into
+// the named list shape. The conversion expression is the shape contract:
+// if NillableWidgetListResponse and entdomain.Page ever diverge in field set,
+// type or order, this line stops compiling in every generated package.
+// JSON tags are outside what a conversion checks; the wire-format golden
+// test in the basic fixture guards those.
+func NewNillableWidgetListResponse(p *entdomain.Page[NillableWidgetResponse]) *NillableWidgetListResponse {
+	if p == nil {
+		return nil
+	}
+	r := NillableWidgetListResponse(*p)
+	return &r
 }

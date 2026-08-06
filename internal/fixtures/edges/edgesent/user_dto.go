@@ -335,16 +335,28 @@ func UserQueryWithResponseEdges(q *UserQuery) *UserQuery {
 	return q.WithPosts()
 }
 
-// UserListResponse represents the list response for User.
-//
-// Its four fields are offset pagination in full, and match entdomain.Page —
-// which is what ListUsers actually returns. A fifth field,
-// PageInfo, held a has-next-page flag and an opaque cursor. Nothing ever set
-// it: the cursor lister that would have left with the base service (#29), so
-// it left with the rest of the cursor surface on #6.
+// UserListResponse is the NAMED, non-generic shape of one list page —
+// for OpenAPI/swaggo-class annotation tooling, which cannot express the
+// generic entdomain.Page[UserResponse] that ListUsers returns.
+// Convert at the handler boundary with NewUserListResponse.
+// (A fifth field, PageInfo, carried cursor metadata until #6 removed it.)
 type UserListResponse struct {
 	Data  []*UserResponse `json:"data"`
 	Total int             `json:"total"`
 	Page  int             `json:"page"`
 	Size  int             `json:"size"`
+}
+
+// NewUserListResponse converts the page ListUsers returns into
+// the named list shape. The conversion expression is the shape contract:
+// if UserListResponse and entdomain.Page ever diverge in field set,
+// type or order, this line stops compiling in every generated package.
+// JSON tags are outside what a conversion checks; the wire-format golden
+// test in the basic fixture guards those.
+func NewUserListResponse(p *entdomain.Page[UserResponse]) *UserListResponse {
+	if p == nil {
+		return nil
+	}
+	r := UserListResponse(*p)
+	return &r
 }

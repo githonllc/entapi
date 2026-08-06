@@ -4,13 +4,13 @@
 
 ## 1. Project Overview
 
-An [Ent](https://entgo.io) codegen extension: it reads `DomainField` annotations off ent schema fields and writes HTTP DTOs, a CRUD service with hooks, and a response-conversion handler into the consumer's `ent/` package.
+An [Ent](https://entgo.io) codegen extension: it reads `DomainField` and `DomainEdge` annotations off ent schema fields and edges and writes HTTP DTOs, a query surface, and one wiring function per operation into the consumer's `ent/` package.
 
 | | |
 |---|---|
 | Language / toolchain | Go 1.23 (`go.mod` — `toolchain go1.23.3`) |
 | Direct dependencies | `entgo.io/ent v0.14.4`, `golang.org/x/tools v0.30.0` (only for `imports.Process`) |
-| Emitted code depends on | `github.com/google/uuid` (hardcoded in `templates/base_service.tmpl:17`) |
+| Emitted code depends on | nothing beyond ent and this package. The identifier's import is derived per entity from `$.ID.Type` (`funcs_imports.go`); an `int` key needs none |
 | Shape | one flat package, no `main`, no internal packages, no example app |
 | Size | 1,541 LOC non-test Go · 3,186 LOC test Go · 664 lines of templates |
 | Test coverage | 81.1% of statements (`go test -coverprofile`); suite is **red** — see §7 |
@@ -28,8 +28,8 @@ package "Consumer project" {
   [ent/schema/*.go\nfield.String(...).Annotations(...)] as SCHEMA
   folder "ent/ (generated)" {
     [{entity}_dto.go] as DTO
-    [{entity}_base_service.go] as BSVC
-    [{entity}_base_handler.go] as BHDL
+    [{entity}_filter.go] as FLT
+    [{entity}_wiring.go] as WIR
   }
 }
 
@@ -52,12 +52,13 @@ EXT --> TMPL : text/template
 EXT --> FUNCS : FuncMap = gen.Funcs + templateFuncs + entdomainPkg
 EXT --> IMP : format before write
 EXT --> DTO
-EXT --> BSVC
-EXT --> BHDL
-DTO ..> RT : PageInfo
-BSVC ..> RT : Err* · PtrOrNil · PtrNilSafe
-BHDL ..> DTO
-BSVC ..> DTO
+EXT --> FLT
+EXT --> WIR
+DTO ..> RT : Err* · PtrOrNil · PtrNilSafe · PageInfo
+FLT ..> RT : ListRequest · ErrValidation
+WIR ..> RT : GetOne · ListPage · SaveOne · Page
+WIR ..> DTO
+WIR ..> FLT
 @enduml
 ```
 
@@ -65,7 +66,7 @@ The package has **two runtime identities that share one import path**. At codege
 
 Two invariants carry the design:
 
-- **Annotations are advisory to the HTTP layer only.** `annotations.go:3-7` and the header of `templates/dto.tmpl` both say it; the code enforces it structurally, because scopes are consumed *only* by the field-selection funcs that build request/response structs (`funcs_fields.go`). No generated service method filters by scope — `Base{Entity}Service` holds a raw `*Client` and can touch any column.
+- **Annotations are advisory to the HTTP layer only.** `annotations.go:3-7` and the header of `templates/dto.tmpl` both say it; the code enforces it structurally, because scopes are consumed *only* by the field-selection funcs that build request/response structs (`funcs_fields.go`). No generated function filters by scope — the wiring takes a `*Client` from the caller and can touch any column, which is why row-level visibility belongs in an ent interceptor rather than here.
 - **Generation is per-`gen.Type`, keyed on annotation presence.** `extension.go:75` skips any node with zero `domainFields`, which is why unannotated entities in a mixed schema produce no files at all.
 
 The extension deliberately does **not** use Ent's `GraphTemplate` mechanism: `Extension.Templates()` returns an empty slice (`extension.go:60`) and all output is written by one `gen.Hook`.
@@ -163,10 +164,9 @@ class Extension <<aggregate root>> {
   Templates() []*gen.Template
 }
 class ExtensionConfig {
-  GenerateBaseService bool
-  GenerateBaseHandler bool
   EntDomainPackage string
 }
+note bottom of ExtensionConfig : GenerateBaseService and\nGenerateBaseHandler removed in #29
 class PageInfo <<runtime>> {
   HasNextPage bool
   EndCursor string
@@ -242,12 +242,9 @@ loop for node in g.Nodes
     note right: unannotated entity ⇒ no files
   else annotated
     EXT -> TT : Parse(dtoTemplate).Execute(node)
-    opt Config.GenerateBaseService
-      EXT -> TT : Parse(baseServiceTemplate).Execute(node)
-    end
-    opt Config.GenerateBaseHandler
-      EXT -> TT : Parse(baseHandlerTemplate).Execute(node)
-    end
+    EXT -> TT : Parse(filterTemplate).Execute(node)
+    EXT -> TT : Parse(wiringTemplate).Execute(node)
+    note right: no conditional output since #29 —\nan artifact that is sometimes absent\nis one the next file cannot depend on
     EXT -> IMP : Process(path, buf)
     alt format error
       IMP --> EXT : err
@@ -266,8 +263,8 @@ Templates are loaded at **package init**, not at generation time:
 ```go
 // template_index.go
 var dtoTemplate = mustLoadTemplate("dto")
-var baseServiceTemplate = mustLoadTemplate("base_service")
-var baseHandlerTemplate = mustLoadTemplate("base_handler")
+var filterTemplate = mustLoadTemplate("filter")
+var wiringTemplate = mustLoadTemplate("wiring")
 ```
 
 `mustLoadTemplate` panics on a missing file (`template_loader.go`), so a renamed or deleted `.tmpl` fails on *import* of the package, not when someone runs `go generate`.
@@ -278,54 +275,51 @@ var baseHandlerTemplate = mustLoadTemplate("base_handler")
 @startuml
 autonumber
 actor Client
-participant "your Handler\n(embeds BaseXHandler)" as H
-participant "your Service\n(embeds BaseXService)" as S
-participant "BaseXService" as B
+participant "your Handler" as H
+participant "UpdateX\n(wiring.tmpl)" as W
+participant "entdomain.SaveOne" as RT
 participant "ent.Client" as EC
 
-Client -> H : PUT /x/:id
-H -> H : req.Validate()  ' dto.tmpl
-H -> B : PartialUpdate(ctx, svc, id, req)
-B -> S : Update(ctx, id, req)
-S -> B : (embedded)
-B -> B : hooks().BeforeUpdate(ctx, id, req)
-note right of B
-  hooks() returns s.self if SetSelf was called,
-  else falls back to the no-op defaults on
-  BaseXService itself (base_service.tmpl:77)
+Client -> H : PATCH /x/:id
+H -> H : req.Validate()  ' dto.tmpl — returns ValidXPatchRequest
+note right of H
+  Apply exists only on the validated type,
+  so skipping validation is a compile error
+  rather than a discipline problem
 end note
-alt BeforeUpdate returns err
-  B --> H : err (abort, nothing written)
-else ok
-  B -> EC : UpdateOneID(id) + ApplyXUpdateRequest(builder, req)
-  EC --> B : entity | error
-  alt IsNotFound(err)
-    B --> H : %w entdomain.ErrNotFound
-  else IsConstraintError(err)
-    B --> H : %w entdomain.ErrAlreadyExists
-  end
-  B -> B : hooks().AfterUpdate(ctx, entity)
-  B -> H : XEntToResponse(entity)
-end
+H -> W : UpdateX(ctx, db, id, v)
+W -> RT : SaveOne(ctx, v.Apply(db.X.UpdateOneID(id)), conv)
+RT -> EC : Save(ctx)
+EC --> RT : entity | error
+note right of RT
+  the error is returned unchanged.
+  Classifying it as ErrNotFound or
+  ErrAlreadyExists is ErrorMapper's job
+  and the wiring does not call it yet (#13)
+end note
+RT -> RT : conv(entity)
+note right of RT
+  conv is NewXResponse, or xReloaded(ctx, db)
+  when the response declares edges — a mutation
+  builder's Save loads none. Decided at
+  GENERATION time from the schema, not at runtime
+end note
+RT --> W : *XResponse | error
+W --> H : *XResponse | error
 H --> Client : XResponse
 @enduml
 ```
 
-The hook indirection is the one genuinely clever mechanism, and it is four lines:
+There is no hook indirection any more, and no override points. A consumer who
+needs different behaviour writes their own function and stops calling the
+generated one — the operations they did not replace keep working, because
+nothing is registered anywhere. `internal/fixtures/wiring/e2e` asserts exactly
+that, alongside the behaviour of every generated operation against SQLite.
 
-```go
-// templates/base_service.tmpl — Base{{ $.Name }}Service.hooks()
-func (s *Base{{ $.Name }}Service) hooks() Base{{ $.Name }}ServiceHooks {
-	if s.self != nil {
-		return s.self
-	}
-	return s
-}
-```
-
-The base struct satisfies its own hook interface with no-ops, so `SetSelf` is optional and forgetting it degrades to "no hooks" instead of a nil panic — but also silently, which is the trade-off.
-
-Two deliberate holes, both documented in the template: `DeleteBatch` skips Before/After hooks entirely (`base_service.tmpl:198`), and `ListWithCursor` orders by ID only.
+What went with the base service (#29): `SetSelf` dispatch, whose every failure
+mode was silent; the `uuid.UUID` hardcoding; the convention-based soft delete,
+which was write-only and disabled downstream delete hooks; and
+`XEntToResponse`, which swallowed the not-loaded-edge error and returned nil.
 
 ## 6. Design & Conventions
 
@@ -334,19 +328,21 @@ Two deliberate holes, both documented in the template: `DeleteBatch` skips Befor
 | Functional options over config structs | `extension.go` — `Option func(*ExtensionConfig)`, `NewExtensionWithOptions(opts ...Option)` |
 | Fluent immutable builders | `annotations.go` — every `With*`/`As*` has a value receiver returning `DomainField` |
 | Sentinel errors + `Is*` predicates, never string matching | `errors.go` — `ErrNotFound` + `IsNotFound(err) { return errors.Is(...) }` |
-| Errors wrapped with `%w` at the generated boundary | `base_service.tmpl:141` — `fmt.Errorf("%w: %v", entdomain.ErrAlreadyExists, err)` |
+| Errors wrapped with `%w` at the generated boundary | `dto.tmpl` — `fmt.Errorf("%w: %s is required", entdomain.ErrValidation, …)` in the generated `Validate()`. The wiring wraps nothing: it returns what ent returned (#13) |
 | Codegen helpers split by concern, registered in one map | `funcs.go` — the registry is the only thing templates can see |
 | Test fixtures built by hand, never from a live schema | `test_helpers_test.go` — `newStringField`, `newTestType`, `assertContains` |
 | Emitted code asserts on substrings, not compilation | `funcs_codegen_test.go` — `TestFieldPredicate_*` |
 
 Cross-cutting concerns are mostly *absent by design* — no logging (one `log.Printf` in `writeFile`), no auth, no caching, no concurrency. `.claude/skills/entdomain/SKILL.md` describes tenant and soft-delete interceptors; those live in a **consumer** project (`internal/database/`), not here.
 
-Soft delete is annotation-detected, and lives at ent's interceptor layer rather than in the generated service (#18). `entdomain.SoftDeleteMixin` (`softdelete.go`) declares the `deleted_at` field plus a `DomainSoftDelete` marker; ent merges a mixin's annotations into the schema's own (`entc/load/schema.go:314`), so embedding the mixin is what makes `isSoftDeletable` true:
+Soft delete is annotation-detected, and lives at ent's interceptor layer rather than in generated code at all (#18). `entdomain.SoftDeleteMixin` (`softdelete.go`) declares the `deleted_at` field plus a `DomainSoftDelete` marker; ent merges a mixin's annotations into the schema's own (`entc/load/schema.go:314`), so embedding the mixin is what makes `isSoftDeletable` true:
 
 ```go
 // funcs_softdelete.go — isSoftDeletable
 return softDeleteAnnotation(node) != nil
 ```
+
+It replaced a convention: a field literally named `deleted_at` used to make the generated service write a tombstone itself. That convention could not tell an entity opting in from one that merely owns a column with that name, and it only ever reached the write path, so reads still returned tombstoned rows. Its host went with the base service (#29), and the wiring's `DeleteX` / `DeleteBatchXs` now issue ordinary ent deletes (`OpDeleteOne` / `OpDelete`) for the hook to rewrite.
 
 The convention it replaced (`hasSoftDelete`: a `Nillable` `time.Time` field literally named `deleted_at`) could not tell an entity that opted in from one that merely owned a column with that name. `templates/softdelete.tmpl` is the only template rendered over a `*gen.Graph` rather than a `*gen.Type`: it emits one type switch for the whole schema, plus the `RegisterSoftDelete` line a consumer calls.
 
@@ -377,18 +373,18 @@ The route it took is the route any new field capability takes:
 5. `funcs_fields.go` — how scopes become struct fields
 6. `funcs_scope.go` — `getDomainFieldAnnotation`, the dual-format gate
 7. `funcs_filter.go` + `templates/filter.tmpl` — how the query markers become filter parameters and a sort allow-list
-8. `templates/base_service.tmpl` — hooks, CRUD, `Apply*Request`, `EntToResponse`
-9. `funcs_softdelete.go` + `templates/softdelete.tmpl` — the one graph-level generator, and the only feature with a behavioural proof (`internal/softdeleteproof`)
-10. `templates/base_handler.tmpl` — 60 lines, the whole handler contract
-11. `funcs_codegen.go` — `setFieldCallReq`, the whole file since #7
+8. `templates/wiring.tmpl` — one free function per operation, and the comments explaining why each body is a single call
+9. `query.go` — `GetOne`, `ListPage`, `SaveOne`: the generic half the wiring calls
+10. `funcs_softdelete.go` + `templates/softdelete.tmpl` — the one graph-level generator, and the only feature with a behavioural proof (`internal/softdeleteproof`)
+11. `funcs_imports.go` — how each template declares its own imports, including the identifier's
+12. `funcs_codegen.go` — `fieldValueExpr`, the whole file since #7
 
 ### Risk areas & discrepancies
 
 | Finding | Evidence | Impact |
 |---|---|---|
-| **`cursor.go` is orphaned from generated code** | `ListWithCursor` does `uuid.Parse(cursor)` and returns `entity.ID.String()` (`base_service.tmpl:223,248`); `EncodeCursor`/`DecodeCursor`/`Cursor` appear in no template | two incompatible cursor formats ship in one package; `ListRequest.Cursor` documents the base64 one |
-| **`ListRequest` is never emitted** | no template references it | consumers must wire pagination input themselves |
-| **BaseService is UUID-only** | `uuid.UUID` hardcoded in every hook and CRUD signature (`base_service.tmpl`) | int/string primary keys are now refused at generation time by `unsupportedIDType` (`schema_conflicts.go`) instead of producing uncompilable services; widening the set is #29 |
+| **`cursor.go` is orphaned from generated code** | `EncodeCursor`/`DecodeCursor`/`Cursor` appear in no template; the one generated cursor lister went with `base_service.tmpl` (#29) | the codec is exported, unused and lossy above 2^53. `dto.tmpl` still emits `PageInfo` in `{Entity}ListResponse`, which is the last generated reference and what #6 must remove |
+| **`{Entity}ListResponse` is emitted but unused** | `dto.tmpl`; the wiring returns `entdomain.Page[…]` instead | two list-response shapes ship, only one of which any generated function produces |
 | Formatting failure is non-fatal | `extension.go:170` logs a warning and writes unformatted source | a broken template yields a broken-but-written `.go` file |
 
 The declared-only surface is no longer established by grepping. `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` (`annotation_surface_test.go`) derives every exported knob by reflection over `DomainField`, `FieldMetadata`, `DomainEdge`, `DomainConfig` and the scope vocabulary, then decides reachability by toggling each and asking whether any *registered* template function returns anything different. 20 of the 27 knobs change nothing. The seven that reach generation are `DomainField.Scopes`, `DomainField.Required`, `DomainEdge.Scopes`, `DomainEdge.JSONKey`, `ScopeCreate`, `ScopeUpdate` and `ScopeResponse`.

@@ -94,3 +94,18 @@ func UpdateAccount(ctx context.Context, db *Client, id uuid.UUID, v *ValidAccoun
 func DeleteAccount(ctx context.Context, db *Client, id uuid.UUID) error {
 	return db.Account.DeleteOneID(id).Exec(ctx)
 }
+
+// DeleteBatchAccounts removes several Accounts in one statement and
+// returns how many rows it deleted.
+//
+// The count is returned rather than discarded because ent computes it and the
+// caller cannot recover it afterwards: a batch delete reports no error for an
+// id that matched nothing, so "how many of the ids existed" is answerable here
+// and nowhere else.
+//
+// An empty list deletes nothing. That is ent's own reading of IDIn with no
+// arguments, not a guard written here — a guard would be a second place for the
+// rule to live, and the failure it protects against is unrecoverable.
+func DeleteBatchAccounts(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
+	return db.Account.Delete().Where(account.IDIn(ids...)).Exec(ctx)
+}

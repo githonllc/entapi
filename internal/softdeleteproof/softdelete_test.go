@@ -262,31 +262,40 @@ func TestHardDeleteEntitiesAreUnaffected(t *testing.T) {
 	}
 }
 
-// TestGeneratedServiceDeleteRoutesThroughTheHook is acceptance criterion 5:
-// the generated Delete and DeleteBatch issue an ordinary ent delete and let the
-// hook rewrite it. If they wrote their own tombstone instead there would be two
-// implementations, and the one on the query side would have to agree with a
-// second one it cannot see.
-func TestGeneratedServiceDeleteRoutesThroughTheHook(t *testing.T) {
+// TestGeneratedBatchDeleteRoutesThroughTheHook is acceptance criterion 5 for
+// the batch delete, which is the half that used to live on the generated
+// BaseDocService and now lives in the wiring (#29):
+//
+//	DeleteBatchDocs -> db.Doc.Delete().Where(doc.IDIn(ids...)).Exec(ctx)
+//
+// That is OpDelete where DeleteDoc is OpDeleteOne, and softDeleteHook fires on
+// `OpDelete|OpDeleteOne`. Reading those two facts together says it must work.
+// It is asserted anyway, because the hook does not merely observe the mutation
+// — it calls SetOp(OpUpdate) and re-runs it, and the value that comes back out
+// of Exec is produced by a different builder than the one the caller invoked.
+//
+// So the RETURNED COUNT is asserted separately from the rows on disk. A batch
+// delete that tombstones three rows and reports 0 would satisfy every other
+// assertion in this file while silently breaking the one thing the count is
+// for, which is telling a caller how many of the ids existed.
+func TestGeneratedBatchDeleteRoutesThroughTheHook(t *testing.T) {
 	c, db, ctx := newClient(t)
-	svc := &ent.BaseDocService{DB: c}
 
-	one := newDoc(t, c, ctx, "one")
-	if err := svc.Delete(ctx, one.ID); err != nil {
-		t.Fatalf("service delete: %v", err)
-	}
-	if n := rowsOnDisk(t, db, doc.Table, one.ID); n != 1 {
-		t.Errorf("BaseDocService.Delete hard-deleted the row: %d on disk, want 1", n)
-	}
-
+	kept := newDoc(t, c, ctx, "kept")
 	a := newDoc(t, c, ctx, "a")
 	b := newDoc(t, c, ctx, "b")
-	if err := svc.DeleteBatch(ctx, []uuid.UUID{a.ID, b.ID}); err != nil {
-		t.Fatalf("service delete batch: %v", err)
+
+	n, err := ent.DeleteBatchDocs(ctx, c, []uuid.UUID{a.ID, b.ID})
+	if err != nil {
+		t.Fatalf("DeleteBatchDocs: %v", err)
 	}
+	if n != 2 {
+		t.Errorf("DeleteBatchDocs reported %d rows, want 2 — the count survives the OpDelete -> OpUpdate rewrite or it does not", n)
+	}
+
 	for _, id := range []uuid.UUID{a.ID, b.ID} {
-		if n := rowsOnDisk(t, db, doc.Table, id); n != 1 {
-			t.Errorf("BaseDocService.DeleteBatch hard-deleted %s: %d on disk, want 1", id, n)
+		if got := rowsOnDisk(t, db, doc.Table, id); got != 1 {
+			t.Errorf("DeleteBatchDocs hard-deleted %s: %d rows on disk, want 1", id, got)
 		}
 	}
 
@@ -294,15 +303,43 @@ func TestGeneratedServiceDeleteRoutesThroughTheHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
-	if len(left) != 0 {
-		t.Errorf("after Delete + DeleteBatch the client still returns %d rows %v", len(left), ids(left))
+	if len(left) != 1 || left[0].ID != kept.ID {
+		t.Errorf("after the batch delete the client returns %v, want only %s", ids(left), kept.ID)
 	}
 
-	// A second Delete of an already-tombstoned row is a not-found, not a
-	// silent re-stamp: the rewritten update carries the same predicate the
-	// read side uses.
-	if err := svc.Delete(ctx, one.ID); err == nil {
-		t.Error("deleting an already soft-deleted row succeeded; want a not-found error")
+	// Batching the same ids again matches nothing: the rewritten update carries
+	// the same DeletedAtIsNil predicate the read side uses, so an already
+	// tombstoned row is not re-stamped and is not counted.
+	n, err = ent.DeleteBatchDocs(ctx, c, []uuid.UUID{a.ID, b.ID})
+	if err != nil {
+		t.Fatalf("second DeleteBatchDocs: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("re-deleting two already soft-deleted rows reported %d, want 0", n)
+	}
+
+	// An entity WITHOUT the mixin really loses its rows to the same call shape.
+	// Without this, "the rows are still there" would be indistinguishable from
+	// a batch delete that never deleted anything.
+	l1, err := c.Ledger.Create().SetEntry("one").Save(ctx)
+	if err != nil {
+		t.Fatalf("create ledger: %v", err)
+	}
+	l2, err := c.Ledger.Create().SetEntry("two").Save(ctx)
+	if err != nil {
+		t.Fatalf("create ledger: %v", err)
+	}
+	n, err = ent.DeleteBatchLedgers(ctx, c, []uuid.UUID{l1.ID, l2.ID})
+	if err != nil {
+		t.Fatalf("DeleteBatchLedgers: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("DeleteBatchLedgers reported %d rows, want 2", n)
+	}
+	for _, id := range []uuid.UUID{l1.ID, l2.ID} {
+		if got := rowsOnDisk(t, db, ledger.Table, id); got != 0 {
+			t.Errorf("DeleteBatchLedgers left %s on disk: %d rows, want 0", id, got)
+		}
 	}
 }
 
@@ -338,6 +375,13 @@ func TestGeneratedWiringRoutesThroughTheHook(t *testing.T) {
 
 	if _, err := ent.GetDoc(ctx, c, gone.ID); err == nil {
 		t.Error("GetDoc returned a soft-deleted row")
+	}
+
+	// A second DeleteDoc of an already-tombstoned row is a not-found, not a
+	// silent re-stamp: the rewritten update carries the same predicate the read
+	// side uses.
+	if err := ent.DeleteDoc(ctx, c, gone.ID); err == nil {
+		t.Error("deleting an already soft-deleted row succeeded; want a not-found error")
 	}
 
 	page, err := ent.ListDocs(ctx, c, nil, entdomain.ListRequest{})

@@ -1,11 +1,12 @@
 // Package entdomain provides an [entgo.io/ent] extension that generates
-// request/response DTOs and service/handler scaffolding from annotated Ent schemas.
+// request/response DTOs, a query surface and operation wiring from annotated
+// Ent schemas.
 //
 // It serves two roles:
 //
 //   - At code-generation time (go generate), it produces request/response DTOs,
-//     BaseService structs, and BaseHandler structs for each Ent schema
-//     annotated with EntDomain markers.
+//     filter structs with a sort allow-list, and one free function per
+//     operation, for each Ent schema annotated with EntDomain markers.
 //
 //   - At runtime, it provides the types and helpers that the generated
 //     code depends on: the generic CRUD operations [ListPage], [GetOne] and
@@ -44,29 +45,27 @@
 //	func main() {
 //	    ext := entdomain.NewExtensionWithOptions(
 //	        entdomain.WithEntDomainPackage("github.com/githonllc/entdomain"),
-//	        entdomain.WithBaseService(true),
-//	        entdomain.WithBaseHandler(true),
 //	    )
 //	    if err := entc.Generate("./schema", &gen.Config{}, entc.Extensions(ext)); err != nil {
 //	        log.Fatal(err)
 //	    }
 //	}
 //
-// Run go generate to produce {entity}_dto.go, {entity}_base_service.go,
-// and {entity}_base_handler.go for each annotated schema.
+// Run go generate to produce {entity}_dto.go, {entity}_filter.go and
+// {entity}_wiring.go for each annotated schema.
+//
+// The generated base service and base handler have been removed, along with
+// WithBaseService and WithBaseHandler — see the README for the migration note.
+// Every artifact is now emitted unconditionally for an annotated entity, so
+// there is nothing left to switch on.
 //
 // # Supported identifier types
 //
-// The generated base service and base handler support exactly one primary key
-// type: uuid.UUID. It is hardcoded in every hook signature, every CRUD method
-// and the cursor round-trip, because text/template cannot express generics.
-// Generating them for an entity with any other primary key is refused at
-// generation time, naming the entity and its actual id type, rather than
-// emitting a service that does not compile.
-//
-// This is a limitation of those two templates only. DTO generation renders the
-// id through the schema's own type and is correct for any identifier, as is the
-// runtime below.
+// All of them. The identifier is rendered from the schema's own type in every
+// template and arrives at the runtime as a type parameter, so an int, a string
+// and a uuid.UUID primary key are equally supported. The uuid.UUID restriction
+// that used to be enforced at generation time belonged to the base service and
+// base handler templates and went with them.
 //
 // # What the annotations actually do
 //

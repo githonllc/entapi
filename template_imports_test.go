@@ -72,8 +72,18 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			schemaDir: filepath.Join(root, "internal", "fixtures", "query", "ent", "schema"),
 			pkgPath:   modulePath + "/internal/fixtures/query/ent",
 		},
-		// The refused fixtures ("immutable", "intid", "selfref",
-		// "queryconflict") are
+		{
+			// An int primary key, which is the one identifier shape that needs
+			// NO import at all. wiringImports asks fieldImportSpec for the id's
+			// package and gets "" — and an import declared without a use fails
+			// generation exactly as loudly as one used without being declared,
+			// so this direction needs its own case now that a non-UUID key is
+			// generated rather than refused (#29).
+			name:      "intid",
+			schemaDir: filepath.Join(root, "internal", "fixtures", "intid", "ent", "schema"),
+			pkgPath:   modulePath + "/internal/fixtures/intid/ent",
+		},
+		// The refused fixtures ("immutable", "selfref", "queryconflict") are
 		// deliberately absent: the generator stops before rendering anything for
 		// them. Asserting on the imports of output that is never emitted would
 		// be testing a fiction.
@@ -98,11 +108,9 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 		{"dto", dtoTemplate},
 		{"filter", filterTemplate},
 		{"wiring", wiringTemplate},
-		{"base_service", baseServiceTemplate},
-		{"base_handler", baseHandlerTemplate},
 	}
 
-	ext := NewExtensionWithOptions(WithBaseService(true), WithBaseHandler(true))
+	ext := NewExtensionWithOptions()
 
 	for _, sc := range schemas {
 		t.Run(sc.name, func(t *testing.T) {
@@ -156,7 +164,7 @@ func TestSoftDeleteTemplateDeclaresItsImports(t *testing.T) {
 		t.Fatal("the softdelete fixture has no soft-deletable entity; this test would pass vacuously")
 	}
 
-	ext := NewExtensionWithOptions(WithBaseService(true), WithBaseHandler(true))
+	ext := NewExtensionWithOptions()
 	tmpl, err := template.New("softdelete").Funcs(ext.templateFuncMap()).Parse(softDeleteTemplate)
 	if err != nil {
 		t.Fatalf("parsing softdelete template: %v", err)

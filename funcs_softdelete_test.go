@@ -240,7 +240,7 @@ func TestUnusableSoftDeleteFieldIsRefused(t *testing.T) {
 		node.ID = newUUIDField("id", nil)
 		g := &gen.Graph{Config: &gen.Config{Package: "example.com/project/ent"}, Nodes: []*gen.Type{node}}
 
-		err := checkGraphConflicts(g, &ExtensionConfig{})
+		err := checkGraphConflicts(g)
 		if err == nil {
 			t.Fatal("generation was not refused")
 		}
@@ -258,7 +258,7 @@ func TestUnusableSoftDeleteFieldIsRefused(t *testing.T) {
 		node.ID = newUUIDField("id", nil)
 		g := &gen.Graph{Config: &gen.Config{Package: "example.com/project/ent"}, Nodes: []*gen.Type{node}}
 
-		err := checkGraphConflicts(g, &ExtensionConfig{})
+		err := checkGraphConflicts(g)
 		if err == nil {
 			t.Fatal("generation was not refused")
 		}
@@ -277,7 +277,7 @@ func TestUnusableSoftDeleteFieldIsRefused(t *testing.T) {
 		node.ID = newUUIDField("id", nil)
 		g := &gen.Graph{Config: &gen.Config{Package: "example.com/project/ent"}, Nodes: []*gen.Type{node}}
 
-		if err := checkGraphConflicts(g, &ExtensionConfig{}); err != nil {
+		if err := checkGraphConflicts(g); err != nil {
 			t.Fatalf("a conforming schema was refused: %v", err)
 		}
 	})
@@ -290,7 +290,7 @@ func TestUnusableSoftDeleteFieldIsRefused(t *testing.T) {
 		node.ID = newUUIDField("id", nil)
 		g := &gen.Graph{Config: &gen.Config{Package: "example.com/project/ent"}, Nodes: []*gen.Type{node}}
 
-		if err := checkGraphConflicts(g, &ExtensionConfig{}); err == nil {
+		if err := checkGraphConflicts(g); err == nil {
 			t.Fatal("the marker check was skipped for an entity with no domain fields")
 		}
 	})

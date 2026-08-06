@@ -21,7 +21,7 @@ Note: the Makefile overrides `GOPATH=/tmp/gopath` and `GOMODCACHE=/tmp/gomodcach
 
 A single Go package (`entdomain`) that plays **two distinct roles**, both from the same package:
 
-1. **Code-generation time** — an [Ent](https://entgo.io) extension. Consumers wire it into their `entc.go`; it reads `DomainField` annotations off `gen.Field`s and writes `{entity}_dto.go`, `{entity}_base_service.go`, `{entity}_base_handler.go` into the consumer's `ent/` package.
+1. **Code-generation time** — an [Ent](https://entgo.io) extension. Consumers wire it into their `entc.go`; it reads `DomainField` annotations off `gen.Field`s and writes `{entity}_dto.go`, `{entity}_filter.go`, `{entity}_wiring.go` into the consumer's `ent/` package.
 2. **Runtime** — the types the generated code links against: `PageInfo`/`Cursor`, `ListRequest`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, and `Ptr`/`PtrOrNil`/`PtrNilSafe`.
 
 There is no `main`, no example app, and no downstream ent project in this repo. Anything about *generated* code can only be verified by generating into a real ent project.
@@ -63,7 +63,7 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 | `funcs_fields.go` | field selection: `domainFields`, `createFields`, `patchFields`, `responseFields`, `responseEdges` |
 | `funcs_scope.go` | `hasDomainScope`, `isDomainRequired`, and `getDomainFieldAnnotation` |
 | `funcs_presence.go` | request field shape: `isCreatePointer`, `isCreateRequired`, `isPatchClearable` |
-| `funcs_typechecks.go` | `isComplexFieldType` |
+| `funcs_typechecks.go` | `isComplexFieldType` — **not registered as a template func**; only `fieldValueExpr` calls it |
 | `funcs_softdelete.go` | `isSoftDeletable`, `softDeleteTypes`, `softDeleteField`, `softDeleteImports` — the soft-delete mixin's marker |
 | `funcs_imports.go` | `dtoImports`: the import specs the DTO must declare for its field types |
 | `funcs_codegen.go` | string-emitting helpers (`setFieldCallReq`, `fieldValueExpr`) |
@@ -141,8 +141,8 @@ from the templates:
 - **Edge state goes through `<Edge>OrErr()`, never a nil check.** `loadedTypes`
   is unexported. Loaded-and-absent is an explicit `null` (no edge field is
   `omitempty`); not-loaded is an error. `IsNotFound` in `dto.tmpl` is
-  unqualified for the same reason as in `base_service.tmpl`, and
-  `TestDTOTemplateResolvesIsNotFoundToEnt` pins it.
+  unqualified so it binds to Ent's generated predicate in the consumer's
+  `package ent`, and `TestDTOTemplateResolvesIsNotFoundToEnt` pins it.
 - **Summaries carry no edges.** That is what bounds expansion — there is no
   second level for a cycle to close through, so no runtime depth counter and no
   visited set. A three-level tree comes back one level deep; that cost is
@@ -156,9 +156,10 @@ left an all-`InputOnly` entity's ID import undeclared, and
 which has such an entity — was added to that test's corpus. Edges themselves
 need no import: `<Target>Summary` is package-local.
 
-`{Entity}EntToResponse` (base_service.tmpl) delegates to `New{Entity}Response`
-for an entity with edges and returns nil on the error, because its signature
-predates the contract. #29 deletes it.
+`{Entity}EntToResponse` is gone (#29). It delegated to `New{Entity}Response` and
+**returned nil on the error**, so a not-loaded edge reached the caller as a nil
+pointer instead of an error naming it. That is the correctness argument for its
+removal, not merely a redundancy one.
 
 **Open, and deliberately not decided here:** which scalar fields a summary
 carries. Nothing in the schema says "this field is the brief one", so the
@@ -181,25 +182,35 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
 
 ## Conventions baked into generated code
 
-- `base_service.tmpl` hardcodes `uuid.UUID` as the entity ID type in hook signatures and CRUD methods. Non-UUID primary keys are not supported by the current BaseService.
-- `Base{Entity}Service.Create`/`Update` call `req.Validate()` and then `Apply` on
-  the result. They have no choice: `Apply` exists only on the validated type. The
-  exported `Apply{Entity}CreateRequest`/`Apply{Entity}UpdateRequest` free
-  functions are gone, because taking a raw request is exactly the escape hatch
-  that made validation optional (#26).
-- Soft delete is **annotation-based and lives at ent's layer, not the service's** (#18).
-  A consumer embeds `entdomain.SoftDeleteMixin` (field + `DomainSoftDelete` marker; ent
+- **No identifier type is hardcoded anywhere.** Every template renders the id
+  through `$.ID.Type` and asks `wiringImports`/`dtoImports` for its package, so
+  an `int` key needs no import at all (the `intid` fixture covers exactly that).
+  The `uuid.UUID`-only refusal in `schema_conflicts.go` belonged to the base
+  service and base handler templates and went with them (#29).
+- `Create{Entity}`/`Update{Entity}` take the **validated** request. They have no
+  choice: `Apply` exists only on `Valid{Entity}…Request`. The exported
+  `Apply{Entity}CreateRequest`/`Apply{Entity}UpdateRequest` free functions are
+  gone, because taking a raw request is exactly the escape hatch that made
+  validation optional (#26).
+- **Soft delete is annotation-based and lives at ent's layer** (#18). A consumer
+  embeds `entdomain.SoftDeleteMixin` (field + `DomainSoftDelete` marker; ent
   merges mixin annotations onto the type) and calls the generated
-  `ent.RegisterSoftDelete(client)` once. `Delete`/`DeleteBatch` in `base_service.tmpl`
-  issue an ordinary ent delete and let the hook rewrite it — there is no second tombstone
-  write. The old `deleted_at`/`Nillable` naming convention and `hasSoftDelete` are gone.
-- `templates/softdelete.tmpl` is the **only graph-level template**: it is rendered once
-  over `*gen.Graph`, not per `*gen.Type`, and it is generated for a soft-deletable entity
-  even when that entity has no domain fields at all. Its output file
-  (`entdomain_softdelete.go`) is cleaned up through `graphFileNames()`, not
-  `generatedFileNames(node)`.
-- Hook dispatch works via `SetSelf` + an embedded interface; without `SetSelf` the no-op defaults on `Base{Entity}Service` are used.
-- `Base{Entity}Handler` exists so consumer handler packages never import `ent` transitively for conversion — keep it dependency-free.
+  `ent.RegisterSoftDelete(client)` once. Nothing in the generated wiring knows
+  about it: `Delete{Entity}` issues `DeleteOneID(...).Exec` (`OpDeleteOne`) and
+  `DeleteBatch{Entities}` issues `Delete().Where(IDIn(...)).Exec` (`OpDelete`),
+  and the hook rewrites both. There is no second tombstone write. The old
+  `deleted_at`/`Nillable` naming convention and `hasSoftDelete` are gone (#29).
+- `templates/softdelete.tmpl` is the **only graph-level template**: it is rendered
+  once over `*gen.Graph`, not per `*gen.Type`, and it is generated for a
+  soft-deletable entity even when that entity has no domain fields at all. Its
+  output file (`entdomain_softdelete.go`) is cleaned up through
+  `graphFileNames()`, not `generatedFileNames(node)`.
+- **There are no generated hooks and nothing to embed.** The wiring is free
+  functions; a consumer who needs different behaviour writes their own function
+  and stops calling the generated one. `SetSelf` dispatch is gone (#16, #29).
+- Handler code should not import `ent` for conversion. That is a property of
+  where the DTO package sits (#15), not of a base type — `Base{Entity}Handler`
+  required an `ent` import to embed it, so it never achieved the goal.
 
 ## Generation can fail, and that is a feature (#10)
 
@@ -219,13 +230,12 @@ Two problems are detected today. The first is an ent-`Immutable()` field carryin
 field silently was rejected: it would vanish from the PATCH API where neither
 `encoding/json` nor `Validate()` can observe the missing key.
 
-The second is an entity whose primary key does not render as `uuid.UUID`, and
-it is **conditional on the config**: `base_service.tmpl` and `base_handler.tmpl`
-hardcode `uuid.UUID`, so the refusal applies only when one of them is being
-generated. `dto.tmpl` renders the id through `$.ID.Type` and is correct for any
-identifier, so DTO-only generation is never refused on this ground. The check is
-also skipped for a node with no domain fields, matching the condition the
-generation loop itself uses. Widening the supported set is #29.
+There used to be a second: an entity whose primary key did not render as
+`uuid.UUID`, refused whenever `WithBaseService` or `WithBaseHandler` was on. Both
+templates and both options are gone (#29), so `checkGraphConflicts` no longer
+takes the config and no identifier type is refused. Every check that remains is
+unconditional, and all of them are skipped for a node with no domain fields —
+matching the condition the generation loop itself uses.
 
 Conversely, `Optional().Nillable()` and named `GoType`s over slices/maps *are*
 generated, because correct output exists for them — `*T` in the create request
@@ -263,13 +273,21 @@ keep them from coming back — read them before adding to the registry:
   embedded `.tmpl` to be bound in `template_index.go`, so a template nothing
   loads cannot survive unnoticed the way `model.tmpl` did.
 
-Related: `templates/base_service.tmpl` calls `IsNotFound`/`IsConstraintError`
-**unqualified on purpose** — the emitted file lands in the consumer's
-`package ent`, so those bind to Ent's generated predicates, not to this
-package's `IsNotFound` (`errors.go`). Qualifying them would compile and
-silently stop matching. `TestGeneratedErrorPredicatesResolveUnambiguously`
-guards both that and the converse rule that the `entdomain.Err*` sentinels
-always stay qualified.
+A fourth, one level up: `TestRemovedTemplatesStayRemoved` (`template_loader_test.go`)
+pins that `base_service.tmpl` and `base_handler.tmpl` are gone **and** that
+`generatedFileNames` still lists the two file names they produced. Cleanup is
+the only thing that deletes them from a consumer's tree, so the name has to
+outlive the template.
+
+Related: `templates/dto.tmpl` calls `IsNotFound` **unqualified on purpose** —
+the emitted file lands in the consumer's `package ent`, so it binds to Ent's
+generated predicate, not to this package's `IsNotFound` (`errors.go`).
+Qualifying it would compile and silently stop matching, routing every
+loaded-but-absent edge into the error branch.
+`TestDTOTemplateResolvesIsNotFoundToEnt` pins that direction, and
+`TestTemplatesQualifyEntdomainSentinels` pins the converse across every
+template: `entdomain.Err*` always stays qualified, because `package ent` has no
+such symbol.
 
 ### Baseline state
 

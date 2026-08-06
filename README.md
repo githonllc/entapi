@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/githonllc/entdomain)](https://goreportcard.com/report/github.com/githonllc/entdomain)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An [Ent](https://entgo.io) extension that generates HTTP request/response DTOs, base service structs, and base handler structs from annotated schemas.
+An [Ent](https://entgo.io) extension that generates HTTP request/response DTOs, a query surface, and one wiring function per operation from annotated schemas.
 
 
 > ### Status: prototype under redesign
@@ -24,17 +24,19 @@ An [Ent](https://entgo.io) extension that generates HTTP request/response DTOs, 
 > Read [Known limitations](#known-limitations) before adopting this. Some of them are
 > traps rather than gaps, and one annotation documents a guarantee it does not provide.
 >
-> `go test ./...` is **red on a clean checkout** ([#2](https://github.com/githonllc/entdomain/issues/2)).
+> `go test ./...`, `make check`, `gofmt -l .` and `make lint` are **green on a clean
+> checkout**. The red suite this line used to warn about was fixed in
+> [#2](https://github.com/githonllc/entdomain/issues/2).
 
 ## Features
 
 - **Annotation-driven** — mark field scopes with concise builders (`DefaultField`, `InputOnlyField`, `OutputOnlyField`, etc.)
 - **HTTP DTOs** — generates `CreateRequest`, `PatchRequest`, `Response`, `ListResponse` per entity
 - **Explicit presence** — a patch request tells an omitted key from an explicit `null` from a value, and a field omitted on create is never written, so the schema's `Default()` still applies
-- **BaseService** — CRUD operations with Before/After hooks, builder helpers, and entity→response conversion
-- **BaseHandler** — response conversion helpers and partial update support
+- **Query surface** — a filter struct with one parameter per operator ent derives, a free-text `q`, and a sort allow-list
+- **Wiring** — one free function per operation, each a single call into a generic runtime written once
+- **Any identifier type** — the id comes from the schema in every template and reaches the runtime as a type parameter
 - **Soft delete at the ent layer** — embed `entdomain.SoftDeleteMixin`, register one line at client construction, and deleted rows disappear from *every* read, including `client.User.Query()` calls that touch nothing generated here
-- **Cursor pagination** — ID-based keyset pagination in BaseService
 - **Source provenance** — generated files include schema name, template path, and regeneration command
 
 ## Requirements
@@ -68,8 +70,6 @@ import (
 func main() {
     ext := entdomain.NewExtensionWithOptions(
         entdomain.WithEntDomainPackage("github.com/githonllc/entdomain"),
-        entdomain.WithBaseService(true),
-        entdomain.WithBaseHandler(true),
     )
 
     if err := entc.Generate("./schema", &gen.Config{
@@ -426,46 +426,55 @@ graph TD
     end
 
     subgraph "ent/ package <small>(all generated)</small>"
-        BH["BaseHandler<br/><small>ToResponse · ToResponseList · PartialUpdate</small>"]
-        BS["BaseService<br/><small>Create · GetByID · Update · Delete<br/>ListWithCursor · DeleteBatch<br/>Before/After hooks</small>"]
-        DTO["DTOs<br/><small>{entity}_dto.go</small>"]
+        DTO["DTOs<br/><small>{entity}_dto.go<br/>requests · responses · summaries<br/>eager-load plan</small>"]
+        FLT["Query surface<br/><small>{entity}_filter.go<br/>Filter · Predicates · SortKeys</small>"]
+        WIR["Wiring<br/><small>{entity}_wiring.go<br/>Get · List · Create · Update<br/>Delete · DeleteBatch</small>"]
     end
 
+    RT["entdomain runtime<br/><small>GetOne · ListPage · SaveOne</small>"]
     EC["ent.Client<br/><small>Ent ORM</small>"]
     DB[("PostgreSQL")]
 
-    CR --> BH
-    UR --> BH
-    BH --> RS
-    BH --> BS
-    BS --> EC
+    CR --> WIR
+    UR --> WIR
+    WIR --> RS
+    DTO -.- WIR
+    FLT -.- WIR
+    WIR --> RT
+    RT --> EC
+    WIR --> EC
     EC --> DB
-    DTO -.- BH
-    DTO -.- BS
 
     style CR fill:#e1f5fe,stroke:#0288d1
     style UR fill:#e1f5fe,stroke:#0288d1
     style RS fill:#e8f5e9,stroke:#388e3c
-    style BH fill:#fff3e0,stroke:#f57c00
-    style BS fill:#fff3e0,stroke:#f57c00
     style DTO fill:#fff3e0,stroke:#f57c00
+    style FLT fill:#fff3e0,stroke:#f57c00
+    style WIR fill:#fff3e0,stroke:#f57c00
+    style RT fill:#ede7f6,stroke:#5e35b1
     style EC fill:#f3e5f5,stroke:#7b1fa2
     style DB fill:#fce4ec,stroke:#c62828
 ```
 
-**Key principle**: Scopes only control HTTP-layer struct generation. The service layer operates directly on ent entities with full ORM capabilities.
+**Key principle**: Scopes only control HTTP-layer struct generation. Nothing generated restricts what the consumer's own code may do with an ent entity.
 
 ## Generated Code
 
-For each annotated schema, up to five files are generated (all in the `ent/` package):
+For each annotated schema, three files are generated (all in the `ent/` package):
 
 | File | Contains |
 |------|----------|
 | `{entity}_dto.go` | `CreateRequest`, `PatchRequest`, their `Validate()`/`Apply` pair, and the response half below |
 | `{entity}_filter.go` | `{Entity}Filter` with its `Predicates()`, `{Entity}SortKeys` and `{Entity}Order` — the query half below |
 | `{entity}_wiring.go` | one free function per operation, each handing this entity's artifacts to the runtime — the wiring half below |
-| `{entity}_base_service.go` | `BaseService` with CRUD, Before/After hooks, `EntToResponse` |
-| `{entity}_base_handler.go` | `BaseHandler` with `ToResponse`, `ToResponseList`, `PartialUpdate` |
+
+Two more used to be generated behind the opt-in switches `WithBaseService` and
+`WithBaseHandler`. Both are gone; see
+[Migrating from `BaseService` and `BaseHandler`](#migrating-from-baseservice-and-basehandler).
+A generation run **deletes** `{entity}_base_service.go` and
+`{entity}_base_handler.go` from the target directory if it finds them there, so
+upgrading does not leave code behind that compiles against a service the library
+no longer describes.
 
 Plus one file for the schema as a whole, written only when at least one entity
 embeds `entdomain.SoftDeleteMixin`:
@@ -637,6 +646,7 @@ self-reference to install and no fixed set of override points.
 | `Create{Entity}(ctx, db, v)` | `entdomain.SaveOne(ctx, v.Apply(db.{Entity}.Create()), …)` |
 | `Update{Entity}(ctx, db, id, v)` | `entdomain.SaveOne(ctx, v.Apply(db.{Entity}.UpdateOneID(id)), …)` |
 | `Delete{Entity}(ctx, db, id)` | `db.{Entity}.DeleteOneID(id).Exec(ctx)` |
+| `DeleteBatch{Entities}(ctx, db, ids)` | `db.{Entity}.Delete().Where({entity}.IDIn(ids...)).Exec(ctx)`, returning the affected-row count |
 
 The identifier's type comes from the schema; nothing is written for a particular
 one. Create and update take the **validated** request, because `Apply` is
@@ -646,7 +656,7 @@ rather than through `{Entity}Client.Get`, which applies no plan and therefore
 cannot serve a response type that declares edges; for the same reason, an entity
 with response edges converts a just-saved row by reading it back.
 
-Four of the five bodies are a single call. `List` is the exception, and the
+Every body but one is a single call. `List` is the exception, and the
 reason is worth stating rather than hiding: `{Entity}Order` can fail, and
 `ListPage` takes resolved order options rather than a fallible producer of them,
 so the allow-list check is a statement of its own.
@@ -752,37 +762,92 @@ the next mutator, so a hook registered after `RegisterSoftDelete` for
 `OpDelete|OpDeleteOne` never runs. Register such hooks for `OpUpdate` and test
 for a non-nil `deleted_at`, or install them before `RegisterSoftDelete`.
 
-### BaseService Pattern
+### Migrating from `BaseService` and `BaseHandler`
 
-Generated `Base{Entity}Service` provides CRUD operations with hook extension points. Embed it and override hooks for custom logic:
+**`Base{Entity}Service`, `Base{Entity}Handler`, `{Entity}EntToResponse`, and the
+options `WithBaseService` / `WithBaseHandler` have all been removed.** Both
+options defaulted to `false`, so a consumer who never passed them is unaffected;
+delete the calls and the extension compiles again.
+
+Every member has a replacement, and one of them is a bug fix rather than a
+rename:
+
+| Removed | Use instead |
+|---|---|
+| `svc.GetByID(ctx, id)` | `ent.Get{Entity}(ctx, db, id)` — and it applies the eager-load plan, which `Client.Get` never did |
+| `svc.Create(ctx, req)` | `ent.Create{Entity}(ctx, db, v)`, where `v, err := req.Validate()` |
+| `svc.Update(ctx, id, req)` | `ent.Update{Entity}(ctx, db, id, v)` |
+| `svc.Delete(ctx, id)` | `ent.Delete{Entity}(ctx, db, id)` |
+| `svc.DeleteBatch(ctx, ids)` | `ent.DeleteBatch{Entities}(ctx, db, ids)`, which also returns the affected-row count |
+| `svc.ListWithCursor(ctx, limit, cursor, order)` | `ent.List{Entities}(ctx, db, filter, req)` — **offset paging**; see below |
+| `ent.{Entity}EntToResponse(e)` | `ent.New{Entity}Response(e)` — **see below** |
+| `h.ToResponse(e)` / `h.ToResponseList(es)` | `ent.New{Entity}Response(e)`, or `ent.List{Entities}`, which already returns `*entdomain.Page[…]` |
+| `h.PartialUpdate(ctx, svc, id, req)` | `ent.Update{Entity}(ctx, db, id, v)` |
+| `SetSelf` and the `Before*` / `After*` hooks | your own function. There is no contract to satisfy and nothing to register |
+
+**`{Entity}EntToResponse` was not merely redundant — it lost errors.** For an
+entity whose response declares edges it called `New{Entity}Response` and, on
+error, **returned `nil`**. So a response built from a query that did not load the
+edges came back as a nil pointer at the call site instead of an error naming the
+edge. `New{Entity}Response` returns `(*{Entity}Response, error)`; handle the
+error. This is the reason to migrate even if you never used the hooks.
+
+**Cursor pagination is no longer generated.** `ListWithCursor` was ID-ordered
+keyset paging with a documented panic at `limit == 0`; `ent.List{Entities}` is
+offset paging through `entdomain.ListPage`, with the page-size ceiling clamped
+in one place. If you depend on keyset paging, write the query yourself — the
+generated filter, order and converter are all still there to hand to it:
 
 ```go
-type myUserService struct {
-    ent.BaseUserService
-}
+q := ent.ArticleQueryWithResponseEdges(db.Article.Query()).
+    Where(article.IDGT(after)).
+    Order(article.ByID()).
+    Limit(size)
+```
 
-func NewMyUserService(db *ent.Client) *myUserService {
-    s := &myUserService{
-        BaseUserService: ent.BaseUserService{DB: db},
+**Hooks become ordinary code.** What used to be `BeforeCreate` is a line before
+the call, and what used to be `AfterCreate` is a line after it:
+
+```go
+func createArticle(ctx context.Context, db *ent.Client, req *ent.ArticleCreateRequest) (*ent.ArticleResponse, error) {
+    if err := authorize(ctx, req); err != nil {   // was BeforeCreate
+        return nil, err
     }
-    s.SetSelf(s) // enable hook dispatch to this struct
-    return s
-}
-
-func (s *myUserService) BeforeCreate(ctx context.Context, req *ent.UserCreateRequest) error {
-    // custom validation
-    return nil
-}
-
-func (s *myUserService) AfterCreate(ctx context.Context, entity *ent.User) (*ent.User, error) {
-    // publish event, etc.
-    return entity, nil
+    v, err := req.Validate()
+    if err != nil {
+        return nil, err
+    }
+    resp, err := ent.CreateArticle(ctx, db, v)
+    if err != nil {
+        return nil, err
+    }
+    publish(ctx, resp)                            // was AfterCreate
+    return resp, nil
 }
 ```
 
+The old mechanism could not have that shape: dispatch went through `SetSelf`, so
+forgetting the call — or misspelling a hook method — compiled cleanly and the
+hook silently never ran ([#16](https://github.com/githonllc/entdomain/issues/16)).
+
+**`Base{Entity}Handler` existed so handler code would not import `ent`. It never
+achieved that**: embedding `ent.Base{Entity}Handler` is itself an `ent` import.
+The goal is real and belongs to where the DTO package sits, not to a base type.
+
+**Soft delete is no longer detected by field name.** The generated `Delete`
+used to rewrite itself as `UpdateOneID().SetDeletedAt(now)` whenever an entity
+owned a Nillable `deleted_at` field. That was write-only — nothing filtered
+tombstoned rows out of reads — and it silently disabled every consumer hook
+registered for a delete operation, because the mutation it issued was an update
+([#12](https://github.com/githonllc/entdomain/issues/12)). `ent.Delete{Entity}`
+now calls ent's own delete builder, so an ent mixin or interceptor decides what
+deletion means and the read path honours it too
+([#18](https://github.com/githonllc/entdomain/issues/18)).
+
 ## Typed Errors
 
-BaseService wraps Ent errors with standard sentinel values:
+The runtime exports the sentinel values generated validation and the error
+mapper produce:
 
 ```go
 var (
@@ -870,8 +935,7 @@ names the entity, the field and both conflicting facts.**
 | `field.JSON(...)` over a slice or map | Generated normally; an optional one is converted with `entdomain.PtrNilSafe`, since `entdomain.PtrOrNil` is `[T comparable]` |
 | A named `GoType` whose underlying type is a slice or map | Same as the line above. The decision is made from the type's reflect kind, not from how it is spelled, so `type Tags []string` is recognised as a slice |
 | A named `GoType` over a comparable type (string, int, struct of comparables) | Generated normally, via `entdomain.PtrOrNil` |
-| A primary key that is not `uuid.UUID`, **with `WithBaseService` or `WithBaseHandler`** | **Generation fails.** Both templates declare every identifier as `uuid.UUID`, so the emitted service cannot compile against the entity. The refusal names the entity and the actual id type. Give the entity a `field.UUID("id", uuid.UUID{})` key, or generate DTOs only |
-| A primary key that is not `uuid.UUID`, DTO generation only | Generated normally. `dto.tmpl` renders the id through `$.ID.Type`, so it is correct for any identifier type |
+| A primary key of any type — `int`, `string`, `uuid.UUID`, a named `GoType` | Generated normally. Every template renders the id through `$.ID.Type` and asks for its import by field, so an `int` key needs no import at all. This used to be **refused** when `WithBaseService` or `WithBaseHandler` was on, because those two templates spelled `uuid.UUID` into every signature; both are gone ([#29](https://github.com/githonllc/entdomain/issues/29)) |
 
 Note that `DefaultField()` grants `ScopeUpdate`, so an immutable field carrying
 the default annotation hits the refusal above. That is deliberate: the
@@ -886,10 +950,13 @@ and then compiled by `TestCodegenFixtures`.
 ## Extension Options
 
 ```go
-entdomain.WithBaseService(true)              // generate BaseService (default: false)
-entdomain.WithBaseHandler(true)              // generate BaseHandler (default: false)
 entdomain.WithEntDomainPackage("custom/path") // override entdomain import path
 ```
+
+That is the whole set. `WithBaseService` and `WithBaseHandler` were removed with
+the templates they selected — everything else is generated unconditionally for an
+annotated entity, because an artifact that is sometimes absent is an artifact the
+next generated file cannot depend on.
 
 ## Known limitations
 
@@ -921,16 +988,25 @@ hook and interceptor, which would oblige every consumer to empty-import `ent/run
 would need reflection to reach the mutation's client; the trade is recorded on
 [#18](https://github.com/githonllc/entdomain/issues/18).
 
-**The generated service supports exactly one identifier type: `uuid.UUID`.** It is
-hardcoded in every hook signature, every CRUD method and the cursor round-trip of
-`base_service.tmpl` and `base_handler.tmpl`. Any other primary key is now **refused at
-generation time**, naming the entity and its actual id type, rather than emitting a service
-that does not compile. DTO-only generation is unaffected. Widening the supported set is
-[#29](https://github.com/githonllc/entdomain/issues/29).
+**Nothing generated classifies errors.** The wiring returns what ent returned; mapping a
+driver error onto `ErrNotFound` or `ErrAlreadyExists` is `entdomain.ErrorMapper`'s job and
+the wiring does not call it yet ([#13](https://github.com/githonllc/entdomain/issues/13)).
 
-**Hook dispatch fails silently when misused.** Forgetting the `SetSelf` call, or
-misspelling a hook method, compiles cleanly and the hook never runs
-([#16](https://github.com/githonllc/entdomain/issues/16)).
+**Pagination is offset-only in generated code.** `ent.List{Entities}` goes through
+`entdomain.ListPage`, which is O(n) deep and costs a `COUNT` per page. The exported cursor
+codec (`Cursor`, `EncodeCursor`, `DecodeCursor`, `PageInfo`) is reachable from the public
+API but no generated code uses it, and it loses precision above 2^53
+([#6](https://github.com/githonllc/entdomain/issues/6)).
+
+**Nothing generated classifies errors.** The wiring returns what ent returned; mapping a
+driver error onto `ErrNotFound` or `ErrAlreadyExists` is `entdomain.ErrorMapper`'s job and
+the wiring does not call it yet ([#13](https://github.com/githonllc/entdomain/issues/13)).
+
+**Pagination is offset-only in generated code.** `ent.List{Entities}` goes through
+`entdomain.ListPage`, which is O(n) deep and costs a `COUNT` per page. The exported cursor
+codec (`Cursor`, `EncodeCursor`, `DecodeCursor`, `PageInfo`) is reachable from the public
+API but no generated code uses it, and it loses precision above 2^53
+([#6](https://github.com/githonllc/entdomain/issues/6)).
 
 **Package import panics on Windows.** Template lookup joins paths with the OS separator
 while the embedded filesystem always uses forward slashes, so loading fails at package
@@ -938,14 +1014,14 @@ initialisation ([#4](https://github.com/githonllc/entdomain/issues/4)).
 
 **Only the field shapes with a fixture are known to compile.** `TestCodegenFixtures`
 generates and compiles every schema under `internal/fixtures/`, which now covers the
-nillable, immutable, enum, JSON/map and named-`GoType` shapes above, plus edges, the
-soft-delete mixin and the non-UUID identifier refusal
-([#8](https://github.com/githonllc/entdomain/issues/8),
-[#10](https://github.com/githonllc/entdomain/issues/10)). Soft delete is the one feature
-with a behavioural proof as well as a compile proof: `internal/softdeleteproof` is a
-separate module with a SQLite driver, so the claim that a direct `client.Doc.Query()`
-excludes deleted rows is checked against a real database rather than against the generated
-source.
+nillable, immutable, enum, JSON/map and named-`GoType` shapes above, plus edges,
+self-referential edges, the presence model, the query surface, an `int` primary key, the
+wiring and the soft-delete mixin ([#8](https://github.com/githonllc/entdomain/issues/8),
+[#10](https://github.com/githonllc/entdomain/issues/10)). Two of them have a behavioural
+proof as well as a compile proof, each a separate module with a SQLite driver:
+`internal/fixtures/wiring/e2e` drives every generated operation against a real database,
+and `internal/softdeleteproof` checks that a direct `client.Doc.Query()` excludes deleted
+rows and that both generated deletes leave the row on disk.
 
 ## Contributing
 

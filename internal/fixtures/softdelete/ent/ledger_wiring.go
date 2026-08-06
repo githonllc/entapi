@@ -94,3 +94,18 @@ func UpdateLedger(ctx context.Context, db *Client, id uuid.UUID, v *ValidLedgerP
 func DeleteLedger(ctx context.Context, db *Client, id uuid.UUID) error {
 	return db.Ledger.DeleteOneID(id).Exec(ctx)
 }
+
+// DeleteBatchLedgers removes several Ledgers in one statement and
+// returns how many rows it deleted.
+//
+// The count is returned rather than discarded because ent computes it and the
+// caller cannot recover it afterwards: a batch delete reports no error for an
+// id that matched nothing, so "how many of the ids existed" is answerable here
+// and nowhere else.
+//
+// An empty list deletes nothing. That is ent's own reading of IDIn with no
+// arguments, not a guard written here — a guard would be a second place for the
+// rule to live, and the failure it protects against is unrecoverable.
+func DeleteBatchLedgers(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
+	return db.Ledger.Delete().Where(ledger.IDIn(ids...)).Exec(ctx)
+}

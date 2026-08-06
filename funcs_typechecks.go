@@ -16,9 +16,15 @@ import (
 // entdomain.SoftDeleteMixin (softdelete.go) and detected through the annotation
 // the mixin attaches (funcs_softdelete.go), and the tombstone write happens in
 // one place: the generated hook. The convention could not tell an entity that
-// opted in from one that merely owns a column with that name, and the service
-// layer could not enforce the read half at all — Base<X>Service.DB is an
-// exported *Client.
+// opted in from one that merely owns a column with that name, and it only ever
+// reached the write path, so reads still returned tombstoned rows.
+//
+// #29 then deleted base_service.tmpl outright, which is why nothing calls
+// either function today: the generated delete is ent's own builder, and the
+// mixin's hook rewrites it. isTimeField had no other caller.
+//
+// isComplexFieldType below is the last resident, and it is no longer a
+// registered template func — only fieldValueExpr calls it.
 
 // isComplexFieldType reports whether a field's Go type is one Go's comparable
 // constraint rejects — slices, maps and functions, including named types whose

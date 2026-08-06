@@ -1,29 +1,36 @@
 ---
 name: entdomain
-description: Work with EntDomain — the Ent code generation extension. Use when creating Ent schemas with domain annotations, understanding generated code, debugging codegen issues, or asking about EntDomain annotation builders, field scopes, BaseService hooks, BaseHandler helpers, or generated DTOs.
+description: Work with EntDomain — the Ent code generation extension. Use when creating Ent schemas with domain annotations, understanding generated code, debugging codegen issues, or asking about EntDomain annotation builders, field scopes, generated DTOs, the query surface, or the generated wiring functions.
 ---
 
 # EntDomain — Ent Code Generation Extension
 
-You are assisting a developer working with EntDomain, an Ent Framework extension that generates HTTP DTOs, BaseService, and BaseHandler from annotated schemas.
+You are assisting a developer working with EntDomain, an Ent Framework extension that generates HTTP DTOs, a query surface, and one wiring function per operation from annotated schemas.
 
 ## Architecture
 
 ```
-BaseHandler (generated, ent/)  ────→  BaseService (generated, ent/)  ────→  ent.Client
-     │                                      │
-     │ ToResponse, ToResponseList           │ CRUD: Create, GetByID, Update, Delete
-     │ PartialUpdate (typed updater)        │ ListWithCursor, DeleteBatch
-     │                                      │ Before/After hooks for all operations
-     ├──────────────────────┐               ├──────────────────────┐
-     │                      │               │                      │
-Handler (user extends)      │          Service (user extends)      │
-     │ Custom endpoints     │               │ Business logic       │
-     │ Uses generated DTOs  │               │ Override hooks       │
-     │                      │               │ or full methods      │
+your handler / service (hand-written)
+     │  calls, and may stop calling, any of:
+     ▼
+{entity}_wiring.go (generated, ent/)   ────→  entdomain runtime  ────→  ent.Client
+     │  GetX · ListXs · CreateX · UpdateX          GetOne · ListPage
+     │  DeleteX · DeleteBatchXs                    SaveOne
+     │  one call each; no struct, nothing to embed
+     ├──────────────► {entity}_dto.go    requests · responses · eager-load plan
+     └──────────────► {entity}_filter.go predicates · sort allow-list
 ```
 
-**Key principle**: All generated code lives in the `ent/` package. Service operates on `*ent.Entity` directly. DTOs (`CreateRequest`, `PatchRequest`, `Response`) are in the same `ent` package — no cross-package imports needed.
+**Key principle**: All generated code lives in the `ent/` package, and every
+generated operation is a **free function** — there is no base type to embed, no
+self-reference to install and no fixed set of override points. To change one
+operation, write your own function and stop calling the generated one; the
+others keep working, because nothing is registered anywhere.
+
+> **`Base{Entity}Service` and `Base{Entity}Handler` were removed** (issue #29),
+> along with `WithBaseService` / `WithBaseHandler`, `{Entity}EntToResponse`,
+> `SetSelf` and the Before/After hooks. See "Migrating from `BaseService` and
+> `BaseHandler`" in the library's README for the member-by-member mapping.
 
 ## ORM-Level Interceptors (IMPORTANT)
 
@@ -79,15 +86,13 @@ generated the `FindByX` methods they promised.
 
 ## Generated Files Per Entity
 
-For entity `Courier`, up to five files are generated in `ent/`:
+For entity `Courier`, three files are generated in `ent/`:
 
 | File | Contains |
 |------|----------|
-| `ent/courier_dto.go` | `CourierCreateRequest`, `CourierPatchRequest`, their `Validate()`/`Apply` pair, `CourierResponse`, `CourierListResponse` |
+| `ent/courier_dto.go` | `CourierCreateRequest`, `CourierPatchRequest`, their `Validate()`/`Apply` pair, `CourierResponse`, `CourierSummary`, `NewCourierResponse`, `CourierQueryWithResponseEdges` |
 | `ent/courier_filter.go` | `CourierFilter` with `Predicates()`, `CourierSortKeys`, `CourierOrder` |
-| `ent/courier_wiring.go` | `GetCourier`, `ListCouriers`, `CreateCourier`, `UpdateCourier`, `DeleteCourier` — free functions, one call into the runtime each |
-| `ent/courier_base_service.go` | `BaseCourierService` with CRUD + Before/After hooks, `CourierEntToResponse` |
-| `ent/courier_base_handler.go` | `BaseCourierHandler` with `ToResponse`, `ToResponseList`, `PartialUpdate` |
+| `ent/courier_wiring.go` | `GetCourier`, `ListCouriers`, `CreateCourier`, `UpdateCourier`, `DeleteCourier`, `DeleteBatchCouriers` — free functions, one call into the runtime each |
 
 ### `ent/courier_dto.go`
 
@@ -106,117 +111,95 @@ For entity `Courier`, up to five files are generated in `ent/`:
 - `CourierResponse` — fields with `ScopeResponse`, plus nested edge responses
 - `CourierListResponse` — paginated response wrapper with `PageInfo`
 
-### `ent/courier_base_service.go`
+### `ent/courier_wiring.go`
 
 ```go
-type BaseCourierServiceHooks interface {
-    BeforeCreate(ctx context.Context, req *CourierCreateRequest) error
-    AfterCreate(ctx context.Context, entity *Courier) (*Courier, error)
-    BeforeUpdate(ctx context.Context, id uuid.UUID, req *CourierPatchRequest) error
-    AfterUpdate(ctx context.Context, entity *Courier) (*Courier, error)
-    BeforeDelete(ctx context.Context, id uuid.UUID) error
-    AfterDelete(ctx context.Context, id uuid.UUID) error
-}
-
-type BaseCourierService struct {
-    DB   *Client
-    self BaseCourierServiceHooks
-}
-
-func (s *BaseCourierService) SetSelf(hooks BaseCourierServiceHooks)
-func (s *BaseCourierService) GetByID(ctx, id) (*Courier, error)
-func (s *BaseCourierService) Create(ctx, req) (*Courier, error)
-func (s *BaseCourierService) Update(ctx, id, req) (*Courier, error)
-func (s *BaseCourierService) Delete(ctx, id) error
-func (s *BaseCourierService) DeleteBatch(ctx, ids) error
-func (s *BaseCourierService) ListWithCursor(ctx, limit, cursor, order) ([]*Courier, nextCursor, error)
-
-// Builder helpers live on the VALIDATED request (courier_dto.go), not here:
-//   valid, err := req.Validate()
-//   builder := valid.Apply(db.Courier.Create())
-
-// Entity → Response conversion
-func CourierEntToResponse(entity *Courier) *CourierResponse
+func GetCourier(ctx, db *Client, id uuid.UUID) (*CourierResponse, error)
+func ListCouriers(ctx, db *Client, f *CourierFilter, r entdomain.ListRequest) (*entdomain.Page[CourierResponse], error)
+func CreateCourier(ctx, db *Client, v *ValidCourierCreateRequest) (*CourierResponse, error)
+func UpdateCourier(ctx, db *Client, id uuid.UUID, v *ValidCourierPatchRequest) (*CourierResponse, error)
+func DeleteCourier(ctx, db *Client, id uuid.UUID) error
+func DeleteBatchCouriers(ctx, db *Client, ids []uuid.UUID) (int, error)
 ```
 
-**Returns `*ent.Courier`, not a DTO**. Service retains full Ent entity capabilities.
+**These return the response DTO, not `*ent.Courier`.** Create and update take the
+**validated** request — `Apply` is defined on `Valid…Request` and nowhere else, so
+skipping validation is a compile error rather than a discipline problem.
 
-### `ent/courier_base_handler.go`
+The identifier type comes from the schema; `uuid.UUID` above is Courier's, not a
+constraint of the generator.
+
+`GetCourier` and `ListCouriers` read through `CourierQueryWithResponseEdges`, the
+generated eager-load plan. `ent.Client.Courier.Get` applies no plan and therefore
+cannot serve a response type that declares edges.
+
+Error classification is deliberately absent: these functions return what ent
+returned. Mapping to `ErrNotFound` / `ErrAlreadyExists` is `entdomain.ErrorMapper`.
+
+## Extending an operation
+
+There is nothing to override. Write your own function and stop calling the
+generated one — the generated filter, order, eager-load plan and converter are
+all still available to hand to it:
 
 ```go
-type BaseCourierHandler struct{}
-
-func (h *BaseCourierHandler) ToResponse(entity *Courier) *CourierResponse
-func (h *BaseCourierHandler) ToResponseList(entities []*Courier) []*CourierResponse
-func (h *BaseCourierHandler) PartialUpdate(ctx, svc courierUpdater, id, req) (*CourierResponse, error)
-```
-
-`PartialUpdate` does Update → ToResponse in one call.
-
-## Hook Extension Pattern
-
-```go
-type CourierService struct {
-    ent.BaseCourierService  // embed generated service
-    publisher event.EventPublisher
-    logger    *slog.Logger
-}
-
-func NewCourierService(db *ent.Client, ...) *CourierService {
-    s := &CourierService{
-        BaseCourierService: ent.BaseCourierService{DB: db},
-        ...
+// what used to be BeforeCreate / AfterCreate is now ordinary control flow
+func (s *CourierService) Create(ctx context.Context, req *ent.CourierCreateRequest) (*ent.CourierResponse, error) {
+    if err := s.checkQuota(ctx); err != nil {          // was BeforeCreate
+        return nil, err
     }
-    s.SetSelf(s)  // enable hook dispatch to this struct
-    return s
+    v, err := req.Validate()
+    if err != nil {
+        return nil, err
+    }
+    resp, err := ent.CreateCourier(ctx, s.db, v)
+    if err != nil {
+        return nil, err
+    }
+    s.publisher.Publish(event.Event{Type: "courier.created"})   // was AfterCreate
+    return resp, nil
 }
 
-// Override hooks — only implement what you need
-func (s *CourierService) AfterCreate(ctx context.Context, entity *ent.Courier) (*ent.Courier, error) {
-    s.publisher.Publish(event.Event{Type: "courier.created", ...})
-    return entity, nil
-}
-
-func (s *CourierService) BeforeDelete(ctx context.Context, id uuid.UUID) error {
-    // Check for active tasks before allowing deletion
-    count, _ := s.DB.Task.Query().Where(task.CourierIDEQ(id), task.StateIn(...)).Count(ctx)
-    if count > 0 { return apierror.ErrCourierHasActiveTasks }
-    return nil
+// a list operation with a policy predicate the schema cannot express
+func (s *CourierService) ListMine(ctx context.Context, f *ent.CourierFilter, r entdomain.ListRequest) (*entdomain.Page[ent.CourierResponse], error) {
+    os, err := ent.CourierOrder(r)
+    if err != nil {
+        return nil, err
+    }
+    q := ent.CourierQueryWithResponseEdges(s.db.Courier.Query())
+    ps := append(f.Predicates(), courier.OrganizationIDEQ(tenantFrom(ctx)))
+    return entdomain.ListPage(ctx, q, ps, os, r, ent.NewCourierResponse)
 }
 ```
-
-**Hook return value design:**
-- **Before hooks** return `error`: nil = proceed, error = abort
-- **After hooks** return `(*ent.Entity, error)`: default returns entity unchanged
 
 ## Handler Pattern
 
 Handlers reference DTOs from the `ent` package directly:
 
 ```go
-type Handler struct {
-    service.CourierBaseHandler  // type alias → ent.BaseCourierHandler
-    courierService *service.CourierService
-}
-
 func (h *Handler) Create(c *gin.Context) {
     var req ent.CourierCreateRequest
-    c.ShouldBindJSON(&req)
-    // Create validates internally; Apply exists only on the validated request.
-    entity, err := h.courierService.Create(c.Request.Context(), &req)
-    response.Created(c, h.ToResponse(entity))
+    if err := c.ShouldBindJSON(&req); err != nil { /* 400 */ }
+    resp, err := h.courierService.Create(c.Request.Context(), &req)
+    if err != nil { /* map and return */ }
+    response.Created(c, resp)
 }
 
 func (h *Handler) Update(c *gin.Context) {
     id, _ := uuid.Parse(c.Param("id"))
     var req ent.CourierPatchRequest
-    c.ShouldBindJSON(&req)
-
-    // One-liner: Update → ToResponse
-    result, err := h.PartialUpdate(c.Request.Context(), h.courierService, id, &req)
-    response.OK(c, result)
+    if err := c.ShouldBindJSON(&req); err != nil { /* 400 */ }
+    v, err := req.Validate()
+    if err != nil { /* 422 */ }
+    resp, err := ent.UpdateCourier(c.Request.Context(), h.db, id, v)
+    if err != nil { /* map and return */ }
+    response.OK(c, resp)
 }
 ```
+
+**`ShouldBindJSON` must be the decode path, not a manual struct build.** Presence
+is recorded by the generated `UnmarshalJSON`, so a patch assembled in Go carries
+no presence at all and every nil pointer reads as "absent".
 
 ## Entity Complexity Spectrum
 
@@ -231,9 +214,9 @@ No logic       +validation      +dedup         +password       +state machine
 │              │                │              +duty toggle    +line items
 │              │                │              │               +clone
 │              │                │              │               │
-BaseHandler    BaseHandler      BaseHandler    BaseHandler     Custom handler
-+BaseService   +BeforeCreate    +search()      +hooks          +custom service
-(zero code)    (coords)         helper         +custom methods +custom methods
+call the         wrap CreateX     +search()      wrap several    hand-written
+generated        with a check     helper         operations      service, calling
+wiring directly                                                  wiring where it fits
 ```
 
 ## Domain Mixins
@@ -258,9 +241,9 @@ entdomain.ErrValidation    // validation failed
 ```go
 ext := entdomain.NewExtensionWithOptions(
     entdomain.WithEntDomainPackage("github.com/githonllc/entdomain"),
-    entdomain.WithBaseService(true),
-    entdomain.WithBaseHandler(true),
 )
+// WithBaseService / WithBaseHandler were removed with the templates they
+// selected (#29). Every artifact is generated unconditionally now.
 ```
 
 ## Common Issues
@@ -269,8 +252,9 @@ ext := entdomain.NewExtensionWithOptions(
 2. **Never edit generated files** — they are overwritten on each generation
 3. **Don't manually set OrganizationID** — the tenant interceptor handles it
 4. **Don't manually add DeletedAtIsNil()** — the soft-delete interceptor handles it
-5. **Call `SetSelf(s)` in service constructors** — without it, hook dispatch falls back to no-op defaults
+5. **Handle the error from `NewXResponse`** — a not-loaded edge is an error, not a nil field. The removed `XEntToResponse` swallowed it and returned nil
 6. **DTOs are in `ent/` package** — import `ent` not `ent/domain`
+7. **Old `{entity}_base_service.go` / `{entity}_base_handler.go` are deleted by the next generation run** — do not re-add them by hand
 
 ## Source Files
 
@@ -284,6 +268,7 @@ ext := entdomain.NewExtensionWithOptions(
 | `funcs.go` | Template function registry |
 | `funcs_fields.go` | Field filtering (createFields, updateFields, etc.) |
 | `funcs_codegen.go` | Code generation helpers |
-| `templates/dto.tmpl` | Template for DTOs (CreateRequest, PatchRequest, Response) |
-| `templates/base_service.tmpl` | Template for BaseService with hooks |
-| `templates/base_handler.tmpl` | Template for BaseHandler with PartialUpdate |
+| `query.go` | GetOne, ListPage, SaveOne — the generic runtime the wiring calls |
+| `templates/dto.tmpl` | Template for DTOs (CreateRequest, PatchRequest, Response, Summary, eager-load plan) |
+| `templates/filter.tmpl` | Template for the filter struct, predicates and sort allow-list |
+| `templates/wiring.tmpl` | Template for the per-operation free functions |

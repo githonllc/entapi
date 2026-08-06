@@ -37,7 +37,14 @@ func (Author) Fields() []ent.Field {
 			Default(uuid.New).
 			Annotations(entdomain.IdField()),
 
+		// Unique, so a duplicate create is a UNIQUE constraint failure rather
+		// than a second row. Together with Article's required author edge —
+		// whose foreign key is declared ON DELETE NO ACTION — this fixture can
+		// produce BOTH kinds of constraint violation through the generated
+		// wiring, which is what #13's rule has to tell apart: ent reports both
+		// as *ent.ConstraintError.
 		field.String("name").
+			Unique().
 			Annotations(entdomain.DefaultField().AsFilterable().AsSearchable().AsSortable()),
 	}
 }

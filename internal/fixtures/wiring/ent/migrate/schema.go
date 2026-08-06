@@ -33,7 +33,7 @@ var (
 	// AuthorsColumns holds the columns for the "authors" table.
 	AuthorsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "name", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString, Unique: true},
 	}
 	// AuthorsTable holds the schema information for the "authors" table.
 	AuthorsTable = &schema.Table{

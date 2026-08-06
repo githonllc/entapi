@@ -97,9 +97,10 @@ func unsupportedIDType(node *gen.Type) string {
 	)
 }
 
-// nodeConflicts returns one human-readable message per contradicting field of
-// one entity. Each message names the entity, the field, and both conflicting
-// facts, because the schema author has to know which of the two to change.
+// nodeConflicts returns one human-readable message per contradiction found on
+// one entity — its fields first, then its edges. Each message names the entity,
+// the field or edge, and both conflicting facts, because the schema author has
+// to know which of the two to change.
 func nodeConflicts(node *gen.Type) []string {
 	var out []string
 	for _, f := range node.Fields {
@@ -110,11 +111,103 @@ func nodeConflicts(node *gen.Type) []string {
 			out = append(out, immutableUpdateConflict(node, f))
 		}
 	}
+	out = append(out, asymmetricSelfEdgeConflicts(node)...)
 	return out
 }
 
-// immutableUpdateConflict describes the one contradiction this package can
-// currently detect: a field ent marks Immutable that carries ScopeUpdate.
+// asymmetricSelfEdgeConflicts reports every self-referential edge pair on this
+// entity whose two ends disagree about whether they carry a DomainEdge
+// annotation at all.
+//
+// The pair is found from the inverse end: gen resolves Edge.Ref to the assoc
+// edge it names, and a self-referential pair is one whose target is the entity
+// that owns it, so both ends sit in the same Edges() slice and the author has
+// them both in view.
+//
+// Only "annotated" versus "not annotated at all" counts. Two ends carrying
+// different annotations are two decisions the author wrote down, and this
+// package has no standing to overrule them; two bare ends are one decision, not
+// to expose the relationship. It is the mixed case that has no reading as
+// intent, because the chained declaration produces exactly it by accident.
+func asymmetricSelfEdgeConflicts(node *gen.Type) []string {
+	var out []string
+	for _, inverse := range node.Edges {
+		if !inverse.IsInverse() || inverse.Ref == nil {
+			continue
+		}
+		if inverse.Type == nil || inverse.Type.Name != node.Name {
+			// Not self-referential: the assoc end lives on another entity, is
+			// annotated by another author on another day, and exposing one
+			// direction only is ordinary there rather than suspicious.
+			continue
+		}
+		assoc := inverse.Ref
+		assocAnnotated := getDomainEdgeAnnotation(assoc) != nil
+		inverseAnnotated := getDomainEdgeAnnotation(inverse) != nil
+		if assocAnnotated == inverseAnnotated {
+			continue
+		}
+		out = append(out, asymmetricSelfEdgeConflict(node, assoc, inverse, assocAnnotated))
+	}
+	return out
+}
+
+// asymmetricSelfEdgeConflict describes one self-referential pair annotated on
+// one end only.
+//
+// The trap this exists for: written as
+//
+//	edge.To("children", Tree.Type).From("parent").Field("parent_id").Annotations(a)
+//
+// ent hands Annotations() to the inverse builder, so the annotation lands on
+// "parent" and the assoc edge "children" is left bare — and a bare edge is
+// precisely how a schema author says "do not expose this". Generation therefore
+// drops "children" from the response and the eager-load plan with nothing to
+// report, and the author is left looking at a missing relation. #22 lost real
+// time to it before declaring the pair as two edges instead.
+//
+// The two spellings are indistinguishable by the time gen sees them — the
+// chained form's Descriptor.Ref does not survive into gen.Edge — so the check
+// is on the asymmetry rather than on the syntax, and the message names the
+// chained form as the likely cause instead of asserting it.
+//
+// One end exposed on purpose stays expressible: annotate the other end with a
+// bare entdomain.Edge(). It grants no scope, so nothing about the output
+// changes; what changes is that the decision is written down where the next
+// reader, and this check, can see it.
+func asymmetricSelfEdgeConflict(node *gen.Type, assoc, inverse *gen.Edge, assocAnnotated bool) string {
+	annotated, bare := inverse, assoc
+	cause := fmt.Sprintf(
+		"declaring the pair in the chained form edge.To(%q, %s.Type).From(%q)...Annotations(...) produces exactly this, "+
+			"because ent gives Annotations() to the inverse builder and leaves the assoc edge %q bare",
+		assoc.Name, node.Name, inverse.Name, assoc.Name)
+	if assocAnnotated {
+		annotated, bare = assoc, inverse
+		cause = fmt.Sprintf("the %q end was most likely annotated and the %q end forgotten", assoc.Name, inverse.Name)
+	}
+
+	carries := "carries a DomainEdge annotation"
+	if hasEdgeScope(annotated, ScopeResponse) {
+		carries = "is annotated for the response"
+	}
+
+	return fmt.Sprintf(
+		"%s.%s / %s.%s: the two ends of this self-referential edge pair disagree — %s.%s %s while %s.%s carries no DomainEdge annotation at all, "+
+			"so %q appears in no response type and in no eager-load plan, and nothing else in generation says so; %s. "+
+			"Declare the two ends separately and give each its own annotation — edge.To(%q, %s.Type).Annotations(entdomain.Edge().InResponse()) "+
+			"and edge.From(%q, %s.Type).Ref(%q).Annotations(entdomain.Edge().InResponse()) — "+
+			"or, to expose %q alone on purpose, annotate %q with a bare entdomain.Edge(), which grants no scope and says the end was considered",
+		node.Name, assoc.Name, node.Name, inverse.Name,
+		node.Name, annotated.Name, carries, node.Name, bare.Name,
+		bare.Name, cause,
+		assoc.Name, node.Name,
+		inverse.Name, node.Name, assoc.Name,
+		annotated.Name, bare.Name,
+	)
+}
+
+// immutableUpdateConflict describes the field-level contradiction: a field ent
+// marks Immutable that carries ScopeUpdate.
 //
 // ent's Update and UpdateOne builders iterate MutableFields, which excludes
 // immutable fields, so no update setter exists for one. Generating the update

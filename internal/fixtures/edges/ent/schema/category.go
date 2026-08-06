@@ -39,8 +39,10 @@ func (Category) Fields() []ent.Field {
 //	edge.To("children", Category.Type).From("parent").Unique().Field("parent_id").Annotations(a)
 //
 // the annotation attaches to the inverse edge only; the assoc edge is left
-// unannotated, nothing is reported, and "children" silently never appears in a
-// response. #30 makes that asymmetry a generation error.
+// unannotated, and before #30 nothing was reported and "children" silently
+// never appeared in a response. That asymmetry is now a generation error —
+// internal/fixtures/selfref is the refused shape, and internal/fixtures/selfrefpartial
+// is how exposing one end only is written down on purpose.
 func (Category) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("children", Category.Type).

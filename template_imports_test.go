@@ -54,9 +54,13 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			schemaDir: filepath.Join(root, "internal", "fixtures", "edges", "ent", "schema"),
 			pkgPath:   modulePath + "/internal/fixtures/edges/ent",
 		},
-		// The "immutable" fixture is deliberately absent: the generator refuses
-		// that schema, so no template is ever rendered for it. Asserting on the
-		// imports of output that is never emitted would be testing a fiction.
+		// The refused fixtures ("immutable", "intid", "selfref") are
+		// deliberately absent: the generator stops before rendering anything for
+		// them. Asserting on the imports of output that is never emitted would
+		// be testing a fiction.
+		//
+		// "selfrefpartial" is absent for a different reason: its templates see
+		// the same shapes "edges" already covers, one self-referential edge less.
 	}
 
 	tmpls := []struct {

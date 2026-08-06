@@ -68,15 +68,44 @@ when the case passes.
 | `basic` | happy path: create/update/response scopes, uuid id, one time field | generates and compiles |
 | `fieldshapes` | nillable, enum, JSON/map and named-`GoType` fields, optional and required | generates and compiles |
 | `edges` | to-one, to-many, a self-referential pair declared separately, a response-scoped foreign key whose edge is deliberately unannotated, and an entity with no response-scoped field at all | generates and compiles |
+| `selfrefpartial` | a self-referential pair exposing one end only, the other end holding a bare `entdomain.Edge()` | generates and compiles |
 | `immutable` | `Immutable()` fields carrying `ScopeUpdate` | generation refused |
 | `intid` | a domain-annotated entity with ent's default `int` primary key, with the base service enabled | generation refused |
+| `selfref` | a self-referential pair declared in the chained form, so annotated on one end only | generation refused |
 | `stale` | an entity that loses its annotations between two runs | generates twice, see below |
+
+## The self-referential pair, in three fixtures
+
+`edges`, `selfref` and `selfrefpartial` are one story told three times, and they
+only make sense together.
+
+Written in the chained form, `edge.To("children", T.Type).From("parent")...Annotations(a)`
+hands the annotation to the **inverse** edge alone. The assoc edge `children` is
+left bare — and a bare edge is exactly how a schema author says *do not expose
+this*. Before #30 the two were indistinguishable: generation succeeded, the
+output compiled, and `children` was in no response type and no eager-load plan,
+with no message anywhere.
+
+- `edges/Category` declares the pair as two separate edges, both annotated: both
+  ends reach `CategoryResponse` and the plan is `WithChildren().WithParent()`.
+- `selfref/Tree` is the chained form. Generation is now refused, naming both
+  ends and the fix.
+- `selfrefpartial/Node` exposes `parent` alone on purpose and writes that down
+  with a bare `entdomain.Edge()` on `children`. It generates, and `NodeResponse`
+  carries `Parent` and no `Children` — the same output the trap produced, now
+  reached deliberately.
+
+`selfrefpartial` has to be a real generation rather than a unit test: the claim
+at risk is that an *empty* annotation survives the schema load, which reaches
+codegen through a JSON round-trip, and `DomainEdge{}` marshals to `{}`. If ent
+dropped it, the refusal message would be recommending a fix that does not work.
 
 `basic`, `fieldshapes` and `edges` are also the corpus for
 `TestTemplatesDeclareTheirImports`, which renders each template over them and
 fails if goimports has to add or remove an import — that is what keeps the
-formatter a safety net rather than the mechanism. `immutable` is deliberately
-absent from it: generation is refused, so no template is ever rendered for it.
+formatter a safety net rather than the mechanism. Every refused fixture is
+deliberately absent from it: generation stops before any template is rendered,
+so there is nothing to check.
 
 ## The `stale` fixture
 

@@ -171,10 +171,31 @@ func (Post) Edges() []ent.Edge {
 Like the field builders, every edge builder takes a value receiver and returns a
 copy, so a partially configured annotation is safe to reuse as a base.
 
-> **Trap.** Declaring a self-referential pair in the chained form
+> **Trap, now refused.** Declaring a self-referential pair in the chained form
 > `edge.To("children", X.Type).From("parent")...Annotations(a)` attaches the
-> annotation to the **inverse edge only**. No error is reported and the assoc
-> edge silently never appears. Declare the two edges separately.
+> annotation to the **inverse edge only**. The assoc edge is left bare — which
+> is also how you say *do not expose this* — so `children` used to vanish from
+> the response and the eager-load plan with no message anywhere.
+>
+> A self-referential pair annotated on **one end only** is now a generation
+> error naming both ends and the fix. Declare the two edges separately and
+> annotate each:
+>
+> ```go
+> edge.To("children", X.Type).
+>     Annotations(entdomain.Edge().InResponse()),
+> edge.From("parent", X.Type).Ref("children").Unique().Field("parent_id").
+>     Annotations(entdomain.Edge().InResponse()),
+> ```
+>
+> To expose **one end only on purpose**, annotate the other end with a bare
+> `entdomain.Edge()`. It grants no scope, so the output is identical to leaving
+> it unannotated; what it adds is that the decision is written down, which is
+> what tells it apart from the end the chained form forgets.
+>
+> The check is confined to pairs whose two ends sit in one `Edges()` slice —
+> only a self-referential pair can. Across two entities, exposing one direction
+> only is the ordinary case and is never refused.
 
 ## Runtime: generic CRUD
 

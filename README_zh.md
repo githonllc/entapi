@@ -509,8 +509,11 @@ var (
 |---|---|
 | `DomainField.Scopes` | 决定字段进入哪个请求/响应结构体 |
 | `DomainField.Required` | 为对应作用域生成 `validate:"required"` 与 `Validate()` 检查 |
+| `DomainEdge.Scopes`，由 `Edge().InResponse()` 设置 | 把嵌套对象放进响应类型 |
+| `DomainEdge.JSONKey`，由 `.As("key")` 设置 | 覆盖该边的 JSON 键 |
 
-就这两个。下面其余的全部只是被接受并存储，不改变任何生成结果。
+二十七个设置中的七个（作用域常量分开计数）。下面其余的全部只是被接受并存储，
+不改变任何生成结果。
 
 **已接受但尚未消费。** 每一项都有明确的保留理由与跟踪 issue；一旦某项悄悄变得可达
 而本表未同步，上面那个测试就会失败：
@@ -520,7 +523,6 @@ var (
 | `Searchable`、`Sortable`、`Filterable` | [#27](https://github.com/githonllc/entdomain/issues/27)——过滤结构体、全文检索与排序白名单 |
 | `ScopeQuery` | [#27](https://github.com/githonllc/entdomain/issues/27)。在它落地之前，不得进入任何打了 tag 的发布 |
 | `Metadata` 及 `FieldMetadata` 全部字段（`Title`、`Format`、`Pattern`、`Minimum`、`Maximum`、`MinLength`、`MaxLength`、`Enum`、`ReadOnly`、`WriteOnly`、`Deprecated`、`Tags`），经由 `WithTitle`、`WithFormat`、`WithPattern`、`WithRange`、`WithLength`、`WithEnum`、`AsReadOnly`、`AsWriteOnly`、`AsDeprecated`、`WithTags` 设置 | OpenAPI/Swagger spec 生成，目前尚无 issue 实现。`annotations.go` 中已标注 RESERVED |
-| `DomainEdge.Scopes`、`DomainEdge.JSONKey`，经由 `Edge().InResponse()` 与 `.As()` 设置 | [#25](https://github.com/githonllc/entdomain/issues/25)——生成响应与摘要类型 |
 | `Validation`、`Description`、`Example` | 未决。它们既没有读取方也没有后继方案；已在 [#17](https://github.com/githonllc/entdomain/issues/17) 上提出 |
 
 **已删除。** `AsUniqueLookup()` / `AsRangeLookup()` 及其 `UniqueLookup` / `RangeLookup`
@@ -571,8 +573,7 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 
 以下全部核对过源码，不是从文档推断的。每条附带跟踪它的 issue。
 
-**三十个导出的注解设置里，有二十五个被接受、存储、然后忽略。** 只有 `Scopes` 与
-`Required` 真正到达模板。但哪些有效不再需要猜：上面的「注解表面」一节列出了每一个，
+**二十七个导出的注解设置里，有二十个被接受、存储、然后忽略。** 但哪些有效不再需要猜：上面的「注解表面」一节列出了每一个，
 而且这份清单由测试推导而非手工维护，所以任何设置都无法悄悄进出它
 （[#17](https://github.com/githonllc/entdomain/issues/17)）。
 

@@ -35,6 +35,15 @@ const markerScanBytes = 4096
 // "Entdomain".
 const softDeleteFileName = "entdomain_softdelete.go"
 
+// errorMapFileName holds the package-level ErrorMap the wiring returns its
+// errors through. It is graph-level for the same reason the wiring needs it to
+// be: every entity's wiring lands in the one package, so one declaration serves
+// all of them — which is what makes the classification identical across
+// operations instead of merely intended to be.
+//
+// Same prefix rule as above: entdomain_ cannot collide with ent's own output.
+const errorMapFileName = "entdomain_errors.go"
+
 // graphFileNames returns the file names this extension can write for the graph
 // as a whole, whether or not this run wrote them.
 //
@@ -42,9 +51,10 @@ const softDeleteFileName = "entdomain_softdelete.go"
 // there is no node to hang them off. The last schema dropping
 // entdomain.SoftDeleteMixin is exactly the case that leaves a
 // RegisterSoftDelete behind which registers a filter for entities that no
-// longer have a tombstone column.
+// longer have a tombstone column, and the last entity losing its annotations is
+// the case that leaves an ErrorMap behind with no wiring left to use it.
 func graphFileNames() []string {
-	return []string{softDeleteFileName}
+	return []string{softDeleteFileName, errorMapFileName}
 }
 
 // generatedFileNames returns the file names this extension can write for node,

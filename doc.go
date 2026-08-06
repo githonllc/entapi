@@ -135,13 +135,22 @@
 //
 // [ErrorMapper] translates a persistence layer's errors into [ErrNotFound] and
 // [ErrAlreadyExists]. It takes predicates as function values so the runtime
-// stays ent-free:
+// stays ent-free.
 //
-//	var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+// Consumers do not construct one. Generation writes ent/entdomain_errors.go,
+// one declaration for the package, and every generated operation returns
+// through it:
 //
-// Uniqueness requires [ErrorMapper.WithUniqueViolation]: ent.IsConstraintError
-// is true for a duplicate key and a foreign-key violation alike, so mapping it
-// straight to ErrAlreadyExists would report the latter as the former. What the
+//	var ErrorMap = entdomain.NewErrorMapper(IsNotFound, IsConstraintError)
+//
+// One variable rather than a per-call parameter is what makes IsNotFound answer
+// the same way whichever operation failed.
+//
+// Uniqueness requires [ErrorMapper.WithUniqueViolation], installed on that
+// variable: ent.IsConstraintError is true for a duplicate key and a foreign-key
+// violation alike, so mapping it straight to ErrAlreadyExists would report the
+// latter as the former. Until it is installed, nothing claims ErrAlreadyExists
+// — not-found keeps working and already-exists is simply given up. What the
 // mapper cannot classify it returns unchanged rather than guessing.
 //
 // See the README for the full annotation reference and generated code examples.

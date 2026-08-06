@@ -28,9 +28,11 @@ import (
 // The identifier type is uuid.UUID because that is what the schema says.
 // Nothing below is written for a particular one.
 //
-// Error classification is deliberately absent: mapping a driver error to
-// not-found or already-exists belongs to the runtime and is issue #13. These
-// functions return what ent returned.
+// Every exported function below returns its error through ErrorMap (see
+// entdomain_errors.go), and each one maps exactly once. That is what makes
+// entdomain.IsNotFound answer the same way whichever operation failed. The
+// sentinel is added to the chain rather than substituted for it, so ent's own
+// error is still reachable with errors.As.
 // ============================================================================
 
 // jSONWidgetByID fetches one JSONWidget through the eager-load plan.
@@ -43,9 +45,20 @@ func jSONWidgetByID(db *Client) func(context.Context, uuid.UUID) (*JSONWidget, e
 	}
 }
 
+// jSONWidgetGet is the read without the error mapping.
+//
+// It exists so that a create or an update maps exactly once. Their response is
+// built by re-reading through the eager-load plan, and if that read applied
+// ErrorMap itself the caller would get a doubly wrapped error whose message
+// names the same sentinel twice.
+func jSONWidgetGet(ctx context.Context, db *Client, id uuid.UUID) (*JSONWidgetResponse, error) {
+	return entdomain.GetOne(ctx, jSONWidgetByID(db), NewJSONWidgetResponse, id)
+}
+
 // GetJSONWidget reads one JSONWidget and converts it to its response.
 func GetJSONWidget(ctx context.Context, db *Client, id uuid.UUID) (*JSONWidgetResponse, error) {
-	return entdomain.GetOne(ctx, jSONWidgetByID(db), NewJSONWidgetResponse, id)
+	r, err := jSONWidgetGet(ctx, db, id)
+	return r, ErrorMap.MapError(err)
 }
 
 // ListJSONWidgets runs a filtered, ordered, paginated query.
@@ -59,12 +72,17 @@ func GetJSONWidget(ctx context.Context, db *Client, id uuid.UUID) (*JSONWidgetRe
 //
 // A nil filter contributes no predicates, so a caller with nothing to filter by
 // does not need a branch of its own.
+//
+// The sort-key failure returns before the mapping. It is already an
+// entdomain.ErrValidation and never reached the database, so there is nothing
+// for a persistence-layer classifier to say about it.
 func ListJSONWidgets(ctx context.Context, db *Client, f *JSONWidgetFilter, r entdomain.ListRequest) (*entdomain.Page[JSONWidgetResponse], error) {
 	order, err := JSONWidgetOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	return entdomain.ListPage(ctx, JSONWidgetQueryWithResponseEdges(db.JSONWidget.Query()), f.Predicates(), order, r, NewJSONWidgetResponse)
+	p, err := entdomain.ListPage(ctx, JSONWidgetQueryWithResponseEdges(db.JSONWidget.Query()), f.Predicates(), order, r, NewJSONWidgetResponse)
+	return p, ErrorMap.MapError(err)
 }
 
 // CreateJSONWidget inserts one JSONWidget and returns its response.
@@ -73,7 +91,8 @@ func ListJSONWidgets(ctx context.Context, db *Client, f *JSONWidgetFilter, r ent
 // else, so validation is a compile-time requirement here rather than a step
 // this function could forget on the caller's behalf.
 func CreateJSONWidget(ctx context.Context, db *Client, v *ValidJSONWidgetCreateRequest) (*JSONWidgetResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.JSONWidget.Create()), NewJSONWidgetResponse)
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.JSONWidget.Create()), NewJSONWidgetResponse)
+	return r, ErrorMap.MapError(err)
 }
 
 // UpdateJSONWidget applies a validated patch to one JSONWidget.
@@ -82,7 +101,8 @@ func CreateJSONWidget(ctx context.Context, db *Client, v *ValidJSONWidgetCreateR
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
 func UpdateJSONWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidJSONWidgetPatchRequest) (*JSONWidgetResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.JSONWidget.UpdateOneID(id)), NewJSONWidgetResponse)
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.JSONWidget.UpdateOneID(id)), NewJSONWidgetResponse)
+	return r, ErrorMap.MapError(err)
 }
 
 // DeleteJSONWidget removes one JSONWidget.
@@ -92,7 +112,7 @@ func UpdateJSONWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidJSO
 // soft-delete column is decided by an ent interceptor or mixin, not by a
 // filename convention read out of the schema.
 func DeleteJSONWidget(ctx context.Context, db *Client, id uuid.UUID) error {
-	return db.JSONWidget.DeleteOneID(id).Exec(ctx)
+	return ErrorMap.MapError(db.JSONWidget.DeleteOneID(id).Exec(ctx))
 }
 
 // DeleteBatchJSONWidgets removes several JSONWidgets in one statement and
@@ -106,6 +126,11 @@ func DeleteJSONWidget(ctx context.Context, db *Client, id uuid.UUID) error {
 // An empty list deletes nothing. That is ent's own reading of IDIn with no
 // arguments, not a guard written here — a guard would be a second place for the
 // rule to live, and the failure it protects against is unrecoverable.
+//
+// An id that matched nothing is not an error here, so this operation never
+// produces a not-found — but it can still fail a foreign-key check, which is
+// exactly the case the mapping must NOT report as already-exists.
 func DeleteBatchJSONWidgets(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
-	return db.JSONWidget.Delete().Where(jsonwidget.IDIn(ids...)).Exec(ctx)
+	n, err := db.JSONWidget.Delete().Where(jsonwidget.IDIn(ids...)).Exec(ctx)
+	return n, ErrorMap.MapError(err)
 }

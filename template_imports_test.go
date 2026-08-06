@@ -189,6 +189,43 @@ func TestSoftDeleteTemplateDeclaresItsImports(t *testing.T) {
 	}
 }
 
+// TestErrorMapTemplateDeclaresItsImports is the same invariant for the other
+// graph-level template. It has exactly one import and no conditional at all,
+// which is precisely why it is worth pinning: the file is short enough that a
+// future edit adding a helper would be tempted to lean on goimports, and
+// writeFile aborts rather than repairing.
+func TestErrorMapTemplateDeclaresItsImports(t *testing.T) {
+	root := repoRoot(t)
+	schemaDir := filepath.Join(root, "internal", "fixtures", "basic", "ent", "schema")
+	pkgPath := modulePath + "/internal/fixtures/basic/ent"
+
+	g := loadFixtureGraph(t, schemaDir, pkgPath)
+
+	ext := NewExtensionWithOptions()
+	tmpl, err := template.New("errors").Funcs(ext.templateFuncMap()).Parse(errorMapTemplate)
+	if err != nil {
+		t.Fatalf("parsing errors template: %v", err)
+	}
+	var buf []byte
+	if err := tmpl.Execute(&byteWriter{buf: &buf}, g); err != nil {
+		t.Fatalf("rendering errors template: %v", err)
+	}
+
+	formatted, err := imports.Process(errorMapFileName, buf, nil)
+	if err != nil {
+		t.Fatalf("rendered errors template is not valid Go: %v\n%s", err, buf)
+	}
+
+	declared := importPaths(t, buf)
+	resolved := importPaths(t, formatted)
+	for _, added := range missing(resolved, declared) {
+		t.Errorf("goimports had to ADD %q: the errors template does not declare an import its output uses", added)
+	}
+	for _, removed := range missing(declared, resolved) {
+		t.Errorf("goimports had to REMOVE %q: the errors template declares an import its output does not use", removed)
+	}
+}
+
 // loadFixtureGraph is loadFixtureNodes for a caller that needs the whole graph,
 // which the graph-level template takes as its data.
 func loadFixtureGraph(t *testing.T, schemaDir, pkgPath string) *gen.Graph {

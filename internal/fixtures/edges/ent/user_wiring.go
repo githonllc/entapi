@@ -28,9 +28,11 @@ import (
 // The identifier type is uuid.UUID because that is what the schema says.
 // Nothing below is written for a particular one.
 //
-// Error classification is deliberately absent: mapping a driver error to
-// not-found or already-exists belongs to the runtime and is issue #13. These
-// functions return what ent returned.
+// Every exported function below returns its error through ErrorMap (see
+// entdomain_errors.go), and each one maps exactly once. That is what makes
+// entdomain.IsNotFound answer the same way whichever operation failed. The
+// sentinel is added to the chain rather than substituted for it, so ent's own
+// error is still reachable with errors.As.
 // ============================================================================
 
 // userByID fetches one User through the eager-load plan.
@@ -53,13 +55,24 @@ func userByID(db *Client) func(context.Context, uuid.UUID) (*User, error) {
 // response the same shape as a read.
 func userReloaded(ctx context.Context, db *Client) func(*User) (*UserResponse, error) {
 	return func(e *User) (*UserResponse, error) {
-		return GetUser(ctx, db, e.ID)
+		return userGet(ctx, db, e.ID)
 	}
+}
+
+// userGet is the read without the error mapping.
+//
+// It exists so that a create or an update maps exactly once. Their response is
+// built by re-reading through the eager-load plan, and if that read applied
+// ErrorMap itself the caller would get a doubly wrapped error whose message
+// names the same sentinel twice.
+func userGet(ctx context.Context, db *Client, id uuid.UUID) (*UserResponse, error) {
+	return entdomain.GetOne(ctx, userByID(db), NewUserResponse, id)
 }
 
 // GetUser reads one User and converts it to its response.
 func GetUser(ctx context.Context, db *Client, id uuid.UUID) (*UserResponse, error) {
-	return entdomain.GetOne(ctx, userByID(db), NewUserResponse, id)
+	r, err := userGet(ctx, db, id)
+	return r, ErrorMap.MapError(err)
 }
 
 // ListUsers runs a filtered, ordered, paginated query.
@@ -73,12 +86,17 @@ func GetUser(ctx context.Context, db *Client, id uuid.UUID) (*UserResponse, erro
 //
 // A nil filter contributes no predicates, so a caller with nothing to filter by
 // does not need a branch of its own.
+//
+// The sort-key failure returns before the mapping. It is already an
+// entdomain.ErrValidation and never reached the database, so there is nothing
+// for a persistence-layer classifier to say about it.
 func ListUsers(ctx context.Context, db *Client, f *UserFilter, r entdomain.ListRequest) (*entdomain.Page[UserResponse], error) {
 	order, err := UserOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	return entdomain.ListPage(ctx, UserQueryWithResponseEdges(db.User.Query()), f.Predicates(), order, r, NewUserResponse)
+	p, err := entdomain.ListPage(ctx, UserQueryWithResponseEdges(db.User.Query()), f.Predicates(), order, r, NewUserResponse)
+	return p, ErrorMap.MapError(err)
 }
 
 // CreateUser inserts one User and returns its response.
@@ -87,7 +105,8 @@ func ListUsers(ctx context.Context, db *Client, f *UserFilter, r entdomain.ListR
 // else, so validation is a compile-time requirement here rather than a step
 // this function could forget on the caller's behalf.
 func CreateUser(ctx context.Context, db *Client, v *ValidUserCreateRequest) (*UserResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.User.Create()), userReloaded(ctx, db))
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.User.Create()), userReloaded(ctx, db))
+	return r, ErrorMap.MapError(err)
 }
 
 // UpdateUser applies a validated patch to one User.
@@ -96,7 +115,8 @@ func CreateUser(ctx context.Context, db *Client, v *ValidUserCreateRequest) (*Us
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
 func UpdateUser(ctx context.Context, db *Client, id uuid.UUID, v *ValidUserPatchRequest) (*UserResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.User.UpdateOneID(id)), userReloaded(ctx, db))
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.User.UpdateOneID(id)), userReloaded(ctx, db))
+	return r, ErrorMap.MapError(err)
 }
 
 // DeleteUser removes one User.
@@ -106,7 +126,7 @@ func UpdateUser(ctx context.Context, db *Client, id uuid.UUID, v *ValidUserPatch
 // soft-delete column is decided by an ent interceptor or mixin, not by a
 // filename convention read out of the schema.
 func DeleteUser(ctx context.Context, db *Client, id uuid.UUID) error {
-	return db.User.DeleteOneID(id).Exec(ctx)
+	return ErrorMap.MapError(db.User.DeleteOneID(id).Exec(ctx))
 }
 
 // DeleteBatchUsers removes several Users in one statement and
@@ -120,6 +140,11 @@ func DeleteUser(ctx context.Context, db *Client, id uuid.UUID) error {
 // An empty list deletes nothing. That is ent's own reading of IDIn with no
 // arguments, not a guard written here — a guard would be a second place for the
 // rule to live, and the failure it protects against is unrecoverable.
+//
+// An id that matched nothing is not an error here, so this operation never
+// produces a not-found — but it can still fail a foreign-key check, which is
+// exactly the case the mapping must NOT report as already-exists.
 func DeleteBatchUsers(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
-	return db.User.Delete().Where(user.IDIn(ids...)).Exec(ctx)
+	n, err := db.User.Delete().Where(user.IDIn(ids...)).Exec(ctx)
+	return n, ErrorMap.MapError(err)
 }

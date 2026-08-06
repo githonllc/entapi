@@ -200,11 +200,18 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
   `DeleteBatch{Entities}` issues `Delete().Where(IDIn(...)).Exec` (`OpDelete`),
   and the hook rewrites both. There is no second tombstone write. The old
   `deleted_at`/`Nillable` naming convention and `hasSoftDelete` are gone (#29).
-- `templates/softdelete.tmpl` is the **only graph-level template**: it is rendered
-  once over `*gen.Graph`, not per `*gen.Type`, and it is generated for a
-  soft-deletable entity even when that entity has no domain fields at all. Its
-  output file (`entdomain_softdelete.go`) is cleaned up through
-  `graphFileNames()`, not `generatedFileNames(node)`.
+- **Two graph-level templates** are rendered once over `*gen.Graph` rather than
+  per `*gen.Type`, and both their output files are cleaned up through
+  `graphFileNames()`, not `generatedFileNames(node)`:
+  `templates/softdelete.tmpl` -> `entdomain_softdelete.go`, generated for a
+  soft-deletable entity even when that entity has no domain fields at all; and
+  `templates/errors.tmpl` -> `entdomain_errors.go`, generated when any entity is
+  annotated, holding the package's `ErrorMap` (#13).
+- **Every exported wiring function returns through `ErrorMap.MapError`, exactly
+  once** (#13). The unexported `{entity}Get` exists precisely so a create or
+  update that re-reads through the eager-load plan does not map twice. The two
+  predicates in `errors.tmpl` must stay UNQUALIFIED — `entdomain.IsNotFound`
+  also exists and would still compile, silently classifying nothing.
 - **There are no generated hooks and nothing to embed.** The wiring is free
   functions; a consumer who needs different behaviour writes their own function
   and stops calling the generated one. `SetSelf` dispatch is gone (#16, #29).

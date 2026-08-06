@@ -365,15 +365,26 @@ page, err := ent.ListArticles(ctx, db, filter, req)
 ### 错误映射
 
 `ErrorMapper` 把持久层的错误翻译成本包的哨兵值。它以函数值的形式接收谓词，
-因此运行时仍然不 import 任何 ent 包。生成的 wiring 只有一行：
+因此运行时仍然不 import 任何 ent 包。
+
+**你不需要自己构造它。** 生成会为整个包写出一个 `ent/entdomain_errors.go`，
+里面就是每个生成操作返回时都会经过的那个映射器：
 
 ```go
-var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+// 生成的
+var ErrorMap = entdomain.NewErrorMapper(IsNotFound, IsConstraintError)
+```
 
-// ...
-if err != nil {
-    return nil, mapper.MapError(err)   // 缺行 -> ErrNotFound
-}
+那里的 `IsNotFound` 与 `IsConstraintError` 是 **ent 自己的**，生成在同一个包里
+——框架并不导出它们，因为 `NotFoundError` 与 `ConstraintError` 是逐项目生成的。
+这一行是两半唯一能相遇的地方。
+
+一个包一个变量、而不是每次调用一个参数，正是"哪个操作失败都读作同一个哨兵"
+的来源：
+
+```go
+_, err := ent.GetArticle(ctx, db, id)
+if entdomain.IsNotFound(err) { /* 404 —— Update、Delete… 完全一样 */ }
 ```
 
 **唯一性需要自己的谓词**，这不是为了方便——`ent.IsConstraintError` 对重复键
@@ -386,14 +397,21 @@ FOREIGN KEY constraint failed (787)
 
 因此把它直接映射成 `ErrAlreadyExists`，等于把外键冲突报成重复键。区别只存在
 于被 `*ent.ConstraintError` 包裹的 driver error 里，且与方言相关，所以库不猜
-——要么你给出判定，要么就得不到 already-exists 分类：
+——要么你把它装到生成的映射器上，要么就得不到 already-exists 分类：
 
 ```go
-var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError).
-    WithUniqueViolation(func(err error) bool {              // SQLite
+func init() {
+    ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(func(err error) bool { // SQLite
         return strings.Contains(err.Error(), "UNIQUE constraint failed")
     })
+}
 ```
+
+**漏掉这一行是安全的，这正是整个设计的落点。** not-found 照常工作，放弃的只有
+already-exists：重复键会以未分类的形式回来，HTTP 层给出 `500` 而不是 `409`。
+这个方向是刻意的——重复键上的 `500` 可以补救，外键冲突上的 `409` 会把调用方
+指去修一个根本没错的东西。请在构造 client 的地方、第一个请求之前赋值：它就是
+一个普通的包级变量，自身不带任何同步。
 
 映射器判不出来的一切——包括种类未识别的约束冲突——原样返回：不分类、不吞掉、
 也绝不贴上一个并未被确立的哨兵。哨兵和原错误同时留在错误链上，`errors.Is`
@@ -499,11 +517,12 @@ graph TD
 生成运行会**删除**目标目录里遗留的 `{entity}_base_service.go` 与
 `{entity}_base_handler.go`，所以升级不会留下一堆「编译得过、但本库已不再描述」的代码。
 
-另外为整个 schema 生成一个文件，仅当至少有一个实体嵌入了 `entdomain.SoftDeleteMixin`：
+另外为整个 schema 生成两个文件，各自仅在确实有内容可写时才生成：
 
-| 文件 | 内容 |
-|------|------|
-| `entdomain_softdelete.go` | `RegisterSoftDelete`、查询 traverser 与改写删除的 hook——见[软删除](#软删除) |
+| 文件 | 生成条件 | 内容 |
+|------|---------|------|
+| `entdomain_errors.go` | 至少有一个实体带注解 | `ErrorMap`——每个生成操作返回时都经过的分类器，见[错误映射](#错误映射) |
+| `entdomain_softdelete.go` | 至少有一个实体嵌入 `entdomain.SoftDeleteMixin` | `RegisterSoftDelete`、查询 traverser 与改写删除的 hook——见[软删除](#软删除) |
 
 ### 创建请求与 patch 请求
 
@@ -671,8 +690,10 @@ func listMyArticles(ctx context.Context, db *ent.Client, f *ent.ArticleFilter, r
 }
 ```
 
-错误分类是刻意缺席的：把驱动错误映射成 `ErrNotFound` 或 `ErrAlreadyExists` 属于
-运行时，是 issue #13。这些函数原样返回 ent 返回的错误。
+以上每个函数都把错误经由本包的 `ErrorMap` 返回，且**恰好映射一次**，所以缺行无论
+出自哪个操作都是 `entdomain.ErrNotFound`。哨兵是加进错误链而不是替换掉它，
+ent 自己的错误仍然可以用 `errors.As` 取到。见[错误映射](#错误映射)——特别是
+唯一性需要你写一行，在拿到它之前没有任何东西会声称 `ErrAlreadyExists`。
 ### 软删除
 
 软删除位于 ent 自己的 interceptor 与 hook 层，而不是生成的 service 层。这不是偏好问题。
@@ -947,9 +968,11 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 并且需要反射才能拿到 mutation 的 client；这笔取舍记录在
 [#18](https://github.com/githonllc/entdomain/issues/18)。
 
-**生成的代码不做任何错误分类。** 接线原样返回 ent 返回的错误；把驱动错误映射成
-`ErrNotFound` 或 `ErrAlreadyExists` 是 `entdomain.ErrorMapper` 的职责，而接线还没有
-调用它（[#13](https://github.com/githonllc/entdomain/issues/13)）。
+**在你装上方言谓词之前，already-exists 不会被分类。** 生成的接线在所有操作上都把缺行
+映射成 `ErrNotFound`，但 `ent.IsConstraintError` 对重复键和外键冲突一视同仁，
+所以在 `ErrorMap.WithUniqueViolation` 拿到判定之前，没有任何东西声称
+`ErrAlreadyExists`——见[错误映射](#错误映射)。漏掉它的代价是少一个 `409`，
+而不会多一个错的 `409`（[#13](https://github.com/githonllc/entdomain/issues/13)）。
 
 **分页只有偏移分页，全库如此。** `ent.List{Entities}` 走 `entdomain.ListPage`，
 深翻是 O(n)，每页还要付一次 `COUNT`，并发写入下还可能跳过或重复行。包内没有 keyset

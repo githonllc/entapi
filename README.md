@@ -392,15 +392,28 @@ asymmetry that made removing it the cheap direction.
 
 `ErrorMapper` turns a persistence layer's errors into this package's sentinels.
 It takes predicates as function values, so the runtime still imports no ent
-package. The generated wiring is one line:
+package.
+
+**You do not construct one.** Generation emits `ent/entdomain_errors.go`, one
+file for the package, holding the mapper every generated operation returns
+through:
 
 ```go
-var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+// generated
+var ErrorMap = entdomain.NewErrorMapper(IsNotFound, IsConstraintError)
+```
 
-// ...
-if err != nil {
-    return nil, mapper.MapError(err)   // missing row -> ErrNotFound
-}
+`IsNotFound` and `IsConstraintError` there are *ent's*, generated into the same
+package — the framework does not export them, because `NotFoundError` and
+`ConstraintError` are generated per project. That one line is the only place the
+two halves can meet.
+
+One variable for the package, not a parameter per call, is what makes
+`entdomain.IsNotFound(err)` answer the same way whichever operation failed:
+
+```go
+_, err := ent.GetArticle(ctx, db, id)
+if entdomain.IsNotFound(err) { /* 404 — and identically for Update, Delete, … */ }
 ```
 
 **Uniqueness needs its own predicate**, and this is not a convenience —
@@ -415,14 +428,24 @@ FOREIGN KEY constraint failed (787)
 Mapping it straight to `ErrAlreadyExists` therefore reports a foreign-key
 violation as a duplicate. The distinction lives in the driver error wrapped by
 `*ent.ConstraintError` and is dialect-specific, so the library does not guess
-it — supply it, or get no already-exists classification at all:
+it — install it on the generated mapper, or get no already-exists
+classification at all:
 
 ```go
-var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError).
-    WithUniqueViolation(func(err error) bool {              // SQLite
+func init() {
+    ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(func(err error) bool { // SQLite
         return strings.Contains(err.Error(), "UNIQUE constraint failed")
     })
+}
 ```
+
+**Forgetting that line is safe, and that is the whole design.** Not-found keeps
+working; only already-exists is given up, so a duplicate key comes back
+unclassified and an HTTP layer answers `500` instead of `409`. That direction is
+deliberate — a `500` on a duplicate is recoverable, a `409` on a foreign-key
+failure sends the caller to fix something that is not wrong. Assign it where the
+client is built, before the first request: it is an ordinary package-level
+variable with no synchronisation of its own.
 
 Anything the mapper cannot classify — including a constraint violation of an
 unidentified kind — is returned unchanged: unclassified, never swallowed, and
@@ -533,12 +556,13 @@ A generation run **deletes** `{entity}_base_service.go` and
 upgrading does not leave code behind that compiles against a service the library
 no longer describes.
 
-Plus one file for the schema as a whole, written only when at least one entity
-embeds `entdomain.SoftDeleteMixin`:
+Plus two files for the schema as a whole, each written only when it has
+something to say:
 
-| File | Contains |
-|------|----------|
-| `entdomain_softdelete.go` | `RegisterSoftDelete`, the query traverser and the delete-rewriting hook — see [Soft delete](#soft-delete) |
+| File | Written when | Contains |
+|------|--------------|----------|
+| `entdomain_errors.go` | at least one entity is annotated | `ErrorMap`, the classifier every generated operation returns through — see [Error mapping](#error-mapping) |
+| `entdomain_softdelete.go` | at least one entity embeds `entdomain.SoftDeleteMixin` | `RegisterSoftDelete`, the query traverser and the delete-rewriting hook — see [Soft delete](#soft-delete) |
 
 ### Create and patch requests
 
@@ -730,9 +754,12 @@ func listMyArticles(ctx context.Context, db *ent.Client, f *ent.ArticleFilter, r
 }
 ```
 
-Error classification is deliberately absent: mapping a driver error onto
-`ErrNotFound` or `ErrAlreadyExists` belongs to the runtime, and is issue #13.
-These functions return what ent returned.
+Every one of these functions returns its error through the package's `ErrorMap`,
+and each maps exactly once, so a missing row is `entdomain.ErrNotFound` whichever
+operation produced it. The sentinel is added to the chain rather than
+substituted for it, so ent's own error is still reachable with `errors.As`. See
+[Error mapping](#error-mapping) — in particular, uniqueness needs one line from
+you and nothing claims `ErrAlreadyExists` until it has it.
 ### Soft delete
 
 Soft delete lives in ent's own interceptor and hook layer, not in the generated
@@ -1045,9 +1072,12 @@ hook and interceptor, which would oblige every consumer to empty-import `ent/run
 would need reflection to reach the mutation's client; the trade is recorded on
 [#18](https://github.com/githonllc/entdomain/issues/18).
 
-**Nothing generated classifies errors.** The wiring returns what ent returned; mapping a
-driver error onto `ErrNotFound` or `ErrAlreadyExists` is `entdomain.ErrorMapper`'s job and
-the wiring does not call it yet ([#13](https://github.com/githonllc/entdomain/issues/13)).
+**Already-exists is not classified until you install a dialect predicate.** The generated
+wiring maps a missing row to `ErrNotFound` everywhere, but `ent.IsConstraintError` is true
+for a duplicate key and a foreign-key violation alike, so nothing claims `ErrAlreadyExists`
+until `ErrorMap.WithUniqueViolation` is given one — see
+[Error mapping](#error-mapping). Forgetting it costs a `409` and never causes a wrong one
+([#13](https://github.com/githonllc/entdomain/issues/13)).
 
 **Pagination is offset-only, everywhere.** `ent.List{Entities}` goes through
 `entdomain.ListPage`, which is O(n) deep, costs a `COUNT` per page, and can skip or repeat

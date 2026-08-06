@@ -27,9 +27,11 @@ import (
 // The identifier type is int because that is what the schema says.
 // Nothing below is written for a particular one.
 //
-// Error classification is deliberately absent: mapping a driver error to
-// not-found or already-exists belongs to the runtime and is issue #13. These
-// functions return what ent returned.
+// Every exported function below returns its error through ErrorMap (see
+// entdomain_errors.go), and each one maps exactly once. That is what makes
+// entdomain.IsNotFound answer the same way whichever operation failed. The
+// sentinel is added to the chain rather than substituted for it, so ent's own
+// error is still reachable with errors.As.
 // ============================================================================
 
 // counterByID fetches one Counter through the eager-load plan.
@@ -42,9 +44,20 @@ func counterByID(db *Client) func(context.Context, int) (*Counter, error) {
 	}
 }
 
+// counterGet is the read without the error mapping.
+//
+// It exists so that a create or an update maps exactly once. Their response is
+// built by re-reading through the eager-load plan, and if that read applied
+// ErrorMap itself the caller would get a doubly wrapped error whose message
+// names the same sentinel twice.
+func counterGet(ctx context.Context, db *Client, id int) (*CounterResponse, error) {
+	return entdomain.GetOne(ctx, counterByID(db), NewCounterResponse, id)
+}
+
 // GetCounter reads one Counter and converts it to its response.
 func GetCounter(ctx context.Context, db *Client, id int) (*CounterResponse, error) {
-	return entdomain.GetOne(ctx, counterByID(db), NewCounterResponse, id)
+	r, err := counterGet(ctx, db, id)
+	return r, ErrorMap.MapError(err)
 }
 
 // ListCounters runs a filtered, ordered, paginated query.
@@ -58,12 +71,17 @@ func GetCounter(ctx context.Context, db *Client, id int) (*CounterResponse, erro
 //
 // A nil filter contributes no predicates, so a caller with nothing to filter by
 // does not need a branch of its own.
+//
+// The sort-key failure returns before the mapping. It is already an
+// entdomain.ErrValidation and never reached the database, so there is nothing
+// for a persistence-layer classifier to say about it.
 func ListCounters(ctx context.Context, db *Client, f *CounterFilter, r entdomain.ListRequest) (*entdomain.Page[CounterResponse], error) {
 	order, err := CounterOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	return entdomain.ListPage(ctx, CounterQueryWithResponseEdges(db.Counter.Query()), f.Predicates(), order, r, NewCounterResponse)
+	p, err := entdomain.ListPage(ctx, CounterQueryWithResponseEdges(db.Counter.Query()), f.Predicates(), order, r, NewCounterResponse)
+	return p, ErrorMap.MapError(err)
 }
 
 // CreateCounter inserts one Counter and returns its response.
@@ -72,7 +90,8 @@ func ListCounters(ctx context.Context, db *Client, f *CounterFilter, r entdomain
 // else, so validation is a compile-time requirement here rather than a step
 // this function could forget on the caller's behalf.
 func CreateCounter(ctx context.Context, db *Client, v *ValidCounterCreateRequest) (*CounterResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.Counter.Create()), NewCounterResponse)
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.Counter.Create()), NewCounterResponse)
+	return r, ErrorMap.MapError(err)
 }
 
 // UpdateCounter applies a validated patch to one Counter.
@@ -81,7 +100,8 @@ func CreateCounter(ctx context.Context, db *Client, v *ValidCounterCreateRequest
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
 func UpdateCounter(ctx context.Context, db *Client, id int, v *ValidCounterPatchRequest) (*CounterResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.Counter.UpdateOneID(id)), NewCounterResponse)
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.Counter.UpdateOneID(id)), NewCounterResponse)
+	return r, ErrorMap.MapError(err)
 }
 
 // DeleteCounter removes one Counter.
@@ -91,7 +111,7 @@ func UpdateCounter(ctx context.Context, db *Client, id int, v *ValidCounterPatch
 // soft-delete column is decided by an ent interceptor or mixin, not by a
 // filename convention read out of the schema.
 func DeleteCounter(ctx context.Context, db *Client, id int) error {
-	return db.Counter.DeleteOneID(id).Exec(ctx)
+	return ErrorMap.MapError(db.Counter.DeleteOneID(id).Exec(ctx))
 }
 
 // DeleteBatchCounters removes several Counters in one statement and
@@ -105,6 +125,11 @@ func DeleteCounter(ctx context.Context, db *Client, id int) error {
 // An empty list deletes nothing. That is ent's own reading of IDIn with no
 // arguments, not a guard written here — a guard would be a second place for the
 // rule to live, and the failure it protects against is unrecoverable.
+//
+// An id that matched nothing is not an error here, so this operation never
+// produces a not-found — but it can still fail a foreign-key check, which is
+// exactly the case the mapping must NOT report as already-exists.
 func DeleteBatchCounters(ctx context.Context, db *Client, ids []int) (int, error) {
-	return db.Counter.Delete().Where(counter.IDIn(ids...)).Exec(ctx)
+	n, err := db.Counter.Delete().Where(counter.IDIn(ids...)).Exec(ctx)
+	return n, ErrorMap.MapError(err)
 }

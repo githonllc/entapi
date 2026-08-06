@@ -287,10 +287,11 @@ W -> RT : SaveOne(ctx, v.Apply(db.X.UpdateOneID(id)), conv)
 RT -> EC : Save(ctx)
 EC --> RT : entity | error
 note right of RT
-  the error is returned unchanged.
-  Classifying it as ErrNotFound or
-  ErrAlreadyExists is ErrorMapper's job
-  and the wiring does not call it yet (#13)
+  the error goes back through the package's
+  ErrorMap on the way out of UpdateX, exactly
+  once. A missing row becomes ErrNotFound;
+  already-exists waits for a dialect predicate
+  the consumer installs (#13)
 end note
 RT -> RT : conv(entity)
 note right of RT
@@ -323,7 +324,7 @@ which was write-only and disabled downstream delete hooks; and
 | Functional options over config structs | `extension.go` — `Option func(*ExtensionConfig)`, `NewExtensionWithOptions(opts ...Option)` |
 | Fluent immutable builders | `annotations.go` — every `With*`/`As*` has a value receiver returning `DomainField` |
 | Sentinel errors + `Is*` predicates, never string matching | `errors.go` — `ErrNotFound` + `IsNotFound(err) { return errors.Is(...) }` |
-| Errors wrapped with `%w` at the generated boundary | `dto.tmpl` — `fmt.Errorf("%w: %s is required", entdomain.ErrValidation, …)` in the generated `Validate()`. The wiring wraps nothing: it returns what ent returned (#13) |
+| Errors wrapped with `%w` at the generated boundary | `dto.tmpl` — `fmt.Errorf("%w: %s is required", entdomain.ErrValidation, …)` in the generated `Validate()`. `wiring.tmpl` — every exported operation returns through `ErrorMap.MapError`, declared once per package by `errors.tmpl` (#13) |
 | Codegen helpers split by concern, registered in one map | `funcs.go` — the registry is the only thing templates can see |
 | Test fixtures built by hand, never from a live schema | `test_helpers_test.go` — `newStringField`, `newTestType`, `assertContains` |
 | Emitted code asserts on substrings, not compilation | `funcs_codegen_test.go` — `TestFieldPredicate_*` |
@@ -339,7 +340,7 @@ return softDeleteAnnotation(node) != nil
 
 It replaced a convention: a field literally named `deleted_at` used to make the generated service write a tombstone itself. That convention could not tell an entity opting in from one that merely owns a column with that name, and it only ever reached the write path, so reads still returned tombstoned rows. Its host went with the base service (#29), and the wiring's `DeleteX` / `DeleteBatchXs` now issue ordinary ent deletes (`OpDeleteOne` / `OpDelete`) for the hook to rewrite.
 
-The convention it replaced (`hasSoftDelete`: a `Nillable` `time.Time` field literally named `deleted_at`) could not tell an entity that opted in from one that merely owned a column with that name. `templates/softdelete.tmpl` is the only template rendered over a `*gen.Graph` rather than a `*gen.Type`: it emits one type switch for the whole schema, plus the `RegisterSoftDelete` line a consumer calls.
+The convention it replaced (`hasSoftDelete`: a `Nillable` `time.Time` field literally named `deleted_at`) could not tell an entity that opted in from one that merely owned a column with that name. `templates/softdelete.tmpl` is one of the two templates rendered over a `*gen.Graph` rather than a `*gen.Type` (the other is `templates/errors.tmpl`): it emits one type switch for the whole schema, plus the `RegisterSoftDelete` line a consumer calls.
 
 Enum predicates need two branches because Go type assertions do not match underlying types — the comment in `funcs_codegen.go:187` records the reasoning, and the emitted code tries `person.Gender` before falling back to `string`.
 
@@ -370,7 +371,8 @@ The route it took is the route any new field capability takes:
 7. `funcs_filter.go` + `templates/filter.tmpl` — how the query markers become filter parameters and a sort allow-list
 8. `templates/wiring.tmpl` — one free function per operation, and the comments explaining why each body is a single call
 9. `query.go` — `GetOne`, `ListPage`, `SaveOne`: the generic half the wiring calls
-10. `funcs_softdelete.go` + `templates/softdelete.tmpl` — the one graph-level generator, and the only feature with a behavioural proof (`internal/softdeleteproof`)
+10. `funcs_softdelete.go` + `templates/softdelete.tmpl` — a graph-level generator, and the feature with its own behavioural proof (`internal/softdeleteproof`)
+11. `errors_map.go` + `templates/errors.tmpl` — the other graph-level generator: why the runtime takes predicates as function values, and why uniqueness is a third one the consumer installs
 11. `funcs_imports.go` — how each template declares its own imports, including the identifier's
 12. `funcs_codegen.go` — `fieldValueExpr`, the whole file since #7
 

@@ -135,8 +135,22 @@ constraint of the generator.
 generated eager-load plan. `ent.Client.Courier.Get` applies no plan and therefore
 cannot serve a response type that declares edges.
 
-Error classification is deliberately absent: these functions return what ent
-returned. Mapping to `ErrNotFound` / `ErrAlreadyExists` is `entdomain.ErrorMapper`.
+Every one of them returns its error through `ent.ErrorMap`, generated once per
+package into `ent/entdomain_errors.go`. A missing row is `entdomain.ErrNotFound`
+whichever operation produced it, and the ent error stays in the chain.
+
+`ErrAlreadyExists` needs one line from you, because `ent.IsConstraintError` is
+true for a duplicate key and a foreign-key violation alike:
+
+```go
+func init() {
+    ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(func(err error) bool { // SQLite
+        return strings.Contains(err.Error(), "UNIQUE constraint failed")
+    })
+}
+```
+
+Forget it and duplicates come back unclassified — never mislabelled.
 
 ## Extending an operation
 
@@ -273,3 +287,4 @@ ext := entdomain.NewExtensionWithOptions(
 | `templates/dto.tmpl` | Template for DTOs (CreateRequest, PatchRequest, Response, Summary, eager-load plan) |
 | `templates/filter.tmpl` | Template for the filter struct, predicates and sort allow-list |
 | `templates/wiring.tmpl` | Template for the per-operation free functions |
+| `templates/errors.tmpl` | Template for `ErrorMap`, one declaration per package (graph-level) |

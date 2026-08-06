@@ -172,7 +172,12 @@ func TestCodegenFixtureStaleArtifacts(t *testing.T) {
 	targetDir := filepath.Join(fixtureDir, "ent")
 	var opts []Option
 
-	generated := []string{"sprocket_dto.go", "sprocket_filter.go", "sprocket_wiring.go"}
+	// The last entry is the graph-level one, and it is the case rule 1 of
+	// removeStaleArtifacts reads differently: there is no entity left in the
+	// schema to hang it off, so only the name fences it. An ErrorMap surviving
+	// here would be an exported symbol in the consumer's package with no wiring
+	// left that uses it.
+	generated := []string{"sprocket_dto.go", "sprocket_filter.go", "sprocket_wiring.go", errorMapFileName}
 
 	// The hand-written file that must survive: it occupies a name cleanup
 	// considers, and carries ent's generic header instead of entdomain's marker.

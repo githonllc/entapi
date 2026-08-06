@@ -17,8 +17,8 @@ import (
 // unannotated, no error is reported, and the edge simply never appears in a
 // response. The schema declares the two edges separately for this reason.
 func TestEdgeAnnotationsSurviveToCodegen(t *testing.T) {
-	g, err := entc.LoadGraph("./ent/schema", &gen.Config{
-		Package: "github.com/githonllc/entdomain/internal/fixture/ent",
+	g, err := entc.LoadGraph("./spikeent/schema", &gen.Config{
+		Package: "github.com/githonllc/entdomain/internal/fixture/spikeent",
 	})
 	if err != nil {
 		t.Fatalf("load graph: %v", err)
@@ -52,8 +52,8 @@ func TestEdgeAnnotationsSurviveToCodegen(t *testing.T) {
 // TestEdgeAnnotationArrivesAsMap records the representation the reader must
 // handle. Annotations do not arrive as the Go type they were written as.
 func TestEdgeAnnotationArrivesAsMap(t *testing.T) {
-	g, err := entc.LoadGraph("./ent/schema", &gen.Config{
-		Package: "github.com/githonllc/entdomain/internal/fixture/ent",
+	g, err := entc.LoadGraph("./spikeent/schema", &gen.Config{
+		Package: "github.com/githonllc/entdomain/internal/fixture/spikeent",
 	})
 	if err != nil {
 		t.Fatalf("load graph: %v", err)

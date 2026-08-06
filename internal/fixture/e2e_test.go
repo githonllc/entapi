@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/githonllc/entdomain/internal/fixture/ent"
-	"github.com/githonllc/entdomain/internal/fixture/ent/dto"
-	"github.com/githonllc/entdomain/internal/fixture/ent/user"
+	"github.com/githonllc/entdomain/internal/fixture/spikeent"
+	"github.com/githonllc/entdomain/internal/fixture/spikeent/dto"
+	"github.com/githonllc/entdomain/internal/fixture/spikeent/user"
 	entdomain "github.com/githonllc/entdomain/runtime"
 
 	stdsql "database/sql"
@@ -19,7 +19,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func newClient(t *testing.T) (*ent.Client, context.Context) {
+func newClient(t *testing.T) (*spikeent.Client, context.Context) {
 	t.Helper()
 	// A per-test DSN. A shared one only works because tests happen to run
 	// sequentially and the in-memory database is dropped when the last
@@ -29,7 +29,7 @@ func newClient(t *testing.T) (*ent.Client, context.Context) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	c := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, db)))
+	c := spikeent.NewClient(spikeent.Driver(entsql.OpenDB(dialect.SQLite, db)))
 	t.Cleanup(func() { c.Close() })
 	ctx := context.Background()
 	if err := c.Schema.Create(ctx); err != nil {
@@ -38,7 +38,7 @@ func newClient(t *testing.T) (*ent.Client, context.Context) {
 	return c, ctx
 }
 
-func seed(t *testing.T, c *ent.Client, ctx context.Context) {
+func seed(t *testing.T, c *spikeent.Client, ctx context.Context) {
 	t.Helper()
 	rows := []struct {
 		name, email, pw string
@@ -180,7 +180,7 @@ func TestPatchThreeStates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	apply := func(t *testing.T, body string) *ent.User {
+	apply := func(t *testing.T, body string) *spikeent.User {
 		t.Helper()
 		var req dto.UserPatchRequest
 		if err := json.Unmarshal([]byte(body), &req); err != nil {

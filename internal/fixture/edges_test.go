@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/githonllc/entdomain/internal/fixture/ent"
-	"github.com/githonllc/entdomain/internal/fixture/ent/dto"
+	"github.com/githonllc/entdomain/internal/fixture/spikeent"
+	"github.com/githonllc/entdomain/internal/fixture/spikeent/dto"
 	entdomain "github.com/githonllc/entdomain/runtime"
 	"github.com/google/uuid"
 )
@@ -61,7 +61,7 @@ func TestNotLoadedFailsLoudly(t *testing.T) {
 	}
 	if _, err := dto.NewUserResponse(raw); err == nil {
 		t.Fatal("want an error when the declared edge was never loaded")
-	} else if !ent.IsNotLoaded(err) {
+	} else if !spikeent.IsNotLoaded(err) {
 		t.Fatalf("want NotLoadedError, got %T %v", err, err)
 	}
 }
@@ -136,7 +136,7 @@ func TestTwoTierBoundsDepthAndWhatThatCosts(t *testing.T) {
 	}
 }
 
-func mustUser(t *testing.T, c *ent.Client, ctx contextT, name, email string) *ent.User {
+func mustUser(t *testing.T, c *spikeent.Client, ctx contextT, name, email string) *spikeent.User {
 	t.Helper()
 	req := &dto.UserCreateRequest{Name: name, Email: email, PasswordHash: "h"}
 	v, err := req.Validate()
@@ -150,7 +150,7 @@ func mustUser(t *testing.T, c *ent.Client, ctx contextT, name, email string) *en
 	return u
 }
 
-func mustPost(t *testing.T, c *ent.Client, ctx contextT, authorID uuidT, title string) *ent.Post {
+func mustPost(t *testing.T, c *spikeent.Client, ctx contextT, authorID uuidT, title string) *spikeent.Post {
 	t.Helper()
 	p, err := c.Post.Create().SetTitle(title).SetAuthorID(authorID).Save(ctx)
 	if err != nil {

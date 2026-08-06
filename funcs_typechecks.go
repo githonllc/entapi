@@ -7,21 +7,18 @@ import (
 	"entgo.io/ent/entc/gen"
 )
 
-// isTimeField checks if a field is a time field.
-func isTimeField(field *gen.Field) bool {
-	return strings.Contains(field.Type.String(), "time.Time")
-}
-
-// hasSoftDelete checks if an entity has a deleted_at field (convention-based soft-delete detection).
-// Returns true if the entity has a Nillable, Optional time.Time field named "deleted_at".
-func hasSoftDelete(node *gen.Type) bool {
-	for _, field := range node.Fields {
-		if field.Name == "deleted_at" && isTimeField(field) && field.Nillable {
-			return true
-		}
-	}
-	return false
-}
+// hasSoftDelete and isTimeField used to live here. They implemented the
+// convention that an entity is soft-deletable iff it owns a Nillable time.Time
+// field literally named "deleted_at", and drove base_service.tmpl's Delete and
+// DeleteBatch to write their own tombstone.
+//
+// #18 retired both. Soft delete is now declared by embedding
+// entdomain.SoftDeleteMixin (softdelete.go) and detected through the annotation
+// the mixin attaches (funcs_softdelete.go), and the tombstone write happens in
+// one place: the generated hook. The convention could not tell an entity that
+// opted in from one that merely owns a column with that name, and the service
+// layer could not enforce the read half at all — Base<X>Service.DB is an
+// exported *Client.
 
 // isComplexFieldType reports whether a field's Go type is one Go's comparable
 // constraint rejects — slices, maps and functions, including named types whose

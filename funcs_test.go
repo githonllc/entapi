@@ -11,7 +11,7 @@ func TestTemplateFuncs(t *testing.T) {
 	expectedFuncs := []string{
 		"domainFields", "createFields", "patchFields", "responseFields",
 		"isCreatePointer", "isCreateRequired", "isPatchClearable",
-		"responseEdges", "hasSoftDelete",
+		"responseEdges", "softDeleteTypes", "softDeleteField",
 		"camelCase",
 	}
 

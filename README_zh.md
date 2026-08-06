@@ -30,7 +30,7 @@
 - **显式的存在性（presence）** — patch 请求能区分「键缺席」「显式 null」「有值」三种状态；create 时省略的字段根本不会被写入，schema 的 `Default()` 因此依然生效
 - **BaseService** — 带 Before/After 钩子的 CRUD 操作、构建器辅助和实体→响应转换
 - **BaseHandler** — 响应转换辅助和部分更新支持
-- **软删除检测** — 自动为包含 `deleted_at` 字段的实体生成 `UpdateOneID().SetDeletedAt(now)`
+- **ent 层软删除** — 嵌入 `entdomain.SoftDeleteMixin`，在构造 client 处注册一行，被删除的行就从**每一条**读路径消失，包括完全不经过本项目生成物的 `client.User.Query()`
 - **游标分页** — BaseService 中基于 ID 的键集分页
 - **来源追溯** — 生成的文件包含 schema 名称、模板路径和重新生成命令
 
@@ -441,6 +441,12 @@ graph TD
 | `{entity}_base_service.go` | 带 CRUD、Before/After 钩子、`EntToResponse` 的 `BaseService` |
 | `{entity}_base_handler.go` | 带 `ToResponse`、`ToResponseList`、`PartialUpdate` 的 `BaseHandler` |
 
+另外为整个 schema 生成一个文件，仅当至少有一个实体嵌入了 `entdomain.SoftDeleteMixin`：
+
+| 文件 | 内容 |
+|------|------|
+| `entdomain_softdelete.go` | `RegisterSoftDelete`、查询 traverser 与改写删除的 hook——见[软删除](#软删除) |
+
 ### 创建请求与 patch 请求
 
 `{entity}_dto.go` 的请求部分是两个请求类型，各自配一个「已校验」形态——那是写
@@ -608,6 +614,77 @@ func listMyArticles(ctx context.Context, db *ent.Client, f *ent.ArticleFilter, r
 
 错误分类是刻意缺席的：把驱动错误映射成 `ErrNotFound` 或 `ErrAlreadyExists` 属于
 运行时，是 issue #13。这些函数原样返回 ent 返回的错误。
+### 软删除
+
+软删除位于 ent 自己的 interceptor 与 hook 层，而不是生成的 service 层。这不是偏好问题。
+`Base{Entity}Service.DB` 是导出的 `*Client`，所以在 service 内部做的任何过滤，
+一行普通的消费者代码就绕开了：
+
+```go
+s.DB.User.Query().All(ctx)   // 调用链里没有任何生成的方法
+```
+
+只有 ORM 层的 interceptor 能看到这条查询；也只有按 `OpDelete|OpDeleteOne` 注册的
+mutation hook 能看到每一次删除。
+
+**两步，没有第三步。**
+
+```go
+// 1. ent/schema/doc.go —— 嵌入 mixin，它带来 deleted_at 列。
+func (Doc) Mixin() []ent.Mixin {
+    return []ent.Mixin{entdomain.SoftDeleteMixin{}}
+}
+```
+
+```go
+// 2. 在构造 client 的地方 —— 装上它。
+client := ent.NewClient(ent.Driver(drv))
+ent.RegisterSoftDelete(client)
+```
+
+`RegisterSoftDelete` 生成在你的 `ent` 包里，整个 schema 只有一份，内容是对嵌入了 mixin
+的实体做类型分支。装上之后，所有读路径都会排除已删除行——直接的 client 查询、`Count`、
+`Exist`、`Only`、`Get`，以及为预加载边构造的子查询——而 `Delete()` / `DeleteOneID()`
+会写入 `deleted_at` 而不是删掉行。本项目生成的所有删除都走这同一个 hook，自己**不**写墓碑：
+上面接线里的 `Delete{Entity}`，以及 base service 上的 `Delete` / `DeleteBatch`。
+`internal/softdeleteproof` 对每一个都断言了行仍在盘上。
+
+**代价，明说而不藏着。** 没有这一行的 client 什么都不过滤，删除就是真删除，
+而且漏写它不会有编译错误。把它放在你自己的接线代码里是故意的：一个会从进程内每条查询里
+悄悄抹掉行的过滤器，应该出现在 setup 代码里，而不是靠嵌一个结构体装上。
+
+**怎么读回来，怎么真正删掉。** 两个 context 开关，各只做一件事：
+
+```go
+all, _ := client.Doc.Query().All(entdomain.WithSoftDeleted(ctx))   // 包含墓碑
+_ = client.Doc.DeleteOneID(id).Exec(entdomain.WithHardDelete(ctx)) // 真删
+```
+
+两者互不蕴含，且都是按调用生效：你原本的 context 不变。（ent 官方配方用同一个 key 表示
+两件事，于是想读一条墓碑的调用方同时也悄悄给自己上了一发真 `DELETE`。）
+
+**不需要空导入，而这是设计的直接结果。** ent 的 schema 缝合运行时有两种生成格式
+（`entc/gen/template/runtime.tmpl:12-17,50-63`）：当任何 schema 带 hook、policy 或
+interceptor 时，生成独立的 `ent/runtime` 包，并且**必须在 main 包里空导入**
+（`import _ "yourproject/ent/runtime"`）；都没有时，生成在 `ent` 包内。
+一个自带 hook 与 interceptor 的软删除 mixin 会把你的项目切到第一种格式——
+于是采用这个特性就改变了整个项目的生成方式，并多出一个你多半要靠运行时 panic
+（`ent: uninitialized interceptor (forgotten import ent/runtime?)`）才发现的导入。
+
+因此 `entdomain.SoftDeleteMixin` **只声明字段和一个标记注解**——没有 `Hooks()`，
+没有 `Interceptors()`。两半都改由 `RegisterSoftDelete` 装在 client 上。
+如果你的 schema 因为别的原因带了 hook，空导入的要求对你依然成立；只是采用软删除
+不会新增这项义务。
+
+**什么决定一个实体是可软删除的。** 嵌入 mixin，仅此而已。早先的版本靠「有一个 `Nillable`
+且字面名为 `deleted_at` 的字段」来判定——于是仅仅拥有同名列的实体就获得了它从未申请过的
+行级过滤，而两种情况之间只差一个修饰符。自己声明了 `deleted_at` 而没有嵌 mixin 的实体，
+就是普通的硬删除实体。
+
+**下游的 `OpDelete` hook 不会触发。** 改写后的 mutation 携带 `OpUpdate`，而且改写是通过
+client 重新派发而不是调用下一个 mutator，所以在 `RegisterSoftDelete` 之后按
+`OpDelete|OpDeleteOne` 注册的 hook 永远不会跑。请改按 `OpUpdate` 注册并检查
+`deleted_at` 非 nil，或者把它们装在 `RegisterSoftDelete` 之前。
 
 ### BaseService 模式
 
@@ -751,9 +828,16 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 `AsFilterable()`、`AsSearchable()`、`AsSortable()` 一律按字段显式开启。预设仍然授予
 `ScopeQuery`：有资格不等于已暴露（[#27](https://github.com/githonllc/entdomain/issues/27)）。
 
-**软删除会静默废掉下游的删除钩子。** 生成的删除被改写成更新，携带的是更新操作标志。
-消费者按删除操作注册的钩子因此**根本不会触发**——这不是两套机制打架，
-是一套静默替换了另一套（[#12](https://github.com/githonllc/entdomain/issues/12)）。
+**软删除会废掉下游的删除钩子。** 改写后的 mutation 携带更新操作标志，
+所以在 `RegisterSoftDelete` 之后按删除操作注册的消费者钩子不会触发。
+现在它是写下来的而不是静默的（见[软删除](#软删除)），并且这是「改写」本身的性质，
+与改写放在哪一层无关（[#18](https://github.com/githonllc/entdomain/issues/18)）。
+
+**软删除必须注册，漏了就默认放行。** `RegisterSoftDelete` 是构造 client 时的一行，
+没有任何东西强制它——没装的 client 会返回已删除行，`Delete()` 也是真删。
+另一条路是让 mixin 自带 hook 与 interceptor，那会要求每个消费者空导入 `ent/runtime`，
+并且需要反射才能拿到 mutation 的 client；这笔取舍记录在
+[#18](https://github.com/githonllc/entdomain/issues/18)。
 
 **生成的 service 只支持一种主键类型：`uuid.UUID`。** 它被硬编码进 `base_service.tmpl`
 与 `base_handler.tmpl` 的每个钩子签名、每个 CRUD 方法以及游标往返。其他主键类型现在会在
@@ -770,10 +854,12 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 
 **只有带 fixture 的字段形态才是「已知能编译」的。** `TestCodegenFixtures` 会生成并
 编译 `internal/fixtures/` 下的每个 schema，现已覆盖上表中的 nillable、immutable、
-枚举、JSON/映射与具名 `GoType` 形态，以及非 UUID 主键的拒绝路径
+枚举、JSON/映射与具名 `GoType` 形态，以及边、软删除 mixin 和非 UUID 主键的拒绝路径
 （[#8](https://github.com/githonllc/entdomain/issues/8)、
-[#10](https://github.com/githonllc/entdomain/issues/10)）。边与软删除尚无 fixture；
-在补上之前，触及它们的模板改动仍属未验证。
+[#10](https://github.com/githonllc/entdomain/issues/10)）。软删除是唯一同时有行为证明
+的特性：`internal/softdeleteproof` 是一个带 SQLite 驱动的独立 module，
+所以「直接的 `client.Doc.Query()` 会排除已删除行」这个论断是对着真实数据库验证的，
+而不是对着生成的源码。
 
 ## 贡献
 

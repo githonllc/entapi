@@ -80,6 +80,15 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 		//
 		// "selfrefpartial" is absent for a different reason: its templates see
 		// the same shapes "edges" already covers, one self-referential edge less.
+		//
+		// "softdelete" is here for the graph-level template only, which is
+		// checked separately below — its per-type output is the same shapes
+		// "edges" covers.
+		{
+			name:      "softdelete",
+			schemaDir: filepath.Join(root, "internal", "fixtures", "softdelete", "ent", "schema"),
+			pkgPath:   modulePath + "/internal/fixtures/softdelete/ent",
+		},
 	}
 
 	tmpls := []struct {
@@ -126,6 +135,71 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSoftDeleteTemplateDeclaresItsImports is the same invariant for the one
+// template rendered over a *gen.Graph rather than a *gen.Type, so it cannot
+// share the loop above.
+//
+// It is the template with the most to get wrong here: its entity-subpackage
+// imports are one per soft-deletable type, computed by softDeleteImports, while
+// "context", "time" and entdomain are named unconditionally — and are correct
+// only because the file is not written at all when the type switch would be
+// empty.
+func TestSoftDeleteTemplateDeclaresItsImports(t *testing.T) {
+	root := repoRoot(t)
+	schemaDir := filepath.Join(root, "internal", "fixtures", "softdelete", "ent", "schema")
+	pkgPath := modulePath + "/internal/fixtures/softdelete/ent"
+
+	g := loadFixtureGraph(t, schemaDir, pkgPath)
+	if len(softDeleteTypes(g)) == 0 {
+		t.Fatal("the softdelete fixture has no soft-deletable entity; this test would pass vacuously")
+	}
+
+	ext := NewExtensionWithOptions(WithBaseService(true), WithBaseHandler(true))
+	tmpl, err := template.New("softdelete").Funcs(ext.templateFuncMap()).Parse(softDeleteTemplate)
+	if err != nil {
+		t.Fatalf("parsing softdelete template: %v", err)
+	}
+	var buf []byte
+	if err := tmpl.Execute(&byteWriter{buf: &buf}, g); err != nil {
+		t.Fatalf("rendering softdelete template: %v", err)
+	}
+
+	formatted, err := imports.Process(softDeleteFileName, buf, nil)
+	if err != nil {
+		t.Fatalf("rendered softdelete template is not valid Go: %v\n%s", err, buf)
+	}
+
+	declared := importPaths(t, buf)
+	resolved := importPaths(t, formatted)
+	for _, added := range missing(resolved, declared) {
+		t.Errorf("goimports had to ADD %q: the softdelete template does not declare an import its output uses", added)
+	}
+	for _, removed := range missing(declared, resolved) {
+		t.Errorf("goimports had to REMOVE %q: the softdelete template declares an import its output does not use", removed)
+	}
+}
+
+// loadFixtureGraph is loadFixtureNodes for a caller that needs the whole graph,
+// which the graph-level template takes as its data.
+func loadFixtureGraph(t *testing.T, schemaDir, pkgPath string) *gen.Graph {
+	t.Helper()
+
+	var graph *gen.Graph
+	capture := &captureExtension{fn: func(g *gen.Graph) { graph = g }}
+
+	err := entc.Generate(schemaDir, &gen.Config{
+		Target:  t.TempDir(),
+		Package: pkgPath,
+	}, entc.Extensions(capture))
+	if err != nil {
+		t.Fatalf("loading fixture schema %s: %v", schemaDir, err)
+	}
+	if graph == nil {
+		t.Fatalf("fixture schema %s produced no graph", schemaDir)
+	}
+	return graph
 }
 
 // loadFixtureNodes runs ent's loader over a fixture schema and returns the

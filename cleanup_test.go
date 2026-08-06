@@ -138,3 +138,49 @@ func TestGeneratedFileNames(t *testing.T) {
 		}
 	}
 }
+
+// TestRemoveStaleArtifacts_GraphLevelFile covers the one file that belongs to
+// no entity. The case it guards is the last schema dropping
+// entdomain.SoftDeleteMixin: without it the previous run's
+// entdomain_softdelete.go survives, publishing a RegisterSoftDelete that
+// registers a filter for entities that no longer have a tombstone column —
+// and it would not even compile, because the predicate it names is gone too.
+func TestRemoveStaleArtifacts_GraphLevelFile(t *testing.T) {
+	t.Run("removed when this run did not write it", func(t *testing.T) {
+		dir := t.TempDir()
+		path := seed(t, dir, softDeleteFileName, entdomainHeader)
+
+		// No nodes at all: the graph file is not hung off any entity, so its
+		// removal must not depend on one being present.
+		if err := removeStaleArtifacts(dir, nil, map[string]bool{}); err != nil {
+			t.Fatalf("removeStaleArtifacts: %v", err)
+		}
+		if exists(path) {
+			t.Errorf("%s survived: it carries the entdomain marker and this run did not write it", path)
+		}
+	})
+
+	t.Run("kept when this run wrote it", func(t *testing.T) {
+		dir := t.TempDir()
+		path := seed(t, dir, softDeleteFileName, entdomainHeader)
+
+		if err := removeStaleArtifacts(dir, nil, map[string]bool{path: true}); err != nil {
+			t.Fatalf("removeStaleArtifacts: %v", err)
+		}
+		if !exists(path) {
+			t.Error("cleanup deleted the graph-level file this run had just written")
+		}
+	})
+
+	t.Run("kept when it is not ours", func(t *testing.T) {
+		dir := t.TempDir()
+		path := seed(t, dir, softDeleteFileName, entHeader)
+
+		if err := removeStaleArtifacts(dir, nil, map[string]bool{}); err != nil {
+			t.Fatalf("removeStaleArtifacts: %v", err)
+		}
+		if !exists(path) {
+			t.Errorf("cleanup deleted %s, which does not carry the entdomain marker", path)
+		}
+	})
+}

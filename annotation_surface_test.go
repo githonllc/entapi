@@ -121,6 +121,12 @@ type annotationKnob struct {
 // knob under test is provably the only difference between the two runs.
 type surfaceProbe struct {
 	node *gen.Type
+	// graph is the one-node graph the graph-level functions take. It exists so
+	// argSets can supply *gen.Graph; no annotation knob reads it today, and the
+	// soft-delete marker is not a knob on any of the four annotation types this
+	// file enumerates — it is attached by entdomain.SoftDeleteMixin, not written
+	// by a schema author.
+	graph *gen.Graph
 	// field is ent-mandatory: not Optional, no Default.
 	field *gen.Field
 	// optional is the same annotation on an ent-Optional field.
@@ -147,6 +153,10 @@ func newSurfaceProbe() *surfaceProbe {
 	}
 	p.node.Edges = []*gen.Edge{p.edge}
 	p.node.Annotations = gen.Annotations{"DomainConfig": &p.config}
+	p.graph = &gen.Graph{
+		Config: &gen.Config{Package: "example.com/project/ent"},
+		Nodes:  []*gen.Type{p.node},
+	}
 
 	return p
 }
@@ -193,6 +203,7 @@ var (
 	typeGenType    = reflect.TypeOf((*gen.Type)(nil))
 	typeGenField   = reflect.TypeOf((*gen.Field)(nil))
 	typeGenEdge    = reflect.TypeOf((*gen.Edge)(nil))
+	typeGenGraph   = reflect.TypeOf((*gen.Graph)(nil))
 	typeFieldScope = reflect.TypeOf(FieldScope(""))
 )
 
@@ -224,6 +235,8 @@ func (p *surfaceProbe) argSets(t *testing.T, name string, ft reflect.Type) [][]r
 			}
 		case pt == typeGenEdge:
 			candidates = []reflect.Value{reflect.ValueOf(p.edge)}
+		case pt == typeGenGraph:
+			candidates = []reflect.Value{reflect.ValueOf(p.graph)}
 		case pt == typeFieldScope:
 			for _, s := range AllFieldScopes {
 				candidates = append(candidates, reflect.ValueOf(s))
@@ -257,6 +270,8 @@ func describeArgs(args []reflect.Value) string {
 			parts = append(parts, "type:"+v.Name)
 		case *gen.Field:
 			parts = append(parts, "field:"+v.Name)
+		case *gen.Graph:
+			parts = append(parts, "graph")
 		default:
 			parts = append(parts, fmt.Sprintf("%v", v))
 		}
@@ -279,6 +294,12 @@ func renderResult(v reflect.Value) string {
 		names := make([]string, len(out))
 		for i, e := range out {
 			names[i] = e.Name
+		}
+		return "[" + strings.Join(names, " ") + "]"
+	case []*gen.Type:
+		names := make([]string, len(out))
+		for i, n := range out {
+			names[i] = n.Name
 		}
 		return "[" + strings.Join(names, " ") + "]"
 	default:

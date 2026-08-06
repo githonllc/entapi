@@ -1,14 +1,22 @@
 # fixtures — the codegen harness
 
-Read this first if you arrived from `internal/fixture` (singular). **They are two
-different things and the names are one character apart.**
+Read this first if you arrived from `internal/fixture` (singular) or
+`internal/softdeleteproof`. **They are three different things and two of the
+names are one character apart.**
 
-| | `internal/fixture` (singular) | `internal/fixtures` (plural, here) |
-|---|---|---|
-| Module | separate Go module, own `go.mod`, SQLite driver | part of `github.com/githonllc/entdomain` |
-| ent code produced by | `go generate ./ent`, **without** this extension | `TestCodegenFixtures`, **with** this extension |
-| Domain layer | hand-written (`ent/dto/user.go`) as the generator's *target* | generated, as the generator's *output* |
-| Question it answers | "what should the generator emit?" | "does what the generator emits compile?" |
+| | `internal/fixture` (singular) | `internal/fixtures` (plural, here) | `internal/softdeleteproof` |
+|---|---|---|---|
+| Module | separate Go module, own `go.mod`, SQLite driver | part of `github.com/githonllc/entdomain` | separate Go module, own `go.mod`, SQLite driver |
+| ent code produced by | `go generate ./ent`, **without** this extension | `TestCodegenFixtures`, **with** this extension | none of its own — it imports `softdelete/ent` from here |
+| Domain layer | hand-written (`ent/dto/user.go`) as the generator's *target* | generated, as the generator's *output* | generated, here |
+| Question it answers | "what should the generator emit?" | "does what the generator emits compile?" | "does what the generator emits **do what it claims**?" |
+
+`softdeleteproof` exists because a compile proof cannot settle #18's central
+claim. `go build` cannot tell "the predicate is generated" from "the predicate
+reaches the SQL", and the whole argument is that a direct `client.Doc.Query()`
+must come back without the deleted rows. It is not reached by `go test ./...`
+at the root — Go excludes nested module directories — so run it separately,
+after this harness has produced the code it compiles against.
 
 ## How this one works
 
@@ -89,6 +97,7 @@ when the case passes.
 | `query` | the query surface: a string, an enum, an optional int and a time field, plus a searchable-not-filterable field, a query-scoped-but-unmarked field, an input-only field, and a second entity that marks nothing | generates and compiles |
 | `queryconflict` | query markers that contradict the schema: `Sortable` on a non-comparable field, `Searchable` on a type with no `Contains`, `Filterable` on a type with no predicates, and a marker on a field withholding `ScopeQuery` | generation refused |
 | `wiring` | a to-many response edge, a to-one response edge with the full query surface, and an entity with no edge at all | generates, compiles, and is exercised against SQLite by `wiring/e2e` |
+| `softdelete` | the soft-delete mixin: one entity embedding it, one hard-delete entity owning it by a to-many edge, and one declaring a `deleted_at` by hand that is NOT `Nillable` | generates and compiles, plus `internal/softdeleteproof` |
 | `stale` | an entity that loses its annotations between two runs | generates twice, see below |
 
 ## The self-referential pair, in three fixtures
@@ -117,7 +126,7 @@ at risk is that an *empty* annotation survives the schema load, which reaches
 codegen through a JSON round-trip, and `DomainEdge{}` marshals to `{}`. If ent
 dropped it, the refusal message would be recommending a fix that does not work.
 
-`basic`, `fieldshapes`, `edges`, `presence` and `query` are also the corpus for
+`basic`, `fieldshapes`, `edges`, `presence`, `query` and `softdelete` are also the corpus for
 `TestTemplatesDeclareTheirImports`, which renders each template over them and
 fails if goimports has to add or remove an import — that is what keeps the
 formatter a safety net rather than the mechanism. Every refused fixture is

@@ -26,6 +26,7 @@ import (
 //   - funcs_strings.go:    string manipulation utilities
 //   - funcs_fields.go:     field filtering and selection
 //   - funcs_scope.go:      scope and requirement checking
+//   - funcs_softdelete.go: the soft-delete mixin's marker and tombstone field
 //   - funcs_presence.go:   create/patch field shape and presence rules
 //   - funcs_typechecks.go: field type checking
 //   - funcs_codegen.go:    code generation helpers
@@ -33,9 +34,10 @@ import (
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		// Import declaration
-		"dtoImports":    dtoImports,
-		"filterImports": filterImports,
-		"wiringImports": wiringImports,
+		"dtoImports":        dtoImports,
+		"filterImports":     filterImports,
+		"wiringImports":     wiringImports,
+		"softDeleteImports": softDeleteImports,
 
 		// String manipulation
 		"camelCase": camelCase,
@@ -64,7 +66,10 @@ func templateFuncs() template.FuncMap {
 
 		// Field type checking
 		"isComplexFieldType": isComplexFieldType,
-		"hasSoftDelete":      hasSoftDelete,
+
+		// Soft delete: the graph-level traverser (funcs_softdelete.go)
+		"softDeleteTypes": softDeleteTypes,
+		"softDeleteField": softDeleteField,
 
 		// Code generation helpers
 		"fieldValueExpr": fieldValueExpr,

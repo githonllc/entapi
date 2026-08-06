@@ -128,6 +128,21 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			}
 		}
 
+		// The soft-delete traverser is generated once per GRAPH, not per type:
+		// it is one type switch over the entities embedding
+		// entdomain.SoftDeleteMixin. It sits outside the loop above for a
+		// second reason too — that loop skips a node with no domain fields,
+		// and soft delete is a property of the ent schema rather than of the
+		// HTTP surface, so an entity with no annotated field at all still has
+		// to be filtered.
+		path, err := e.generateSoftDeleteFile(g)
+		if err != nil {
+			return fmt.Errorf("failed to generate the soft-delete traverser: %w", err)
+		}
+		if path != "" {
+			written[path] = true
+		}
+
 		// Only once every file is on disk: a run that failed partway must not
 		// delete anything, or a template bug would take the previous output
 		// with it.
@@ -218,6 +233,40 @@ func (e *Extension) generateWiringFile(g *gen.Graph, node *gen.Type) (string, er
 
 	filename := fmt.Sprintf("%s_wiring.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
+
+	if err := writeFile(outputPath, buf.Bytes()); err != nil {
+		return "", err
+	}
+	return outputPath, nil
+}
+
+// generateSoftDeleteFile generates the soft-delete traverser, the
+// delete-rewriting hook and the single registration function, for the whole
+// graph at once.
+// Output: ent/entdomain_softdelete.go
+//
+// It returns "" when no entity embeds entdomain.SoftDeleteMixin, in which case
+// nothing is written and removeStaleArtifacts deletes any file an earlier run
+// left. A file holding an empty type switch would compile, but it would also
+// publish a RegisterSoftDelete that quietly does nothing.
+func (e *Extension) generateSoftDeleteFile(g *gen.Graph) (string, error) {
+	if len(softDeleteTypes(g)) == 0 {
+		return "", nil
+	}
+
+	tmpl, err := template.New("softdelete").
+		Funcs(e.templateFuncMap()).
+		Parse(softDeleteTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse soft-delete template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, g); err != nil {
+		return "", fmt.Errorf("failed to render soft-delete template: %w", err)
+	}
+
+	outputPath := filepath.Join(g.Config.Target, softDeleteFileName)
 
 	if err := writeFile(outputPath, buf.Bytes()); err != nil {
 		return "", err

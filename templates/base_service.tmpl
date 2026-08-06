@@ -9,10 +9,6 @@ package {{ base $.Config.Package }}
 import (
 	"context"
 	"fmt"
-{{- /* time is used only by the soft-delete branches of Delete/DeleteBatch */}}
-{{- if hasSoftDelete $ }}
-	"time"
-{{- end }}
 
 	"{{ $.Config.Package }}/{{ $.Package }}"
 	"{{ entdomainPkg }}"
@@ -195,11 +191,13 @@ func (s *Base{{ $.Name }}Service) Delete(ctx context.Context, id uuid.UUID) erro
 		return err
 	}
 
-{{- if hasSoftDelete $ }}
-	err := s.DB.{{ $.Name }}.UpdateOneID(id).SetDeletedAt(time.Now()).Exec(ctx)
-{{- else }}
+{{- /* Deliberately unconditional. When the entity embeds
+       entdomain.SoftDeleteMixin, the hook RegisterSoftDelete installs rewrites
+       this delete into the tombstone update; when it does not, the row goes.
+       Writing the tombstone here as well would be a second implementation of
+       the same rule, in a layer that cannot enforce the reading half of it —
+       which is exactly what #18 removed. See templates/softdelete.tmpl. */}}
 	err := s.DB.{{ $.Name }}.DeleteOneID(id).Exec(ctx)
-{{- end }}
 	if err != nil {
 		{{/* IsNotFound (and IsConstraintError) are Ent's generated predicates, not
 		     this package's. They are deliberately unqualified: this file is emitted
@@ -222,16 +220,10 @@ func (s *Base{{ $.Name }}Service) DeleteBatch(ctx context.Context, ids []uuid.UU
 		return nil
 	}
 
-{{- if hasSoftDelete $ }}
-	_, err := s.DB.{{ $.Name }}.Update().
-		Where({{ $.Package }}.IDIn(ids...)).
-		SetDeletedAt(time.Now()).
-		Save(ctx)
-{{- else }}
+{{- /* Unconditional for the same reason as Delete above. */}}
 	_, err := s.DB.{{ $.Name }}.Delete().
 		Where({{ $.Package }}.IDIn(ids...)).
 		Exec(ctx)
-{{- end }}
 	return err
 }
 

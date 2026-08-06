@@ -30,13 +30,13 @@ func (h *BaseRecordHandler) ToResponseList(entities []*Record) []*RecordResponse
 
 // recordUpdater is the interface required by PartialUpdate.
 type recordUpdater interface {
-	Update(context.Context, uuid.UUID, *RecordUpdateRequest) (*Record, error)
+	Update(context.Context, uuid.UUID, *RecordPatchRequest) (*Record, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseRecordHandler) PartialUpdate(
 	ctx context.Context, svc recordUpdater,
-	id uuid.UUID, req *RecordUpdateRequest,
+	id uuid.UUID, req *RecordPatchRequest,
 ) (*RecordResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

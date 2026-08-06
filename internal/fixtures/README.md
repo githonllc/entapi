@@ -35,6 +35,13 @@ exceptions, and each says so in its own header:
   absent from explicit null from value. ent records every `Set`/`Clear` on the
   mutation, which is the last observable point before the query — and the only
   one available in a module with no SQL driver.
+- `query/ent/filter_contract_test.go`, hand-written and in `package ent`. It is the
+  behavioural half of the filter/sort generation: an ent predicate and an ent
+  order option are both functions over a `*sql.Selector`, so it renders the SQL
+  they produce and asserts on that — including that a rejected sort key reaches
+  neither an `ORDER BY` nor the query text. That is a stronger statement than
+  any assertion about the generated source, and it needs no database, which
+  this module deliberately does not have.
 - `edges/ent/orerr_contract_test.go`, hand-written and in `package ent`. It has
   to be, because the contract it pins is exactly that `Edges.loadedTypes` is
   unreachable from anywhere else — setting that flag is the only way to build the
@@ -79,6 +86,8 @@ when the case passes.
 | `immutable` | `Immutable()` fields carrying `ScopeUpdate` | generation refused |
 | `intid` | a domain-annotated entity with ent's default `int` primary key, with the base service enabled | generation refused |
 | `selfref` | a self-referential pair declared in the chained form, so annotated on one end only | generation refused |
+| `query` | the query surface: a string, an enum, an optional int and a time field, plus a searchable-not-filterable field, a query-scoped-but-unmarked field, an input-only field, and a second entity that marks nothing | generates and compiles |
+| `queryconflict` | query markers that contradict the schema: `Sortable` on a non-comparable field, `Searchable` on a type with no `Contains`, `Filterable` on a type with no predicates, and a marker on a field withholding `ScopeQuery` | generation refused |
 | `stale` | an entity that loses its annotations between two runs | generates twice, see below |
 
 ## The self-referential pair, in three fixtures
@@ -107,7 +116,7 @@ at risk is that an *empty* annotation survives the schema load, which reaches
 codegen through a JSON round-trip, and `DomainEdge{}` marshals to `{}`. If ent
 dropped it, the refusal message would be recommending a fix that does not work.
 
-`basic`, `fieldshapes`, `edges` and `presence` are also the corpus for
+`basic`, `fieldshapes`, `edges`, `presence` and `query` are also the corpus for
 `TestTemplatesDeclareTheirImports`, which renders each template over them and
 fails if goimports has to add or remove an import — that is what keeps the
 formatter a safety net rather than the mechanism. Every refused fixture is

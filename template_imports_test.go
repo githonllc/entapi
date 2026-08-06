@@ -63,7 +63,17 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			schemaDir: filepath.Join(root, "internal", "fixtures", "presence", "ent", "schema"),
 			pkgPath:   modulePath + "/internal/fixtures/presence/ent",
 		},
-		// The refused fixtures ("immutable", "intid", "selfref") are
+		{
+			// The query surface: an enum, a time field and an optional int in
+			// the filter struct, plus an entity that marks nothing and whose
+			// filter file therefore names only the three unconditional
+			// imports.
+			name:      "query",
+			schemaDir: filepath.Join(root, "internal", "fixtures", "query", "ent", "schema"),
+			pkgPath:   modulePath + "/internal/fixtures/query/ent",
+		},
+		// The refused fixtures ("immutable", "intid", "selfref",
+		// "queryconflict") are
 		// deliberately absent: the generator stops before rendering anything for
 		// them. Asserting on the imports of output that is never emitted would
 		// be testing a fiction.
@@ -77,6 +87,7 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 		text string
 	}{
 		{"dto", dtoTemplate},
+		{"filter", filterTemplate},
 		{"base_service", baseServiceTemplate},
 		{"base_handler", baseHandlerTemplate},
 	}

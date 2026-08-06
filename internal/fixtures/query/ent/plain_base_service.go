@@ -18,7 +18,7 @@ import (
 type BasePlainServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *PlainCreateRequest) error
 	AfterCreate(ctx context.Context, entity *Plain) (*Plain, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *PlainUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *PlainPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *Plain) (*Plain, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BasePlainService) AfterCreate(_ context.Context, entity *Plain) (*Plain
 	return entity, nil
 }
 
-func (s *BasePlainService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *PlainUpdateRequest) error {
+func (s *BasePlainService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *PlainPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BasePlainService) GetByID(ctx context.Context, id uuid.UUID) (*Plain, e
 }
 
 // Create creates a new Plain from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BasePlainService) Create(ctx context.Context, req *PlainCreateRequest) (*Plain, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Plain.Create()
-	ApplyPlainCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Plain.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BasePlainService) Create(ctx context.Context, req *PlainCreateRequest) 
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of Plain, only setting non-nil fields from the request.
-func (s *BasePlainService) Update(ctx context.Context, id uuid.UUID, req *PlainUpdateRequest) (*Plain, error) {
+// Update performs a partial update of Plain: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BasePlainService) Update(ctx context.Context, id uuid.UUID, req *PlainPatchRequest) (*Plain, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Plain.UpdateOneID(id)
-	ApplyPlainUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Plain.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,21 +222,14 @@ func (s *BasePlainService) ListWithCursor(ctx context.Context, limit int, cursor
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyPlainCreateRequest and
+// ApplyPlainUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidPlainCreateRequest and
+// ValidPlainPatchRequest (see plain_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyPlainCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyPlainCreateRequest(builder *PlainCreate, req *PlainCreateRequest) {
-	builder.SetLabel(req.Label)
-}
-
-// ApplyPlainUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyPlainUpdateRequest(builder *PlainUpdateOne, req *PlainUpdateRequest) {
-	if req.Label != nil {
-		builder.SetLabel(*req.Label)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

@@ -506,15 +506,12 @@ func TestIdField(t *testing.T) {
 		t.Error("IdField Metadata.ReadOnly should be true")
 	}
 
-	// Inherited from OutputOnlyField: Searchable, Filterable, Sortable
-	if !field.Searchable {
-		t.Error("IdField should be Searchable (inherited from OutputOnlyField)")
-	}
-	if !field.Filterable {
-		t.Error("IdField should be Filterable (inherited from OutputOnlyField)")
-	}
-	if !field.Sortable {
-		t.Error("IdField should be Sortable (inherited from OutputOnlyField)")
+	// No preset grants a query marker (#27). An identifier that is filterable
+	// or sortable is a decision the schema author makes explicitly, because the
+	// sort allow-list is only worth having if it is narrower than "everything".
+	if field.Searchable || field.Filterable || field.Sortable {
+		t.Errorf("IdField grants a query marker (searchable=%v filterable=%v sortable=%v); the three markers are opt-in",
+			field.Searchable, field.Filterable, field.Sortable)
 	}
 }
 
@@ -542,15 +539,10 @@ func TestAuditLogField(t *testing.T) {
 		t.Error("AuditLogField Metadata.ReadOnly should be true")
 	}
 
-	// Inherited from OutputOnlyField
-	if !field.Searchable {
-		t.Error("AuditLogField should be Searchable (inherited from OutputOnlyField)")
-	}
-	if !field.Filterable {
-		t.Error("AuditLogField should be Filterable (inherited from OutputOnlyField)")
-	}
-	if !field.Sortable {
-		t.Error("AuditLogField should be Sortable (inherited from OutputOnlyField)")
+	// No preset grants a query marker (#27).
+	if field.Searchable || field.Filterable || field.Sortable {
+		t.Errorf("AuditLogField grants a query marker (searchable=%v filterable=%v sortable=%v); the three markers are opt-in",
+			field.Searchable, field.Filterable, field.Sortable)
 	}
 
 	// AuditLogField should NOT have a description (unlike IdField)
@@ -654,14 +646,9 @@ func TestComplexBuilderChaining(t *testing.T) {
 		if len(field.Scopes) != len(AllFieldScopes) {
 			t.Errorf("Should have all scopes, got %d", len(field.Scopes))
 		}
-		if !field.Searchable {
-			t.Error("Should be Searchable")
-		}
-		if !field.Filterable {
-			t.Error("Should be Filterable")
-		}
-		if !field.Sortable {
-			t.Error("Should be Sortable")
+		if field.Searchable || field.Filterable || field.Sortable {
+			t.Errorf("DefaultField grants a query marker (searchable=%v filterable=%v sortable=%v); the three markers are opt-in (#27)",
+				field.Searchable, field.Filterable, field.Sortable)
 		}
 
 		// From WithRequired

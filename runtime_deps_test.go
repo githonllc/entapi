@@ -21,6 +21,7 @@ import (
 // here at the granularity that currently exists.
 var runtimeFiles = []string{
 	"query.go",
+	"filter.go",
 	"types.go",
 	"errors.go",
 	"errors_map.go",

@@ -8,3 +8,7 @@ var baseServiceTemplate = mustLoadTemplate("base_service")
 
 // baseHandlerTemplate is the base handler template (ent→response conversion).
 var baseHandlerTemplate = mustLoadTemplate("base_handler")
+
+// filterTemplate is the query-surface template: filter struct, predicates and
+// the sort allow-list.
+var filterTemplate = mustLoadTemplate("filter")

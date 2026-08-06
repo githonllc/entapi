@@ -421,11 +421,12 @@ graph TD
 
 ## 生成的代码
 
-为每个带注解的 schema 最多生成三个文件（均在 `ent/` 包中）：
+为每个带注解的 schema 最多生成四个文件（均在 `ent/` 包中）：
 
 | 文件 | 内容 |
 |------|------|
 | `{entity}_dto.go` | `CreateRequest`、`PatchRequest`、它们的 `Validate()`/`Apply` 组合，以及下述响应部分 |
+| `{entity}_filter.go` | `{Entity}Filter` 及其 `Predicates()`、`{Entity}SortKeys`、`{Entity}Order`——下述查询部分 |
 | `{entity}_base_service.go` | 带 CRUD、Before/After 钩子、`EntToResponse` 的 `BaseService` |
 | `{entity}_base_handler.go` | 带 `ToResponse`、`ToResponseList`、`PartialUpdate` 的 `BaseHandler` |
 
@@ -508,6 +509,59 @@ if err != nil {
 resp, err := ent.NewPostResponse(p) // 仅当某条边未加载时 err 才非 nil
 ```
 
+### 过滤、全文检索与排序白名单
+
+`{entity}_filter.go` 把一个列表端点的三个维度收进同一个产物。字段必须**同时**带有
+`ScopeQuery` 和对应维度的标记才会参与；两者皆无的字段在三者中都不出现，也没有任何
+运行时开关能把它加回来。
+
+| 声明 | 用途 |
+|---|---|
+| `{Entity}Filter` | 每个 `Filterable` 字段按操作符各一个参数；只要有 `Searchable` 字段就额外带 `Q` |
+| `(*{Entity}Filter).Predicates() []predicate.{Entity}` | 生成 ent 谓词，由 `Where(...)` 合取组合 |
+| `{Entity}SortKeys []string` | 排序白名单：恰好是那些 `Sortable` 字段 |
+| `{Entity}Order(entdomain.ListRequest) ([]{entity}.OrderOption, error)` | 用白名单校验请求的排序键，返回 ent 自己的排序构建器 |
+
+**操作符覆盖面就是 ent 为该字段类型推导出的那一套**，取自 `$field.Ops`，而不是本包
+自备的一张表。string 得到 13 个参数，enum 4 个，可选 `int` 8 + 1 个，`time.Time` 8 个。
+生成期多发一个操作符不花任何代价；事后补一个则意味着改模板、重新生成，还可能打破
+消费者已经依赖的 URL 契约。
+
+```go
+type RecordFilter struct {
+    Title             *string  `form:"title" json:"title,omitempty"`             // EQ
+    TitleNEQ          *string  `form:"title_neq" json:"title_neq,omitempty"`
+    TitleIn           []string `form:"title_in" json:"title_in,omitempty"`
+    // … GT GTE LT LTE Contains HasPrefix HasSuffix EqualFold ContainsFold
+
+    ScoreIsNull *bool `form:"score_is_null" json:"score_is_null,omitempty"`
+
+    Q *string `form:"q" json:"q,omitempty"` // 在 Searchable 字段之间取析取
+}
+```
+
+`IsNil` 与 `NotNil` 是「一个操作符一个参数」唯一的例外：它们是同一个布尔问题，拆成
+两个参数会容许一个自相矛盾的请求。
+
+**排序白名单是承重的安全机制，不是易用性糖。** 未经校验的排序字段是注入点、是全表
+扫描的触发点，配合分页还是一个针对调用方本不该读到的列的排序预言机。调用方给的字符串
+先与 `{Entity}SortKeys` 比对，然后被丢弃：真正进入查询的是 ent 为该列生成的
+`By<Field>` 构建器，用一个已经校验过的键查出来。白名单之外的键返回 `ErrValidation`，
+绝不静默降级。**没有默认排序键**——调用方没指定时该按哪列排序是 schema 里不存在的策略。
+
+```go
+os, err := ent.RecordOrder(req)          // req.SortBy 不在白名单内时返回 ErrValidation
+if err != nil {
+    return err
+}
+page, err := entdomain.ListPage(ctx, client.Record.Query(), filter.Predicates(), os, req, ent.NewRecordResponse)
+```
+
+有四种注解与 schema 的矛盾组合会在**生成期被拒绝**，而不是发出一个 ent 根本没写过的
+调用：标记加在没有 `ScopeQuery` 的字段上、`Searchable` 加在没有 `Contains` 谓词的
+类型上、`Filterable` 加在完全没有谓词的类型上，以及 `Sortable` 加在因不可比较而被
+ent 排序构建器跳过的类型上。
+
 ### BaseService 模式
 
 生成的 `Base{Entity}Service` 提供带钩子扩展点的 CRUD 操作。嵌入它，覆盖钩子即可添加自定义逻辑：
@@ -557,7 +611,7 @@ var (
 | `ScopeCreate` | 字段出现在 `CreateRequest` 中 |
 | `ScopeUpdate` | 字段出现在 `PatchRequest` 中 |
 | `ScopeResponse` | 字段出现在 `Response` 中 |
-| `ScopeQuery` | **目前什么都不做。** 预留给 [#27](https://github.com/githonllc/entdomain/issues/27) 生成的查询参数。大多数预设构建器都会授予它，但它今天不改变任何生成的字节 |
+| `ScopeQuery` | 字段可以被查询 API 触及：它有资格进入 `{Entity}Filter`、全文检索与排序白名单。**有资格不等于已暴露**——具体进入哪一维由 `Filterable` / `Searchable` / `Sortable` 标记决定，只有作用域而没有标记的字段三者皆不进 |
 
 ## 注解表面：哪些被消费，哪些没有
 
@@ -575,8 +629,11 @@ var (
 | `DomainField.Required` | `WithRequired(ScopeCreate)` 让创建请求强制要求一个 ent 本可以默认或允许缺席的字段；`WithRequired(ScopeUpdate)` 则把该字段从「显式 null 可清空」的集合里拿掉 |
 | `DomainEdge.Scopes`，由 `Edge().InResponse()` 设置 | 把嵌套对象放进响应类型 |
 | `DomainEdge.JSONKey`，由 `.As("key")` 设置 | 覆盖该边的 JSON 键 |
+| `DomainField.Filterable`，由 `.AsFilterable()` 设置 | 按 ent 为该字段类型推导出的每个操作符各生成一个过滤参数 |
+| `DomainField.Searchable`，由 `.AsSearchable()` 设置 | 把字段加入 `q` 全文检索的析取式 |
+| `DomainField.Sortable`，由 `.AsSortable()` 设置 | 把字段加入排序白名单 `{Entity}SortKeys` |
 
-二十七个设置中的七个（作用域常量分开计数）。下面其余的全部只是被接受并存储，
+二十七个设置中的十一个（作用域常量分开计数）。下面其余的全部只是被接受并存储，
 不改变任何生成结果。
 
 **已接受但尚未消费。** 每一项都有明确的保留理由与跟踪 issue；一旦某项悄悄变得可达
@@ -584,8 +641,6 @@ var (
 
 | 设置 | 等待 |
 |---|---|
-| `Searchable`、`Sortable`、`Filterable` | [#27](https://github.com/githonllc/entdomain/issues/27)——过滤结构体、全文检索与排序白名单 |
-| `ScopeQuery` | [#27](https://github.com/githonllc/entdomain/issues/27)。在它落地之前，不得进入任何打了 tag 的发布 |
 | `Metadata` 及 `FieldMetadata` 全部字段（`Title`、`Format`、`Pattern`、`Minimum`、`Maximum`、`MinLength`、`MaxLength`、`Enum`、`ReadOnly`、`WriteOnly`、`Deprecated`、`Tags`），经由 `WithTitle`、`WithFormat`、`WithPattern`、`WithRange`、`WithLength`、`WithEnum`、`AsReadOnly`、`AsWriteOnly`、`AsDeprecated`、`WithTags` 设置 | OpenAPI/Swagger spec 生成，目前尚无 issue 实现。`annotations.go` 中已标注 RESERVED |
 | `Validation`、`Description`、`Example` | 未决。它们既没有读取方也没有后继方案；已在 [#17](https://github.com/githonllc/entdomain/issues/17) 上提出 |
 
@@ -643,10 +698,11 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 而且这份清单由测试推导而非手工维护，所以任何设置都无法悄悄进出它
 （[#17](https://github.com/githonllc/entdomain/issues/17)）。
 
-**除 `InputOnlyField` 外，每个预设构建器都会把字段标成 searchable / filterable /
-sortable，并授予 `ScopeQuery`。** 今天无害。但它对下一步有影响：按任意列排序是全表
-扫描的触发点，配合分页还是一个排序预言机。这些标记一旦实现，默认全开会让白名单
-失去意义（[#27](https://github.com/githonllc/entdomain/issues/27)）。
+**没有任何预设构建器授予查询标记。** 它们过去三个全给，在无人消费时是无害的；如今
+它们会生成真实的查询参数与真实的白名单，默认全开等于让几乎每个可见于响应的字段都能
+排序——而按任意列排序是全表扫描的触发点，配合分页还是一个排序预言机。因此
+`AsFilterable()`、`AsSearchable()`、`AsSortable()` 一律按字段显式开启。预设仍然授予
+`ScopeQuery`：有资格不等于已暴露（[#27](https://github.com/githonllc/entdomain/issues/27)）。
 
 **软删除会静默废掉下游的删除钩子。** 生成的删除被改写成更新，携带的是更新操作标志。
 消费者按删除操作注册的钩子因此**根本不会触发**——这不是两套机制打架，

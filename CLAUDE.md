@@ -67,6 +67,7 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 | `funcs_imports.go` | `dtoImports`: the import specs the DTO must declare for its field types |
 | `funcs_codegen.go` | string-emitting helpers (`setFieldCallReq`, `fieldValueExpr`) |
 | `funcs_strings.go` | `camelCase`, `contains`, `hasPrefix` |
+| `funcs_filter.go` | the query surface: `queryFields` (the `ScopeQuery` gate), `isFilterable`/`isSearchable`/`isSortable` (the per-dimension markers), `searchFields`, `filterParams`, `filterImports` |
 | `annotations_edge.go` | edge annotation: `DomainEdge`, `getDomainEdgeAnnotation`, `responseEdgeSet`, `edgeJSONKey` |
 
 **A helper is only callable from a template if it appears in `templateFuncs()`.** Adding a func to a `funcs_*.go` file is not enough.
@@ -168,6 +169,8 @@ mechanical. Narrowing it needs a new annotation, and that is a separate issue.
 ## Annotation model
 
 `annotations.go` defines `DomainField` plus value-receiver fluent builders (`WithRequired`, `AsSearchable`, `WithFormat`, …). Every builder **returns a copy** — chaining works, mutating in place does not.
+
+**No preset builder grants `Searchable`, `Filterable` or `Sortable`.** The three markers are opt-in per field (#27): they now generate real query parameters and a real sort allow-list, and a permissive default would make essentially every response-visible field orderable. Presets do still grant `ScopeQuery` — that scope says the field *may* be reached from the query API, and the marker says in which dimension. A marker without `ScopeQuery` is refused at generation time, as is `Searchable` on a type with no `Contains`, `Filterable` on a type with no ops, and `Sortable` on a non-comparable type (`schema_conflicts.go`).
 
 **Seven of the 27 exported knobs reach a template**: `DomainField.Scopes`, `DomainField.Required`, `DomainEdge.Scopes`, `DomainEdge.JSONKey` and three of the four scopes. The other 20 are accepted, stored and ignored. That is allowed but not free: `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` (`annotation_surface_test.go`) derives the knob list by reflection and reachability by toggling each knob against the registered template funcs, so a new knob fails CI until it is either wired up or given a `pendingKnobs` entry naming its issue. It also fails when a listed knob *becomes* reachable — the entry is a claim with a deadline, not an exemption. See "Dead code is now a test failure" below; this is the same contract one level up.
 

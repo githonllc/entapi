@@ -33,7 +33,8 @@ import (
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		// Import declaration
-		"dtoImports": dtoImports,
+		"dtoImports":    dtoImports,
+		"filterImports": filterImports,
 
 		// String manipulation
 		"camelCase": camelCase,
@@ -50,6 +51,15 @@ func templateFuncs() template.FuncMap {
 		"isCreatePointer":  isCreatePointer,
 		"isCreateRequired": isCreateRequired,
 		"isPatchClearable": isPatchClearable,
+
+		// Query surface: the outer loop is the scope, the inner test is the
+		// dimension (funcs_filter.go)
+		"queryFields":  queryFields,
+		"searchFields": searchFields,
+		"isFilterable": isFilterable,
+		"isSearchable": isSearchable,
+		"isSortable":   isSortable,
+		"filterParams": filterParams,
 
 		// Field type checking
 		"isComplexFieldType": isComplexFieldType,

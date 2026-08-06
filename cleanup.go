@@ -31,6 +31,7 @@ func generatedFileNames(node *gen.Type) []string {
 	base := strings.ToLower(node.Name)
 	return []string{
 		base + "_dto.go",
+		base + "_filter.go",
 		base + "_base_service.go",
 		base + "_base_handler.go",
 	}

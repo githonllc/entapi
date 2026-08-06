@@ -115,8 +115,8 @@ func TestGetDomainFieldAnnotation_DirectPointer(t *testing.T) {
 	if got == nil {
 		t.Fatal("expected non-nil annotation")
 	}
-	if !got.Searchable {
-		t.Error("expected Searchable to be true")
+	if len(got.Scopes) != len(AllFieldScopes) {
+		t.Errorf("expected %d scopes from DefaultField(), got %d", len(AllFieldScopes), len(got.Scopes))
 	}
 }
 

@@ -110,6 +110,7 @@ func nodeConflicts(node *gen.Type) []string {
 		if f.Immutable && hasDomainScope(f, ScopeUpdate) {
 			out = append(out, immutableUpdateConflict(node, f))
 		}
+		out = append(out, queryConflicts(node, f)...)
 	}
 	out = append(out, asymmetricSelfEdgeConflicts(node)...)
 	return out
@@ -204,6 +205,87 @@ func asymmetricSelfEdgeConflict(node *gen.Type, assoc, inverse *gen.Edge, assocA
 		inverse.Name, node.Name, assoc.Name,
 		annotated.Name, bare.Name,
 	)
+}
+
+// queryConflicts reports the contradictions between a field's query markers and
+// what ent generates for that field.
+//
+// All four have the same shape as the immutable/update conflict above: the
+// annotation asks for a call to something ent never wrote. Emitting it anyway
+// produces an undefined symbol inside the consumer's own ent package, naming
+// ent's API, with nothing pointing back at the annotation that asked for it.
+// Silently dropping the marker instead would be worse — the parameter would
+// vanish from the query API without a word, and the caller would find out by
+// getting unfiltered results.
+func queryConflicts(node *gen.Type, f *gen.Field) []string {
+	a := getDomainFieldAnnotation(f)
+	if a == nil {
+		return nil
+	}
+	var out []string
+
+	if (a.Filterable || a.Searchable || a.Sortable) && !hasDomainScope(f, ScopeQuery) {
+		out = append(out, fmt.Sprintf(
+			"%s.%s: annotation marks the field %s but withholds scope %q, so it is not exposed to the query API and no query artifact is generated for it; "+
+				"add %s to the field's scopes (entdomain.DefaultField(), CreateOnlyField() and OutputOnlyField() all carry it), or drop the marker",
+			node.Name, f.Name, markerList(a), ScopeQuery, ScopeQuery,
+		))
+	}
+
+	if a.Searchable && !fieldHasOp(f, gen.Contains) {
+		out = append(out, fmt.Sprintf(
+			"%s.%s: annotation marks the field Searchable, but ent derives no Contains predicate for type %q "+
+				"(entc/gen/func.go fieldOps), so there is no %sContains to put in the free-text disjunction. "+
+				"Free-text search is a substring match and only string fields have one — drop AsSearchable(), or use AsFilterable() for exact matching",
+			node.Name, f.Name, f.Type.String(), f.StructField(),
+		))
+	}
+
+	if a.Filterable && len(f.Ops()) == 0 {
+		out = append(out, fmt.Sprintf(
+			"%s.%s: annotation marks the field Filterable, but ent derives no predicates at all for type %q "+
+				"(entc/gen/func.go fieldOps), so the filter group would be empty and the parameter would silently do nothing. Drop AsFilterable()",
+			node.Name, f.Name, f.Type.String(),
+		))
+	}
+
+	if a.Sortable && (f.Type == nil || !f.Type.Comparable()) {
+		out = append(out, fmt.Sprintf(
+			"%s.%s: annotation marks the field Sortable, but type %q is not comparable, so ent's order builders skip it "+
+				"(entc/gen/template/dialect/sql/meta.tmpl) and there is no %s to put in the sort allow-list. Drop AsSortable()",
+			node.Name, f.Name, f.Type.String(), f.OrderName(),
+		))
+	}
+
+	return out
+}
+
+// markerList names the query markers a field carries, so the scope message says
+// which annotation the author has to reconcile.
+func markerList(a *DomainField) string {
+	var set []string
+	if a.Filterable {
+		set = append(set, "Filterable")
+	}
+	if a.Searchable {
+		set = append(set, "Searchable")
+	}
+	if a.Sortable {
+		set = append(set, "Sortable")
+	}
+	return strings.Join(set, "/")
+}
+
+// fieldHasOp reports whether ent derived op for this field. The question is
+// always asked of ent's own table rather than of a copy of it — that table is
+// what where.go is generated from, so a second one could only disagree.
+func fieldHasOp(f *gen.Field, want gen.Op) bool {
+	for _, op := range f.Ops() {
+		if op == want {
+			return true
+		}
+	}
+	return false
 }
 
 // immutableUpdateConflict describes the field-level contradiction: a field ent

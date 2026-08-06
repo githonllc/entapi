@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"entgo.io/ent/entc/gen"
+	"entgo.io/ent/schema/field"
 )
 
 // immutableField returns a string field ent has marked Immutable, carrying the
@@ -276,5 +277,102 @@ func TestCheckGraphConflicts_Clean(t *testing.T) {
 
 	if err := checkGraphConflicts(g, nil); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Query-marker conflicts (#27). Each has the same shape as the immutable one
+// above: the annotation asks for a call to something ent never generated.
+// ────────────────────────────────────────────────────────────────────────────
+
+// annotatedJSONField returns a named JSON field, for which ent derives no
+// order builder and — unless it is Optional — no predicates either.
+func annotatedJSONField(name string, optional bool, df *DomainField) *gen.Field {
+	f := newField(name, &field.TypeInfo{Type: field.TypeJSON, Ident: "[]string"}, df)
+	f.Optional = optional
+	return f
+}
+
+func TestCheckGraphConflicts_MarkerWithoutQueryScope(t *testing.T) {
+	g := graphOf(newTestType("Doc",
+		newStringField("token", ptr(InputOnlyField().AsFilterable().AsSortable())),
+	))
+
+	err := checkGraphConflicts(g, nil)
+	if err == nil {
+		t.Fatal("expected an error for a marker on a field withholding ScopeQuery, got nil")
+	}
+	for _, want := range []string{"Doc.token", "Filterable/Sortable", `scope "query"`, "DefaultField()"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q\ngot: %v", want, err)
+		}
+	}
+}
+
+func TestCheckGraphConflicts_SearchableWithoutContains(t *testing.T) {
+	g := graphOf(newTestType("Doc",
+		newIntField("count", ptr(DefaultField().AsSearchable())),
+	))
+
+	err := checkGraphConflicts(g, nil)
+	if err == nil {
+		t.Fatal("expected an error for Searchable on a field with no Contains predicate, got nil")
+	}
+	for _, want := range []string{"Doc.count", "Searchable", "Contains", "CountContains", "AsSearchable()"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q\ngot: %v", want, err)
+		}
+	}
+}
+
+func TestCheckGraphConflicts_FilterableWithNoOperators(t *testing.T) {
+	g := graphOf(newTestType("Doc",
+		annotatedJSONField("meta", false, ptr(DefaultField().AsFilterable())),
+	))
+
+	err := checkGraphConflicts(g, nil)
+	if err == nil {
+		t.Fatal("expected an error for Filterable on a field with no predicates, got nil")
+	}
+	for _, want := range []string{"Doc.meta", "Filterable", "no predicates at all", "AsFilterable()"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q\ngot: %v", want, err)
+		}
+	}
+}
+
+func TestCheckGraphConflicts_SortableOnANonComparableField(t *testing.T) {
+	// Optional, so the field does have predicates (IsNil/NotNil) — the
+	// sortable check must not be reachable only through "has no operators".
+	g := graphOf(newTestType("Doc",
+		annotatedJSONField("tags", true, ptr(DefaultField().AsSortable())),
+	))
+
+	err := checkGraphConflicts(g, nil)
+	if err == nil {
+		t.Fatal("expected an error for Sortable on a non-comparable field, got nil")
+	}
+	for _, want := range []string{"Doc.tags", "Sortable", "not comparable", "ByTags", "AsSortable()"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q\ngot: %v", want, err)
+		}
+	}
+}
+
+// TestCheckGraphConflicts_MarkedFieldsThatAgreeWithTheSchema is the converse:
+// anything that can be generated correctly is generated, not refused.
+func TestCheckGraphConflicts_MarkedFieldsThatAgreeWithTheSchema(t *testing.T) {
+	optionalInt := newIntField("score", ptr(DefaultField().AsFilterable()))
+	optionalInt.Optional = true
+
+	g := graphOf(newTestType("Doc",
+		newStringField("title", ptr(DefaultField().AsFilterable().AsSearchable().AsSortable())),
+		optionalInt,
+		newTimeField("created_at", ptr(OutputOnlyField().AsFilterable().AsSortable())),
+		annotatedJSONField("tags", true, ptr(DefaultField())), // unmarked: nothing to contradict
+	))
+
+	if err := checkGraphConflicts(g, nil); err != nil {
+		t.Fatalf("expected no conflict, got: %v", err)
 	}
 }

@@ -18,7 +18,7 @@ import (
 type BaseRecordServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *RecordCreateRequest) error
 	AfterCreate(ctx context.Context, entity *Record) (*Record, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *RecordUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *RecordPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *Record) (*Record, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseRecordService) AfterCreate(_ context.Context, entity *Record) (*Rec
 	return entity, nil
 }
 
-func (s *BaseRecordService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *RecordUpdateRequest) error {
+func (s *BaseRecordService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *RecordPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseRecordService) GetByID(ctx context.Context, id uuid.UUID) (*Record,
 }
 
 // Create creates a new Record from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseRecordService) Create(ctx context.Context, req *RecordCreateRequest) (*Record, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Record.Create()
-	ApplyRecordCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Record.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseRecordService) Create(ctx context.Context, req *RecordCreateRequest
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of Record, only setting non-nil fields from the request.
-func (s *BaseRecordService) Update(ctx context.Context, id uuid.UUID, req *RecordUpdateRequest) (*Record, error) {
+// Update performs a partial update of Record: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseRecordService) Update(ctx context.Context, id uuid.UUID, req *RecordPatchRequest) (*Record, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Record.UpdateOneID(id)
-	ApplyRecordUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Record.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,47 +222,14 @@ func (s *BaseRecordService) ListWithCursor(ctx context.Context, limit int, curso
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyRecordCreateRequest and
+// ApplyRecordUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidRecordCreateRequest and
+// ValidRecordPatchRequest (see record_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyRecordCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyRecordCreateRequest(builder *RecordCreate, req *RecordCreateRequest) {
-	builder.SetTitle(req.Title)
-	builder.SetBody(req.Body)
-	if req.Status != "" {
-		builder.SetStatus(req.Status)
-	}
-	if req.Score != nil {
-		builder.SetScore(*req.Score)
-	}
-	if req.Note != nil {
-		builder.SetNote(*req.Note)
-	}
-	builder.SetSecret(req.Secret)
-}
-
-// ApplyRecordUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyRecordUpdateRequest(builder *RecordUpdateOne, req *RecordUpdateRequest) {
-	if req.Title != nil {
-		builder.SetTitle(*req.Title)
-	}
-	if req.Body != nil {
-		builder.SetBody(*req.Body)
-	}
-	if req.Status != nil {
-		builder.SetStatus(*req.Status)
-	}
-	if req.Score != nil {
-		builder.SetNillableScore(req.Score)
-	}
-	if req.Note != nil {
-		builder.SetNote(*req.Note)
-	}
-	if req.Secret != nil {
-		builder.SetSecret(*req.Secret)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

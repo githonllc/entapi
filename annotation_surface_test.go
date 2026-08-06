@@ -57,20 +57,13 @@ import (
 // reason must name an issue, so "documented as pending" cannot degrade into
 // "documented as permanent".
 var pendingKnobs = map[string]string{
-	// Decided on #17 (2026-07-30): implemented by #27, not removed. Translating
-	// query-string parameters into typed predicates is schema-determined, and
-	// the sortable allow-list is load-bearing security — an unchecked sort
-	// field is an injection site, an unindexed-scan trigger and, combined with
-	// paging, an ordering oracle.
-	"DomainField.Searchable": "implemented by #27 (filter/search/sort generation); kept per the #17 verdict",
-	"DomainField.Sortable":   "implemented by #27 (sort allow-list); kept per the #17 verdict",
-	"DomainField.Filterable": "implemented by #27 (filter structs and predicates); kept per the #17 verdict",
-
-	// Decided on #17 (2026-07-30): kept. Its real consumer is #27, which
-	// carries two binding constraints — ScopeQuery must not enter any tagged
-	// release before #27 lands, and #27 must not close until ScopeQuery has a
-	// reachable consumer.
-	"FieldScope.ScopeQuery": "consumer arrives with #27; must not ship in a tagged release before it (#17 verdict)",
+	// DomainField.Searchable, .Sortable, .Filterable and FieldScope.ScopeQuery
+	// are deliberately absent: #27 landed filter.tmpl, so all four are consumed
+	// now. isSearchable, isSortable and isFilterable each read one marker, and
+	// queryFields reads the scope; all four are registered and all four are
+	// invoked by templates/filter.tmpl. Their entries were removed as part of
+	// that change, which is what the "reachable but still declared pending"
+	// branch below would otherwise have demanded.
 
 	// Decided on #17 (2026-07-30): kept. annotations.go labels these RESERVED
 	// for OpenAPI/Swagger spec generation, which is a stated forward contract

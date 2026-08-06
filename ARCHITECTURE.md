@@ -136,7 +136,7 @@ skinparam classAttributeIconSize 0
 class DomainField <<annotation>> {
   Scopes []FieldScope
   Required map[FieldScope]bool
-  Searchable/Sortable/Filterable bool
+  Searchable/Sortable/Filterable bool  ' opt-in, never granted by a preset
   Metadata *FieldMetadata
   --
   Name() string
@@ -354,14 +354,17 @@ Enum predicates need two branches because Go type assertions do not match underl
 
 ### Adding a field capability end to end
 
-Say you want `.AsSearchable()` to actually reach the generated code (today it is stored and ignored):
+`.AsSearchable()` is the worked example, because it was the standing case of an
+annotation that was stored and ignored, and #27 is the commit that changed that.
+The route it took is the route any new field capability takes:
 
-1. `annotations.go` — field already exists on `DomainField`; no change.
-2. `funcs_fields.go` — a new selector reading it, next to `responseFields`.
-3. `funcs.go` — register the selector in `templateFuncs()`. **A helper in `funcs_*.go` is invisible to templates unless it is there** — and one registered but invoked by no template fails `TestTemplateInvocationsAreRegistered`, so the registration and the template edit are one commit.
-4. `templates/dto.tmpl` + `templates/base_service.tmpl` — a field-shaped capability usually lands in two places (the struct and its converter); both must agree or the emitted file will not compile.
-5. `funcs_fields_test.go` — table test with `newStringField("x", ptr(DefaultField()))`.
-6. Add or extend a fixture under `internal/fixtures/` — `TestCodegenFixtures` is the only thing here that compiles emitted output.
+1. `annotations.go` — field already exists on `DomainField`; no change. (A genuinely new knob is added here, and `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` fails until it is either consumed or declared pending with an issue.)
+2. `funcs_filter.go` — a selector or predicate reading it, next to `queryFields`.
+3. `funcs.go` — register it in `templateFuncs()`. **A helper in `funcs_*.go` is invisible to templates unless it is there** — and one registered but invoked by no template fails `TestTemplateInvocationsAreRegistered`, so the registration and the template edit are one commit.
+4. `templates/*.tmpl` — a field-shaped capability usually lands in two places (the struct and the code that reads it); both must agree or the emitted file will not compile. Declare the imports the new output uses: `TestTemplatesDeclareTheirImports` fails if goimports has to add or remove one.
+5. `schema_conflicts.go` — if the knob can contradict the ent schema, refuse there rather than emitting a call ent never wrote.
+6. `funcs_filter_test.go` — table test with `newStringField("x", ptr(DefaultField().AsSearchable()))`.
+7. Add or extend a fixture under `internal/fixtures/` — `TestCodegenFixtures` is the only thing here that compiles emitted output.
 
 ### Reading order
 
@@ -371,10 +374,11 @@ Say you want `.AsSearchable()` to actually reach the generated code (today it is
 4. `templates/dto.tmpl` — the smallest complete output
 5. `funcs_fields.go` — how scopes become struct fields
 6. `funcs_scope.go` — `getDomainFieldAnnotation`, the dual-format gate
-7. `templates/base_service.tmpl` — hooks, CRUD, `Apply*Request`, `EntToResponse`
-8. `funcs_typechecks.go` — the conventions (`deleted_at`, UUID, complex types)
-9. `templates/base_handler.tmpl` — 60 lines, the whole handler contract
-10. `funcs_codegen.go` — `setFieldCallReq`, the whole file since #7
+7. `funcs_filter.go` + `templates/filter.tmpl` — how the query markers become filter parameters and a sort allow-list
+8. `templates/base_service.tmpl` — hooks, CRUD, `Apply*Request`, `EntToResponse`
+9. `funcs_typechecks.go` — the conventions (`deleted_at`, UUID, complex types)
+10. `templates/base_handler.tmpl` — 60 lines, the whole handler contract
+11. `funcs_codegen.go` — `setFieldCallReq`, the whole file since #7
 
 ### Risk areas & discrepancies
 

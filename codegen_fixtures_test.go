@@ -160,7 +160,7 @@ func TestCodegenFixtureStaleArtifacts(t *testing.T) {
 	targetDir := filepath.Join(fixtureDir, "ent")
 	opts := []Option{WithBaseService(true), WithBaseHandler(true)}
 
-	generated := []string{"sprocket_dto.go", "sprocket_base_service.go", "sprocket_base_handler.go"}
+	generated := []string{"sprocket_dto.go", "sprocket_filter.go", "sprocket_base_service.go", "sprocket_base_handler.go"}
 
 	// The hand-written file that must survive: it occupies a name cleanup
 	// considers, and carries ent's generic header instead of entdomain's marker.

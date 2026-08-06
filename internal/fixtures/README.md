@@ -88,6 +88,7 @@ when the case passes.
 | `selfref` | a self-referential pair declared in the chained form, so annotated on one end only | generation refused |
 | `query` | the query surface: a string, an enum, an optional int and a time field, plus a searchable-not-filterable field, a query-scoped-but-unmarked field, an input-only field, and a second entity that marks nothing | generates and compiles |
 | `queryconflict` | query markers that contradict the schema: `Sortable` on a non-comparable field, `Searchable` on a type with no `Contains`, `Filterable` on a type with no predicates, and a marker on a field withholding `ScopeQuery` | generation refused |
+| `wiring` | a to-many response edge, a to-one response edge with the full query surface, and an entity with no edge at all | generates, compiles, and is exercised against SQLite by `wiring/e2e` |
 | `stale` | an entity that loses its annotations between two runs | generates twice, see below |
 
 ## The self-referential pair, in three fixtures
@@ -122,6 +123,27 @@ fails if goimports has to add or remove an import — that is what keeps the
 formatter a safety net rather than the mechanism. Every refused fixture is
 deliberately absent from it: generation stops before any template is rendered,
 so there is nothing to check.
+
+## The `wiring/e2e` module
+
+`wiring` is the one fixture with a behavioural half, because generated wiring
+that compiles is not generated wiring that returns the right page. Compiling it
+proves the call into the runtime type-checks; only a database proves the filter
+narrowed, the sort ordered and the patch cleared.
+
+`internal/fixtures/wiring/e2e` is therefore **a separate Go module**, for the
+same reason `internal/fixture` (singular) is: it needs a SQL driver, and this
+module must not have one. It contains no ent code of its own — it imports what
+`TestCodegenFixtures` generated into `wiring/ent` and drives it. Being a nested
+module, `go build ./...` and `go test ./...` from the repository root skip it, so
+it is run explicitly:
+
+```bash
+(cd internal/fixtures/wiring/e2e && go test ./...)
+```
+
+Regenerating `wiring/ent` and then not running that command is how a behavioural
+regression gets committed. Run both.
 
 ## The `stale` fixture
 

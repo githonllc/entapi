@@ -1132,10 +1132,16 @@ without this table being updated:
 
 | Setting | Waiting on |
 |---|---|
-| `Metadata` and all of `FieldMetadata` (`Title`, `Description`, `Format`, `Pattern`, `Minimum`, `Maximum`, `MinLength`, `MaxLength`, `Enum`, `Example`, `ReadOnly`, `WriteOnly`, `Deprecated`, `Tags`), set through `WithTitle`, `WithDescription`, `WithFormat`, `WithPattern`, `WithRange`, `WithLength`, `WithEnum`, `WithExample`, `AsReadOnly`, `AsWriteOnly`, `AsDeprecated`, `WithTags` | OpenAPI/Swagger spec generation, which no issue implements yet. Declared RESERVED in `annotations.go` |
+| `Metadata` and all of `FieldMetadata` (`Title`, `Description`, `Format`, `Pattern`, `Minimum`, `Maximum`, `MinLength`, `MaxLength`, `Enum`, `Example`, `ReadOnly`, `WriteOnly`, `Deprecated`, `Tags`), set through `WithTitle`, `WithDescription`, `WithFormat`, `WithPattern`, `WithRange`, `WithLength`, `WithEnum`, `WithExample`, `AsReadOnly`, `AsWriteOnly`, `AsDeprecated`, `WithTags` | OpenAPI/Swagger spec generation, which no issue implements yet. Declared RESERVED in `annotations.go` — **stored, not consumed ([#17](https://github.com/githonllc/entdomain/issues/17))** |
 
 Fifteen settings, all of them the metadata block. There is no third category:
 every exported setting is either in the table above it or in this one.
+
+Every builder in that row opens its godoc with the same sentence, so a schema
+author calling `WithDescription` sees it without reading this table
+([#67](https://github.com/githonllc/entdomain/issues/67)). Wiring one of these
+knobs up must delete the disclaimer in the same commit;
+`TestPendingKnobBuildersDeclareNoOp` fails while a stale one survives.
 
 **Removed.** `AsUniqueLookup()` / `AsRangeLookup()` and their `UniqueLookup` /
 `RangeLookup` fields are gone, along with the whole `DomainConfig` annotation

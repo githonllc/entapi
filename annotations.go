@@ -118,6 +118,7 @@ type DomainField struct {
 	// Filterable marks the field as filterable in query APIs
 	Filterable bool `json:"filterable,omitempty"`
 
+	// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 	// Metadata contains additional field metadata for documentation and API spec generation
 	Metadata *FieldMetadata `json:"metadata,omitempty"`
 }
@@ -341,12 +342,14 @@ func (d DomainField) ensureMetadata() DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithMetadata sets field metadata directly.
 func (d DomainField) WithMetadata(metadata FieldMetadata) DomainField {
 	d.Metadata = &metadata
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithTitle sets the field title for documentation and API specs.
 func (d DomainField) WithTitle(title string) DomainField {
 	d = d.ensureMetadata()
@@ -354,6 +357,7 @@ func (d DomainField) WithTitle(title string) DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithDescription sets the field description for documentation and API specs.
 //
 // The value is stored on the metadata block since #17; the builder itself is
@@ -364,6 +368,7 @@ func (d DomainField) WithDescription(desc string) DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithExample sets an example value for the field, for documentation and API
 // specs.
 //
@@ -375,6 +380,7 @@ func (d DomainField) WithExample(example interface{}) DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithFormat sets the field format (e.g., "email", "date-time", "uuid").
 func (d DomainField) WithFormat(format string) DomainField {
 	d = d.ensureMetadata()
@@ -382,6 +388,7 @@ func (d DomainField) WithFormat(format string) DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithPattern sets the regular expression pattern for string validation.
 func (d DomainField) WithPattern(pattern string) DomainField {
 	d = d.ensureMetadata()
@@ -389,6 +396,7 @@ func (d DomainField) WithPattern(pattern string) DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithRange sets the minimum and maximum numeric value constraints.
 func (d DomainField) WithRange(min, max *float64) DomainField {
 	d = d.ensureMetadata()
@@ -397,6 +405,7 @@ func (d DomainField) WithRange(min, max *float64) DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithLength sets the minimum and maximum string length constraints.
 func (d DomainField) WithLength(min, max *int) DomainField {
 	d = d.ensureMetadata()
@@ -405,6 +414,7 @@ func (d DomainField) WithLength(min, max *int) DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithEnum sets the allowed enumeration values for the field.
 func (d DomainField) WithEnum(values ...interface{}) DomainField {
 	d = d.ensureMetadata()
@@ -412,6 +422,7 @@ func (d DomainField) WithEnum(values ...interface{}) DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // AsReadOnly marks the field as read-only in API specifications.
 func (d DomainField) AsReadOnly() DomainField {
 	d = d.ensureMetadata()
@@ -419,6 +430,7 @@ func (d DomainField) AsReadOnly() DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // AsWriteOnly marks the field as write-only in API specifications.
 func (d DomainField) AsWriteOnly() DomainField {
 	d = d.ensureMetadata()
@@ -426,6 +438,7 @@ func (d DomainField) AsWriteOnly() DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // AsDeprecated marks the field as deprecated.
 func (d DomainField) AsDeprecated() DomainField {
 	d = d.ensureMetadata()
@@ -433,6 +446,7 @@ func (d DomainField) AsDeprecated() DomainField {
 	return d
 }
 
+// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17).
 // WithTags adds grouping tags to the field for documentation organization.
 func (d DomainField) WithTags(tags ...string) DomainField {
 	d = d.ensureMetadata()

@@ -2,6 +2,9 @@ package entdomain
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"reflect"
 	"sort"
 	"strings"
@@ -94,6 +97,123 @@ var pendingKnobs = map[string]string{
 	// registered responseEdges and edgeJSONKey, so both are consumed now. They
 	// were listed here while this branch was based on the commit before #25
 	// landed, and this test is what caught it on rebase.
+}
+
+// noOpDisclaimer is the sentence every builder for a pending knob must carry as
+// the FIRST line of its doc comment. Godoc shows a method's own comment and
+// nothing else, so a disclaimer on the FieldMetadata type — which is where it
+// lived before #67 — is invisible at the only place a schema author looks: the
+// builder they are about to call. First line, verbatim, because the reader who
+// reads exactly one line is the reader this exists for.
+const noOpDisclaimer = "// No-op today: stored but not consumed by any template — reserved for OpenAPI spec generation (#17)."
+
+// pendingKnobBuilders maps each pendingKnobs entry to the exported builder
+// method a schema author calls to set it. Two knobs share a builder in two
+// cases (WithRange writes Minimum and Maximum, WithLength writes MinLength and
+// MaxLength), which is why this is knob -> method and not the reverse.
+//
+// This map is hardcoded on purpose: it is the claim being checked, and deriving
+// it from the code would make the test agree with whatever the code says.
+//
+// # The contract is BIDIRECTIONAL
+//
+// Wiring a knob up means deleting its pendingKnobs entry (that is
+// TestEveryAnnotationKnobIsConsumedOrDeclaredPending's "reachable but still
+// declared pending" branch). This test then fails, because the entry here still
+// demands a "No-op today" disclaimer the builder must no longer carry. That is
+// the point: the commit that consumes a knob must delete BOTH the disclaimer in
+// annotations.go AND the entry here, in the same commit, or CI stays red. A
+// stale disclaimer is worse than none — it tells a schema author their working
+// annotation does nothing.
+var pendingKnobBuilders = map[string]string{
+	"DomainField.Metadata":      "WithMetadata",
+	"FieldMetadata.Title":       "WithTitle",
+	"FieldMetadata.Description": "WithDescription",
+	"FieldMetadata.Format":      "WithFormat",
+	"FieldMetadata.Pattern":     "WithPattern",
+	"FieldMetadata.Minimum":     "WithRange",
+	"FieldMetadata.Maximum":     "WithRange",
+	"FieldMetadata.MinLength":   "WithLength",
+	"FieldMetadata.MaxLength":   "WithLength",
+	"FieldMetadata.Enum":        "WithEnum",
+	"FieldMetadata.Example":     "WithExample",
+	"FieldMetadata.ReadOnly":    "AsReadOnly",
+	"FieldMetadata.WriteOnly":   "AsWriteOnly",
+	"FieldMetadata.Deprecated":  "AsDeprecated",
+	"FieldMetadata.Tags":        "WithTags",
+}
+
+// TestPendingKnobBuildersDeclareNoOp asserts that every builder for a knob
+// declared pending says so on its first godoc line, and that this map and
+// pendingKnobs cover exactly the same knobs. See pendingKnobBuilders for why
+// both directions are checked.
+func TestPendingKnobBuildersDeclareNoOp(t *testing.T) {
+	// Both directions of the map/pendingKnobs correspondence, checked before the
+	// doc comments: a mismatch here means the failure below would be about the
+	// wrong set.
+	for knob := range pendingKnobBuilders {
+		if _, ok := pendingKnobs[knob]; !ok {
+			t.Errorf("pendingKnobBuilders lists %q, which pendingKnobs does not declare pending.\n"+
+				"if the knob was just wired to generation, delete its entry here AND the "+
+				"%q line from its builder's doc comment, in this commit", knob, noOpDisclaimer)
+		}
+	}
+	for knob := range pendingKnobs {
+		if _, ok := pendingKnobBuilders[knob]; !ok {
+			t.Errorf("knob %q is declared pending but names no builder here.\n"+
+				"add the builder method a schema author calls to set it, so the no-op "+
+				"disclaimer on that builder is enforced", knob)
+		}
+	}
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "annotations.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parsing annotations.go: %v", err)
+	}
+
+	docs := make(map[string]*ast.CommentGroup)
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil {
+			continue
+		}
+		docs[fn.Name.Name] = fn.Doc
+	}
+
+	// Sorted, so a run reports the same order twice.
+	knobs := make([]string, 0, len(pendingKnobBuilders))
+	for knob := range pendingKnobBuilders {
+		knobs = append(knobs, knob)
+	}
+	sort.Strings(knobs)
+
+	checked := make(map[string]bool)
+	for _, knob := range knobs {
+		method := pendingKnobBuilders[knob]
+		if checked[method] {
+			continue
+		}
+		checked[method] = true
+
+		doc, ok := docs[method]
+		if !ok {
+			t.Errorf("knob %q names builder %s, which annotations.go declares no method for.\n"+
+				"fix the name — an entry naming nothing enforces nothing", knob, method)
+			continue
+		}
+		if doc == nil || len(doc.List) == 0 {
+			t.Errorf("%s (builder for pending knob %q) has no doc comment; it must start with:\n%s",
+				method, knob, noOpDisclaimer)
+			continue
+		}
+		if got := doc.List[0].Text; got != noOpDisclaimer {
+			t.Errorf("%s (builder for pending knob %q) does not open with the no-op disclaimer.\n"+
+				" first doc line: %s\n want first line: %s\n"+
+				"godoc shows this line and a reader may read no other; the existing description "+
+				"stays on the lines after it", method, knob, got, noOpDisclaimer)
+		}
+	}
 }
 
 // annotationKnob is one exported setting a schema author can write, together

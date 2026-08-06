@@ -1025,10 +1025,15 @@ var (
 
 | 设置 | 等待 |
 |---|---|
-| `Metadata` 及 `FieldMetadata` 全部字段（`Title`、`Description`、`Format`、`Pattern`、`Minimum`、`Maximum`、`MinLength`、`MaxLength`、`Enum`、`Example`、`ReadOnly`、`WriteOnly`、`Deprecated`、`Tags`），经由 `WithTitle`、`WithDescription`、`WithFormat`、`WithPattern`、`WithRange`、`WithLength`、`WithEnum`、`WithExample`、`AsReadOnly`、`AsWriteOnly`、`AsDeprecated`、`WithTags` 设置 | OpenAPI/Swagger spec 生成，目前尚无 issue 实现。`annotations.go` 中已标注 RESERVED |
+| `Metadata` 及 `FieldMetadata` 全部字段（`Title`、`Description`、`Format`、`Pattern`、`Minimum`、`Maximum`、`MinLength`、`MaxLength`、`Enum`、`Example`、`ReadOnly`、`WriteOnly`、`Deprecated`、`Tags`），经由 `WithTitle`、`WithDescription`、`WithFormat`、`WithPattern`、`WithRange`、`WithLength`、`WithEnum`、`WithExample`、`AsReadOnly`、`AsWriteOnly`、`AsDeprecated`、`WithTags` 设置 | OpenAPI/Swagger spec 生成，目前尚无 issue 实现。`annotations.go` 中已标注 RESERVED ——**仅存储，模板不消费（[#17](https://github.com/githonllc/entdomain/issues/17)）** |
 
 共十五项，全部属于 metadata 块。没有第三类：每一个导出设置要么在上面那张表里，要么在
 这张表里。
+
+该行列出的每个 builder 的 godoc 首行都写着同一句话，因此调用 `WithDescription` 的
+schema 作者不必读到本表也能看见（[#67](https://github.com/githonllc/entdomain/issues/67)）。
+将其中某个 knob 真正接线时，必须在同一个 commit 里删掉该声明——只要还留着陈旧声明，
+`TestPendingKnobBuildersDeclareNoOp` 就会红。
 
 **已删除。** `AsUniqueLookup()` / `AsRangeLookup()` 及其 `UniqueLookup` / `RangeLookup`
 字段已删除，整个 `DomainConfig` 注解与 `DomainField.Validation` 亦然。这两个 lookup

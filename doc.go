@@ -70,12 +70,16 @@
 //
 // # What the annotations actually do
 //
-// Only [DomainField.Scopes] and [DomainField.Required] reach a template. Every
-// other exported setting — the searchable/sortable/filterable markers,
-// [ScopeQuery], the whole [FieldMetadata] block, and the [DomainEdge] settings
-// — is accepted and stored but changes nothing that is generated yet. The
-// README's "Annotation surface" section lists each one with the issue that will
-// consume it; that list is derived by a test, so it cannot drift from the code.
+// Seven of the twenty-seven exported settings reach a template:
+// [DomainField.Scopes], [DomainField.Required], [DomainEdge.Scopes],
+// [DomainEdge.JSONKey], and the [ScopeCreate], [ScopeUpdate] and
+// [ScopeResponse] constants. Every other one — the searchable/sortable/
+// filterable markers, [ScopeQuery], and the whole [FieldMetadata] block — is
+// accepted and stored but changes nothing that is generated yet.
+//
+// The README's "Annotation surface" section lists each with the issue that will
+// consume it. That list is derived by a test, not maintained by hand, so it
+// cannot drift from the code in either direction.
 //
 // # Runtime
 //

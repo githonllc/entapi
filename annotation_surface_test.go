@@ -90,12 +90,10 @@ var pendingKnobs = map[string]string{
 	"FieldMetadata.Deprecated": "RESERVED for spec generation (#17)",
 	"FieldMetadata.Tags":       "RESERVED for spec generation (#17)",
 
-	// Landed by #24 as library API ahead of the generation that uses it. Their
-	// readers (responseEdgesV2, edgeJSONKey) exist but are deliberately not
-	// registered yet, because registering a helper no template invokes fails
-	// TestTemplateInvocationsAreRegistered.
-	"DomainEdge.Scopes":  "consumed by #25 (response and summary types); readers exist, registration lands with the template",
-	"DomainEdge.JSONKey": "consumed by #25 (response and summary types); readers exist, registration lands with the template",
+	// DomainEdge.Scopes and DomainEdge.JSONKey are deliberately absent: #25
+	// registered responseEdges and edgeJSONKey, so both are consumed now. They
+	// were listed here while this branch was based on the commit before #25
+	// landed, and this test is what caught it on rebase.
 
 	// NOT COVERED by the #17 verdict, which enumerated the query knobs, the
 	// metadata block, EntityName and the identifier types but not these three.
@@ -188,6 +186,7 @@ func (p *surfaceProbe) observe(t *testing.T) string {
 var (
 	typeGenType    = reflect.TypeOf((*gen.Type)(nil))
 	typeGenField   = reflect.TypeOf((*gen.Field)(nil))
+	typeGenEdge    = reflect.TypeOf((*gen.Edge)(nil))
 	typeFieldScope = reflect.TypeOf(FieldScope(""))
 )
 
@@ -213,6 +212,8 @@ func (p *surfaceProbe) argSets(t *testing.T, name string, ft reflect.Type) [][]r
 			candidates = []reflect.Value{reflect.ValueOf(p.node)}
 		case pt == typeGenField:
 			candidates = []reflect.Value{reflect.ValueOf(p.field), reflect.ValueOf(p.node.ID)}
+		case pt == typeGenEdge:
+			candidates = []reflect.Value{reflect.ValueOf(p.edge)}
 		case pt == typeFieldScope:
 			for _, s := range AllFieldScopes {
 				candidates = append(candidates, reflect.ValueOf(s))
@@ -369,6 +370,28 @@ func scopeConstName(s FieldScope) string {
 	}
 }
 
+// meaningfulValues returns every value of an enumerable annotation type, so a
+// collection knob is probed with everything it can express rather than with one
+// value that might happen to be the wrong one.
+//
+// This is not a refinement, it is the difference between a correct and an
+// incorrect answer. Filling DomainEdge.Scopes with a single arbitrary scope
+// reported it as unreachable, because the only scope any edge selector looks
+// for is ScopeResponse. A knob is reachable if *any* setting of it is
+// observable, so probe all of them.
+func meaningfulValues(t *testing.T, ft reflect.Type) []reflect.Value {
+	t.Helper()
+
+	if ft == typeFieldScope {
+		out := make([]reflect.Value, len(AllFieldScopes))
+		for i, s := range AllFieldScopes {
+			out[i] = reflect.ValueOf(s)
+		}
+		return out
+	}
+	return []reflect.Value{probeValue(t, ft)}
+}
+
 // probeValue produces a value that a real schema author might set, which is
 // stricter than "non-zero": a nonsense value would make a live knob look dead.
 // FieldScope is the case that matters — a generic string would produce
@@ -397,12 +420,17 @@ func probeValue(t *testing.T, ft reflect.Type) reflect.Value {
 		p.Elem().Set(probeValue(t, ft.Elem()))
 		return p
 	case reflect.Slice:
-		s := reflect.MakeSlice(ft, 1, 1)
-		s.Index(0).Set(probeValue(t, ft.Elem()))
+		values := meaningfulValues(t, ft.Elem())
+		s := reflect.MakeSlice(ft, len(values), len(values))
+		for i, v := range values {
+			s.Index(i).Set(v)
+		}
 		return s
 	case reflect.Map:
 		m := reflect.MakeMap(ft)
-		m.SetMapIndex(probeValue(t, ft.Key()), probeValue(t, ft.Elem()))
+		for _, k := range meaningfulValues(t, ft.Key()) {
+			m.SetMapIndex(k, probeValue(t, ft.Elem()))
+		}
 		return m
 	case reflect.Struct:
 		v := reflect.New(ft).Elem()

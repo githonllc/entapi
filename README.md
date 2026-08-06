@@ -540,9 +540,12 @@ table exists to prevent.
 |---|---|
 | `DomainField.Scopes` | Selects which request/response struct the field lands in |
 | `DomainField.Required` | Emits `validate:"required"` and the `Validate()` check for that scope |
+| `DomainEdge.Scopes`, set by `Edge().InResponse()` | Puts the nested object in the response type |
+| `DomainEdge.JSONKey`, set by `.As("key")` | Overrides the edge's JSON key |
 
-That is the entire list. Everything else below is accepted and stored, and
-changes nothing that is generated.
+Seven of the twenty-seven settings, counting the scope constants separately.
+Everything else below is accepted and stored, and changes nothing that is
+generated.
 
 **Accepted but not consumed yet.** Each is kept for a stated reason with a
 tracking issue, and the test above fails if one silently becomes reachable
@@ -553,7 +556,6 @@ without this table being updated:
 | `Searchable`, `Sortable`, `Filterable` | [#27](https://github.com/githonllc/entdomain/issues/27) — filter structs, free-text search and the sort allow-list |
 | `ScopeQuery` | [#27](https://github.com/githonllc/entdomain/issues/27). It must not appear in a tagged release before that lands |
 | `Metadata` and all of `FieldMetadata` (`Title`, `Format`, `Pattern`, `Minimum`, `Maximum`, `MinLength`, `MaxLength`, `Enum`, `ReadOnly`, `WriteOnly`, `Deprecated`, `Tags`), set through `WithTitle`, `WithFormat`, `WithPattern`, `WithRange`, `WithLength`, `WithEnum`, `AsReadOnly`, `AsWriteOnly`, `AsDeprecated`, `WithTags` | OpenAPI/Swagger spec generation, which no issue implements yet. Declared RESERVED in `annotations.go` |
-| `DomainEdge.Scopes`, `DomainEdge.JSONKey`, set through `Edge().InResponse()` and `.As()` | [#25](https://github.com/githonllc/entdomain/issues/25) — generated response and summary types |
 | `Validation`, `Description`, `Example` | Undecided. They have no reader and no successor; raised on [#17](https://github.com/githonllc/entdomain/issues/17) |
 
 **Removed.** `AsUniqueLookup()` / `AsRangeLookup()` and their `UniqueLookup` /
@@ -610,9 +612,8 @@ entdomain.WithEntDomainPackage("custom/path") // override entdomain import path
 
 Verified against the source, not inferred from docs. Each links to the issue tracking it.
 
-**Twenty-five of the thirty exported annotation settings are accepted, stored and
-ignored.** Only `Scopes` and `Required` reach a template. Which is which is no longer
-guesswork: "Annotation surface" above lists every one, and the list is derived by a test
+**Twenty of the twenty-seven exported annotation settings are accepted, stored and
+ignored.** Which is which is no longer guesswork: "Annotation surface" above lists every one, and the list is derived by a test
 rather than maintained by hand, so a setting cannot quietly join or leave it
 ([#17](https://github.com/githonllc/entdomain/issues/17)).
 

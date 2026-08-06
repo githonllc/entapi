@@ -4,7 +4,7 @@ GOMODCACHE ?= /tmp/gomodcache
 export GOPATH
 export GOMODCACHE
 
-.PHONY: test cover lint fmt vet check
+.PHONY: test test-modules cover lint fmt vet check
 
 # Files this module owns and hand-writes. Two subtrees are excluded:
 #
@@ -28,6 +28,34 @@ FMT_FILES = $(shell find . -name '*.go' -not -path './internal/fixture/*' -not -
 test:
 	go test -count=1 -v ./...
 
+# The two nested Go modules. Both are separate modules because they need a SQL
+# driver and this library must not have one, which is exactly why `go test ./...`
+# above does not descend into them — and a gate nobody runs is not a gate.
+#
+#   internal/fixture              the #22 spike: the hand-written target this
+#                                 generator has to reproduce, ~40 subtests
+#                                 against real ent and SQLite. It is the
+#                                 specification, so it breaking is the signal
+#                                 that generated output has drifted from it.
+#   internal/fixtures/wiring/e2e  the behavioural half of the wiring fixture.
+#                                 Compiling generated wiring proves it
+#                                 type-checks; only this proves it returns the
+#                                 right page.
+#
+# Measured cost: `make check` goes from ~16.5s to ~19.8s, and this target alone
+# runs in ~2.7s on a warm module cache. A cold GOMODCACHE pays once for
+# modernc.org/sqlite, exactly as it already pays once for entgo.io/ent. It is in
+# `check` rather than `test` so the inner loop stays fast — which does mean
+# `make test` alone does NOT cover these two.
+#
+# Nothing here edits either module. `go test` in internal/fixture is read-only,
+# and internal/fixtures/wiring/e2e contains no generated code at all.
+test-modules:
+	@for m in internal/fixture internal/fixtures/wiring/e2e; do \
+		echo "==> go test ./... in $$m"; \
+		( cd $$m && go test -count=1 ./... ) || exit 1; \
+	done
+
 cover:
 	go test -count=1 -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out | tail -1
@@ -43,4 +71,4 @@ fmt:
 vet:
 	go vet ./...
 
-check: fmt vet test
+check: fmt vet test test-modules

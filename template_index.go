@@ -12,3 +12,7 @@ var baseHandlerTemplate = mustLoadTemplate("base_handler")
 // filterTemplate is the query-surface template: filter struct, predicates and
 // the sort allow-list.
 var filterTemplate = mustLoadTemplate("filter")
+
+// wiringTemplate is the wiring template: one free function per operation,
+// connecting this entity's generated artifacts to the generic runtime.
+var wiringTemplate = mustLoadTemplate("wiring")

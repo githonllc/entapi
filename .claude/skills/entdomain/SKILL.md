@@ -79,11 +79,13 @@ generated the `FindByX` methods they promised.
 
 ## Generated Files Per Entity
 
-For entity `Courier`, three files are generated in `ent/`:
+For entity `Courier`, up to five files are generated in `ent/`:
 
 | File | Contains |
 |------|----------|
 | `ent/courier_dto.go` | `CourierCreateRequest`, `CourierPatchRequest`, their `Validate()`/`Apply` pair, `CourierResponse`, `CourierListResponse` |
+| `ent/courier_filter.go` | `CourierFilter` with `Predicates()`, `CourierSortKeys`, `CourierOrder` |
+| `ent/courier_wiring.go` | `GetCourier`, `ListCouriers`, `CreateCourier`, `UpdateCourier`, `DeleteCourier` — free functions, one call into the runtime each |
 | `ent/courier_base_service.go` | `BaseCourierService` with CRUD + Before/After hooks, `CourierEntToResponse` |
 | `ent/courier_base_handler.go` | `BaseCourierHandler` with `ToResponse`, `ToResponseList`, `PartialUpdate` |
 

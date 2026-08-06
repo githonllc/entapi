@@ -35,6 +35,7 @@ func templateFuncs() template.FuncMap {
 		// Import declaration
 		"dtoImports":    dtoImports,
 		"filterImports": filterImports,
+		"wiringImports": wiringImports,
 
 		// String manipulation
 		"camelCase": camelCase,

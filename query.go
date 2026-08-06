@@ -121,6 +121,39 @@ func ListPage[Q Query[Q, P, O, E], P, O, E, R any](
 	return &Page[R]{Data: data, Total: total, Page: page, Size: limit}, nil
 }
 
+// Saver is the subset of an ent mutation builder a create or an update needs.
+//
+// Both *<T>Create and *<T>UpdateOne carry it, which is what lets one routine
+// serve both operations. It is an interface rather than a plain function value
+// because the generated wiring passes the builder itself — v.Apply(...) returns
+// the builder, so the call stays a single expression.
+type Saver[E any] interface {
+	Save(context.Context) (*E, error)
+}
+
+// SaveOne runs a mutation builder and converts the entity it returns.
+//
+// E and R are inferred from to, and the builder is then checked against
+// Saver[E]; nothing here names an ent type.
+//
+// The converter is a parameter rather than a fixed New<T>Response call because
+// an entity whose response declares edges cannot be converted from the value
+// Save returns — a builder loads no edges. The generated wiring passes a
+// converter that re-reads through the eager-load plan in that case, and the
+// plain constructor otherwise. Which of the two is a fact about the schema, so
+// it is decided at generation time rather than by a branch at runtime.
+func SaveOne[B Saver[E], E, R any](
+	ctx context.Context,
+	b B,
+	to func(*E) (*R, error),
+) (*R, error) {
+	e, err := b.Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return to(e)
+}
+
 // GetOne fetches a single entity by id and converts it.
 //
 // ID is a type parameter, so the identifier type comes from the schema rather

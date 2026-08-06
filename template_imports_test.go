@@ -88,6 +88,7 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 	}{
 		{"dto", dtoTemplate},
 		{"filter", filterTemplate},
+		{"wiring", wiringTemplate},
 		{"base_service", baseServiceTemplate},
 		{"base_handler", baseHandlerTemplate},
 	}

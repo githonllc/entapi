@@ -8,9 +8,9 @@
 //     annotated with EntDomain markers.
 //
 //   - At runtime, it provides the types and helpers that the generated
-//     code depends on: the generic CRUD operations [ListPage] and [GetOne],
-//     [Page], [ListRequest], [PageInfo], error sentinel values, and pointer
-//     utilities.
+//     code depends on: the generic CRUD operations [ListPage], [GetOne] and
+//     [SaveOne], [Page], [ListRequest], [PageInfo], error sentinel values, and
+//     pointer utilities.
 //
 // The runtime half imports no ent package. Its entity-specific parts arrive as
 // type parameters and function values supplied by generated wiring, so a
@@ -102,6 +102,13 @@
 //
 //	page, err := entdomain.ListPage(ctx, db.User.Query(),
 //	    filter.Predicates(), orderOpts, req, NewUserResponse)
+//
+// [SaveOne] is the mutation half: it runs an ent create or update builder — both
+// satisfy [Saver] — and converts the entity it returns. Generated wiring calls
+// it with the builder the validated request already wrote itself onto, so a
+// create or an update stays a single expression:
+//
+//	resp, err := entdomain.SaveOne(ctx, v.Apply(db.User.Create()), NewUserResponse)
 //
 // [ListPage] uses offset pagination, which is O(n) deep, costs a COUNT per
 // page, and can skip or repeat rows under concurrent writes.

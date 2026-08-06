@@ -127,7 +127,7 @@ func TestRemoveStaleArtifacts_MissingFilesAreNotAnError(t *testing.T) {
 
 func TestGeneratedFileNames(t *testing.T) {
 	got := generatedFileNames(newTestType("UserProfile"))
-	want := []string{"userprofile_dto.go", "userprofile_filter.go", "userprofile_base_service.go", "userprofile_base_handler.go"}
+	want := []string{"userprofile_dto.go", "userprofile_filter.go", "userprofile_wiring.go", "userprofile_base_service.go", "userprofile_base_handler.go"}
 
 	if len(got) != len(want) {
 		t.Fatalf("generatedFileNames() = %v, want %v", got, want)

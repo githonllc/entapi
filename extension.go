@@ -102,6 +102,13 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			}
 			written[path] = true
 
+			// Generate the wiring → ent/{entity}_wiring.go
+			path, err = e.generateWiringFile(g, node)
+			if err != nil {
+				return fmt.Errorf("failed to generate %s wiring: %w", node.Name, err)
+			}
+			written[path] = true
+
 			// Generate base service file → ent/{entity}_base_service.go
 			if e.Config.GenerateBaseService {
 				path, err := e.generateBaseServiceFile(g, node)
@@ -178,6 +185,38 @@ func (e *Extension) generateFilterFile(g *gen.Graph, node *gen.Type) (string, er
 	}
 
 	filename := fmt.Sprintf("%s_filter.go", strings.ToLower(node.Name))
+	outputPath := filepath.Join(g.Config.Target, filename)
+
+	if err := writeFile(outputPath, buf.Bytes()); err != nil {
+		return "", err
+	}
+	return outputPath, nil
+}
+
+// generateWiringFile generates the wiring for a single Type: one free function
+// per operation, each handing this entity's generated artifacts to a routine in
+// the runtime.
+// Output: ent/{entity}_wiring.go
+//
+// It is emitted unconditionally, like the filter file and for the same reason:
+// every entity the generator handles has a response type, an eager-load plan, a
+// filter and a sort allow-list, so every one of them can be read, listed and
+// deleted. The create and update functions are the two that depend on the
+// scopes — an entity with no create-scoped field gets no Create.
+func (e *Extension) generateWiringFile(g *gen.Graph, node *gen.Type) (string, error) {
+	tmpl, err := template.New("wiring").
+		Funcs(e.templateFuncMap()).
+		Parse(wiringTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse wiring template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, node); err != nil {
+		return "", fmt.Errorf("failed to render wiring template: %w", err)
+	}
+
+	filename := fmt.Sprintf("%s_wiring.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
 
 	if err := writeFile(outputPath, buf.Bytes()); err != nil {

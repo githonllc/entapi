@@ -13,7 +13,7 @@ import (
 
 // guardedTree is the only subtree this package's tests write into.
 // TestCodegenFixtures and TestCodegenFixtureStaleArtifacts regenerate
-// internal/fixtures/<dir>/ent in place; nothing else in this package writes to
+// internal/fixtures/<dir>/<dir>ent in place; nothing else in this package writes to
 // the repository at all. So this is exactly the surface the drift guard is
 // accountable for.
 //
@@ -161,12 +161,14 @@ func (b driftBaseline) verdict() (string, bool) {
 		sb.WriteString(indentLines(truncateLines(diff, driftDiffMaxLines)))
 	}
 
-	sb.WriteString("\nIf the diff is an import line being rewritten to another fixture's ent package,\n")
-	sb.WriteString("that is issue #49: this module contains many packages named `ent`, and which one\n")
-	sb.WriteString("goimports picks for a bare `ent.` reference depends on its cache state.\n")
+	sb.WriteString("\nIf the diff is an import line being rewritten to another fixture's generated\n")
+	sb.WriteString("package, that is #49 returning: goimports resolves a bare reference by PACKAGE\n")
+	sb.WriteString("NAME, so two fixtures sharing one made the choice cache-dependent. Each\n")
+	sb.WriteString("fixture's package is named after its directory (<dir>ent) to keep them\n")
+	sb.WriteString("distinct, and TestNoAmbiguousEntPackages is the standing guard.\n")
 	sb.WriteString("Otherwise a template or a schema changed and the regenerated output simply needs\n")
 	sb.WriteString("to be committed. Either way: regenerate, inspect, commit. Do not hand-edit\n")
-	sb.WriteString("anything under " + guardedTree + "/*/ent — those files carry DO NOT EDIT headers.\n")
+	sb.WriteString("anything under " + guardedTree + "/*/*ent — those files carry DO NOT EDIT headers.\n")
 
 	return sb.String(), true
 }

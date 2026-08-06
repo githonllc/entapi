@@ -5,7 +5,7 @@
 // Generating this one over the target directory the annotated schema was
 // generated into is the "annotations removed between runs" case: Sprocket no
 // longer qualifies, and the files the previous run wrote for it must be
-// removed. The committed contents of internal/fixtures/stale/ent are the result
+// removed. The committed contents of internal/fixtures/stale/staleent are the result
 // of this second run, which is why running the test leaves git clean.
 package schema
 

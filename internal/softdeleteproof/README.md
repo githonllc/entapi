@@ -9,7 +9,7 @@ There are now three directories one character apart. This is the third.
 | Question | what should the generator emit? | does the output compile? | **does the output do what it claims?** |
 
 It owns no schema and no generated code. It imports
-`internal/fixtures/softdelete/ent` — generated and committed by
+`internal/fixtures/softdelete/softdeleteent` — generated and committed by
 `TestCodegenFixtures` — and adds the one thing the parent module deliberately
 does not have: a SQL driver.
 

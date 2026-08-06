@@ -6,7 +6,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/ent"
+	// Aliased back to `ent`. The fixture package is named wiringent so that
+	// no two packages in the generator's own module answer to the name
+	// `ent` (#49);
+	// a real consumer's generated package IS named `ent`, and these tests are
+	// written from the consumer's side, so the alias keeps them reading the way
+	// the code they stand in for does. Being spelled out, it is also nothing
+	// goimports has to resolve.
+	ent "github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent"
 	entdomain "github.com/githonllc/entdomain/runtime"
 )
 

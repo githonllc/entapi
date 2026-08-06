@@ -12,10 +12,17 @@ import (
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent/doc"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent/ledger"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent/note"
+	// Aliased back to `ent`. The fixture package is named softdeleteent so that
+	// no two packages in the generator's own module answer to the name
+	// `ent` (#49);
+	// a real consumer's generated package IS named `ent`, and these tests are
+	// written from the consumer's side, so the alias keeps them reading the way
+	// the code they stand in for does. Being spelled out, it is also nothing
+	// goimports has to resolve.
+	ent "github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent"
+	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/ledger"
+	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/note"
 	entdomain "github.com/githonllc/entdomain/runtime"
 )
 

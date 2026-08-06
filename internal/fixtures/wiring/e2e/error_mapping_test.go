@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixtures/wiring/ent"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // This file is the behavioural proof for #13: error classification in the

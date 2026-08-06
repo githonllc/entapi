@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	entdomain "github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixtures/presence/ent/account"
+	entdomain "github.com/githonllc/entdomain/runtime"
 	"github.com/google/uuid"
 )
 

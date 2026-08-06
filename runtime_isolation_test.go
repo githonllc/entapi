@@ -15,14 +15,18 @@ import (
 // generatorPackage is the package ent loads at generation time: the extension,
 // the annotations, the template functions and the embedded templates.
 //
-// #15 is the assertion that these two are different packages. While they are
-// the same string, every criterion below that names runtimePackage is a
-// statement about the generator too — which is exactly the defect: #4 fixed the
-// Windows path bug inside mustLoadTemplate, but could not stop mustLoadTemplate
-// from running in a binary that only wanted a sentinel error, because the
-// sentinel and the loader share a package.
+// #15 is the assertion that these two are different packages. They were the
+// same string until it landed, and while they were, every criterion below that
+// names runtimePackage was a statement about the generator too — which was
+// exactly the defect: #4 fixed the Windows path bug inside mustLoadTemplate,
+// but could not stop mustLoadTemplate from running in a binary that only wanted
+// a sentinel error, because the sentinel and the loader shared a package.
+//
+// runtimePackage must stay equal to defaultEntDomainPackage: that constant is
+// what generated code imports, so a test pointed anywhere else would prove
+// isolation for a package nobody links.
 const (
-	runtimePackage   = "github.com/githonllc/entdomain"
+	runtimePackage   = defaultEntDomainPackage
 	generatorPackage = "github.com/githonllc/entdomain"
 )
 

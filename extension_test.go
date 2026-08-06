@@ -86,11 +86,18 @@ func TestNewExtensionWithOptions_NoOptions(t *testing.T) {
 }
 
 func TestWithEntDomainPackage(t *testing.T) {
-	t.Run("default value", func(t *testing.T) {
+	// The default is the RUNTIME package, not this one (#15). Spelled as a
+	// literal rather than as defaultEntDomainPackage, because comparing a
+	// constant to itself would agree with any future edit — including one that
+	// pointed generated code back at the generator, which is the regression
+	// this pins.
+	t.Run("default value is the runtime package", func(t *testing.T) {
 		ext := NewExtension(nil)
-		want := "github.com/githonllc/entdomain"
+		want := "github.com/githonllc/entdomain/runtime"
 		if ext.Config.EntDomainPackage != want {
-			t.Errorf("default EntDomainPackage = %q, want %q", ext.Config.EntDomainPackage, want)
+			t.Errorf("default EntDomainPackage = %q, want %q — generated code that imports the "+
+				"generator links the templates and the loader's init",
+				ext.Config.EntDomainPackage, want)
 		}
 	})
 
@@ -108,8 +115,9 @@ func TestWithEntDomainPackage(t *testing.T) {
 func TestNewExtension_Defaults(t *testing.T) {
 	ext := NewExtension(nil)
 
-	if ext.Config.EntDomainPackage != "github.com/githonllc/entdomain" {
-		t.Errorf("EntDomainPackage = %q, want %q", ext.Config.EntDomainPackage, "github.com/githonllc/entdomain")
+	if ext.Config.EntDomainPackage != "github.com/githonllc/entdomain/runtime" {
+		t.Errorf("EntDomainPackage = %q, want %q",
+			ext.Config.EntDomainPackage, "github.com/githonllc/entdomain/runtime")
 	}
 }
 

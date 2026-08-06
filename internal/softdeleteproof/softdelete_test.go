@@ -12,11 +12,11 @@ import (
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
-	"github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent"
 	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent/doc"
 	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent/ledger"
 	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent/note"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // newClient returns a client with the generated soft-delete registration

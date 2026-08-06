@@ -2,21 +2,34 @@
 // request/response DTOs, a query surface and operation wiring from annotated
 // Ent schemas.
 //
-// It serves two roles:
+// This package is the code-generation half only. It is loaded by ent at
+// `go generate` time and produces request/response DTOs, filter structs with a
+// sort allow-list, and one free function per operation, for each Ent schema
+// annotated with EntDomain markers. It also carries the annotation types and
+// [SoftDeleteMixin], which consumer SCHEMAS embed — also generation-time code.
 //
-//   - At code-generation time (go generate), it produces request/response DTOs,
-//     filter structs with a sort allow-list, and one free function per
-//     operation, for each Ent schema annotated with EntDomain markers.
+// The runtime half — the generic CRUD operations, ListRequest, the error
+// sentinels, the error mapper and the pointer helpers — lives in
+// [github.com/githonllc/entdomain/runtime], which imports no ent package and
+// embeds no templates.
 //
-//   - At runtime, it provides the types and helpers that the generated
-//     code depends on: the generic CRUD operations [ListPage], [GetOne] and
-//     [SaveOne], [Page], [ListRequest], error sentinel values, and pointer
-//     utilities.
+// # Migration: the runtime moved (#15)
 //
-// The runtime half imports no ent package. Its entity-specific parts arrive as
-// type parameters and function values supplied by generated wiring, so a
-// consumer's binary does not link the generator's dependency graph and the
-// identifier type is not hardcoded.
+// The two halves used to share this package, so importing it for
+// entdomain.ErrValidation also embedded five templates into the consumer's
+// binary and ran the template loader during package initialisation. The runtime
+// symbols are GONE from this package; there are no deprecation aliases.
+//
+//	was: import "github.com/githonllc/entdomain"
+//	now: import "github.com/githonllc/entdomain/runtime"
+//
+// The runtime package is still named entdomain, so every `entdomain.X` call
+// site is unchanged — only the import path moves. Schema files, which use the
+// annotation builders and [SoftDeleteMixin], keep importing this package and
+// need no edit. A file that needs both imports both, aliasing one.
+//
+// Regenerating picks the new path up automatically:
+// [WithEntDomainPackage]'s default is now the runtime path.
 //
 // # Quick Start
 //
@@ -44,7 +57,7 @@
 //
 //	func main() {
 //	    ext := entdomain.NewExtensionWithOptions(
-//	        entdomain.WithEntDomainPackage("github.com/githonllc/entdomain"),
+//	        entdomain.WithEntDomainPackage("github.com/githonllc/entdomain/runtime"),
 //	    )
 //	    if err := entc.Generate("./schema", &gen.Config{}, entc.Extensions(ext)); err != nil {
 //	        log.Fatal(err)
@@ -89,69 +102,7 @@
 // consume it. That list is derived by a test, not maintained by hand, so it
 // cannot drift from the code in either direction.
 //
-// # Runtime
-//
-// [ListPage] runs a filtered, ordered, paginated query against anything
-// satisfying [Query] — in practice an ent query builder — and converts the
-// results. [GetOne] fetches one entity by id. Both infer all their type
-// arguments at the call site, including the identifier type:
-//
-//	user, err := entdomain.GetOne(ctx, db.User.Get, NewUserResponse, id)     // ID is uuid.UUID
-//	tag,  err := entdomain.GetOne(ctx, db.Tag.Get, NewTagResponse, tagID)    // ID is int
-//
-//	page, err := entdomain.ListPage(ctx, db.User.Query(),
-//	    filter.Predicates(), orderOpts, req, NewUserResponse)
-//
-// [SaveOne] is the mutation half: it runs an ent create or update builder — both
-// satisfy [Saver] — and converts the entity it returns. Generated wiring calls
-// it with the builder the validated request already wrote itself onto, so a
-// create or an update stays a single expression:
-//
-//	resp, err := entdomain.SaveOne(ctx, v.Apply(db.User.Create()), NewUserResponse)
-//
-// [ListPage] uses offset pagination, which is O(n) deep, costs a COUNT per
-// page, and can skip or repeat rows under concurrent writes. It is also the
-// only pagination this package has: Cursor, PageInfo, EncodeCursor,
-// DecodeCursor and ListRequest.Cursor have been removed, and generated
-// {Entity}ListResponse no longer carries a PageInfo field — see the README for
-// the migration note.
-//
-// [MaxPageSize] is the single place the page-size ceiling is decided, with a
-// single reaction to crossing it: [ListRequest.Limit] clamps. [ListRequest.Validate]
-// says nothing about Size or Page, because Limit and [ListRequest.Offset] sit on
-// the only path into ListPage and apply whether or not anyone validates. The
-// validate struct tag on ListRequest.Size carries no numeric ceiling of its own,
-// because a struct tag cannot reference a constant and so can only drift away
-// from one.
-//
-// A ListRequest zero value is usable as-is; there is deliberately no defaulting
-// method, so there is none to forget. ListRequest.SetDefaults has been removed —
-// see the README for the migration note.
-//
-// [ListRequest.Validate] is left with Order, compared case-insensitively to
-// match [ListRequest.SortKey], which is what actually decides the direction.
-//
-// # Error mapping
-//
-// [ErrorMapper] translates a persistence layer's errors into [ErrNotFound] and
-// [ErrAlreadyExists]. It takes predicates as function values so the runtime
-// stays ent-free.
-//
-// Consumers do not construct one. Generation writes ent/entdomain_errors.go,
-// one declaration for the package, and every generated operation returns
-// through it:
-//
-//	var ErrorMap = entdomain.NewErrorMapper(IsNotFound, IsConstraintError)
-//
-// One variable rather than a per-call parameter is what makes IsNotFound answer
-// the same way whichever operation failed.
-//
-// Uniqueness requires [ErrorMapper.WithUniqueViolation], installed on that
-// variable: ent.IsConstraintError is true for a duplicate key and a foreign-key
-// violation alike, so mapping it straight to ErrAlreadyExists would report the
-// latter as the former. Until it is installed, nothing claims ErrAlreadyExists
-// — not-found keeps working and already-exists is simply given up. What the
-// mapper cannot classify it returns unchanged rather than guessing.
-//
-// See the README for the full annotation reference and generated code examples.
+// See the README for the full annotation reference and generated code examples,
+// and [github.com/githonllc/entdomain/runtime] for what the generated code
+// calls at run time.
 package entdomain

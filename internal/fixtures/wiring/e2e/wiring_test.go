@@ -14,9 +14,9 @@ import (
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
-	"github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixtures/wiring/ent"
 	"github.com/githonllc/entdomain/internal/fixtures/wiring/ent/article"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // newClient opens a per-test in-memory database. A shared DSN would only work

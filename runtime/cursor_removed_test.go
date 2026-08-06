@@ -35,34 +35,47 @@ var removedCursorSymbols = []string{
 //
 // It scans declarations rather than text so a mention in a comment — the README
 // pointer, this file's own list — does not trip it.
+//
+// It scans BOTH halves of the split #15 made: "." is this runtime package,
+// where a revived Cursor would most naturally land, and ".." is the generator
+// package, which is still named entdomain and still published. Checking only
+// the directory the test happens to sit in would have turned a guard on the
+// public API into a guard on one directory of it.
 func TestCursorSymbolsStayOutOfThePackage(t *testing.T) {
 	forbidden := make(map[string]bool, len(removedCursorSymbols))
 	for _, name := range removedCursorSymbols {
 		forbidden[name] = true
 	}
 
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
-	if err != nil {
-		t.Fatalf("parsing the package: %v", err)
-	}
-	pkg, ok := pkgs["entdomain"]
-	if !ok {
-		t.Fatal("package entdomain not found in the working directory; this test would pass vacuously")
-	}
+	scanned := 0
+	for _, dir := range []string{".", ".."} {
+		fset := token.NewFileSet()
+		pkgs, err := parser.ParseDir(fset, dir, func(fi fs.FileInfo) bool {
+			return !strings.HasSuffix(fi.Name(), "_test.go")
+		}, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", dir, err)
+		}
+		pkg, ok := pkgs["entdomain"]
+		if !ok {
+			t.Fatalf("package entdomain not found in %s; this test would pass vacuously", dir)
+		}
 
-	for path, file := range pkg.Files {
-		for _, decl := range file.Decls {
-			for _, name := range declaredNames(decl) {
-				if forbidden[name] {
-					t.Errorf("%s declares %q; the cursor codec left the public API on #6 "+
-						"and a keyset design that is ever needed is to be written fresh, not revived",
-						path, name)
+		for path, file := range pkg.Files {
+			scanned++
+			for _, decl := range file.Decls {
+				for _, name := range declaredNames(decl) {
+					if forbidden[name] {
+						t.Errorf("%s declares %q; the cursor codec left the public API on #6 "+
+							"and a keyset design that is ever needed is to be written fresh, not revived",
+							path, name)
+					}
 				}
 			}
 		}
+	}
+	if scanned == 0 {
+		t.Fatal("no files scanned; this test would pass vacuously")
 	}
 }
 
@@ -103,34 +116,6 @@ func TestListRequestCarriesNoCursorField(t *testing.T) {
 	for i := 0; i < rt.NumField(); i++ {
 		if tag := rt.Field(i).Tag.Get("json"); strings.HasPrefix(tag, "cursor") {
 			t.Errorf("ListRequest.%s still binds the %q query parameter", rt.Field(i).Name, tag)
-		}
-	}
-}
-
-// TestNoTemplateEmitsCursorMetadata is the generation half.
-//
-// dto.tmpl emitting `PageInfo *entdomain.PageInfo` into {Entity}ListResponse was
-// the single blocker that kept the codec alive: the type had no consumer — the
-// generated wiring returns entdomain.Page[…] — but deleting it would have broken
-// a live template. This asserts the template side directly, so the two can never
-// drift back apart.
-func TestNoTemplateEmitsCursorMetadata(t *testing.T) {
-	entries, err := fs.ReadDir(templateFS, "templates")
-	if err != nil {
-		t.Fatalf("reading the embedded templates: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("no embedded templates; this test would pass vacuously")
-	}
-	for _, entry := range entries {
-		body, err := fs.ReadFile(templateFS, "templates/"+entry.Name())
-		if err != nil {
-			t.Fatalf("reading templates/%s: %v", entry.Name(), err)
-		}
-		for _, symbol := range removedCursorSymbols {
-			if strings.Contains(string(body), "entdomain."+symbol) {
-				t.Errorf("templates/%s emits entdomain.%s, which no longer exists", entry.Name(), symbol)
-			}
 		}
 	}
 }

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixture/ent"
 	"github.com/githonllc/entdomain/internal/fixture/ent/dto"
 	"github.com/githonllc/entdomain/internal/fixture/ent/user"
+	entdomain "github.com/githonllc/entdomain/runtime"
 
 	stdsql "database/sql"
 	"entgo.io/ent/dialect"

@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	entdomain "github.com/githonllc/entdomain"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // ============================================================================================

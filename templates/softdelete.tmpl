@@ -13,7 +13,7 @@ import (
 {{- range softDeleteImports $ }}
 	{{ . }}
 {{- end }}
-	"{{ entdomainPkg }}"
+	entdomain "{{ entdomainPkg }}"
 )
 
 // RegisterSoftDelete installs soft delete on c. It is the one line a consumer

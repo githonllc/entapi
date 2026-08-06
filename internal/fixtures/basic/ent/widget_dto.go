@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	entdomain "github.com/githonllc/entdomain"
+	entdomain "github.com/githonllc/entdomain/runtime"
 	"github.com/google/uuid"
 )
 

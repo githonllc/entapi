@@ -37,7 +37,7 @@ package "entdomain (this repo)" {
   [Extension\nextension.go] as EXT
   [templateFuncs()\nfuncs*.go] as FUNCS
   [templates/*.tmpl\n//go:embed] as TMPL
-  [runtime types\ntypes.go · errors.go · query.go] as RT
+  [runtime types\nruntime/ (separate package)] as RT
   [annotations\nannotations.go] as ANN
 }
 
@@ -62,7 +62,9 @@ WIR ..> FLT
 @enduml
 ```
 
-The package has **two runtime identities that share one import path**. At codegen time it is a plugin loaded by `entc`; at application runtime it is the small library the emitted code links against (`entdomain.ErrNotFound`, `entdomain.Page`, `entdomain.PtrOrNil`). `doc.go` states this explicitly, and the code confirms it: nothing in `extension.go` is reachable from a running server, and nothing in `errors.go`/`types.go` is reachable from codegen.
+The module has **two identities, and since #15 they are two packages**. `github.com/githonllc/entdomain` is the plugin `entc` loads at codegen time; `github.com/githonllc/entdomain/runtime` is the small library the emitted code links against (`entdomain.ErrNotFound`, `entdomain.Page`, `entdomain.PtrOrNil`) — same package NAME, so every call site is unchanged, different import path.
+
+They shared one package until #15, and the cost was not stylistic: `template_index.go` declares package-level vars calling `mustLoadTemplate`, so a binary that imported the package for a sentinel error embedded five templates and ran the loader at init. `go list -deps` now reports 0 `entgo.io` packages for the runtime (62 total, all stdlib) against 15 for the generator, and `TestRuntimePackageIsGeneratorFree` holds it there — with a control that fails if the probe itself breaks, so it cannot decay into a vacuous absence check.
 
 Two invariants carry the design:
 
@@ -80,8 +82,8 @@ Modules are file-level, not directory-level — the whole thing is `package entd
 | Extension | `extension.go` | hook registration, per-type render + write | `NewExtensionWithOptions`, `With*` options, `Extension` | templates, funcs, `x/tools/imports` |
 | Template store | `template_loader.go`, `template_index.go`, `templates/*.tmpl` | embed + load templates at init | (unexported vars) | `embed` |
 | Template funcs | `funcs.go` + `funcs_fields.go`, `funcs_scope.go`, `funcs_typechecks.go`, `funcs_codegen.go`, `funcs_strings.go` | the FuncMap templates call | `templateFuncs()` (unexported) | annotations, `gen` |
-| Annotations | `annotations.go` | `DomainField`, `FieldScope`, fluent builders | ~30 exported builders | — |
-| Runtime | `types.go`, `errors.go`, `errors_map.go`, `query.go`, `filter.go` | types the emitted code links against | `ListRequest`, `Page`, `ListPage`, `GetOne`, `SaveOne`, `Err*`, `Ptr*` | stdlib only |
+| Annotations | `annotations.go`, `annotations_edge.go`, `softdelete.go` | `DomainField`, `FieldScope`, fluent builders, `SoftDeleteMixin` | ~30 exported builders | `entgo.io/ent/schema` (mixin only) |
+| Runtime (**separate package**, `runtime/`) | `runtime/types.go`, `runtime/errors.go`, `runtime/errors_map.go`, `runtime/query.go`, `runtime/filter.go`, `runtime/softdelete_context.go` | types the emitted code links against | `ListRequest`, `Page`, `ListPage`, `GetOne`, `SaveOne`, `Err*`, `Ptr*`, `With{Soft,Hard}Delete*` | stdlib only |
 
 ```plantuml
 @startuml
@@ -100,10 +102,10 @@ package "codegen side" {
 package "shared" {
   [annotations.go] as ANN
 }
-package "runtime side" {
-  [types.go] as T
-  [errors.go] as E
-  [query.go] as C
+package "runtime side — package entdomain at entdomain/runtime" {
+  [runtime/types.go] as T
+  [runtime/errors.go] as E
+  [runtime/query.go] as C
 }
 EXT --> IDX
 EXT --> F
@@ -323,7 +325,7 @@ which was write-only and disabled downstream delete hooks; and
 |---|---|
 | Functional options over config structs | `extension.go` — `Option func(*ExtensionConfig)`, `NewExtensionWithOptions(opts ...Option)` |
 | Fluent immutable builders | `annotations.go` — every `With*`/`As*` has a value receiver returning `DomainField` |
-| Sentinel errors + `Is*` predicates, never string matching | `errors.go` — `ErrNotFound` + `IsNotFound(err) { return errors.Is(...) }` |
+| Sentinel errors + `Is*` predicates, never string matching | `runtime/errors.go` — `ErrNotFound` + `IsNotFound(err) { return errors.Is(...) }` |
 | Errors wrapped with `%w` at the generated boundary | `dto.tmpl` — `fmt.Errorf("%w: %s is required", entdomain.ErrValidation, …)` in the generated `Validate()`. `wiring.tmpl` — every exported operation returns through `ErrorMap.MapError`, declared once per package by `errors.tmpl` (#13) |
 | Codegen helpers split by concern, registered in one map | `funcs.go` — the registry is the only thing templates can see |
 | Test fixtures built by hand, never from a live schema | `test_helpers_test.go` — `newStringField`, `newTestType`, `assertContains` |
@@ -370,9 +372,9 @@ The route it took is the route any new field capability takes:
 6. `funcs_scope.go` — `getDomainFieldAnnotation`, the dual-format gate
 7. `funcs_filter.go` + `templates/filter.tmpl` — how the query markers become filter parameters and a sort allow-list
 8. `templates/wiring.tmpl` — one free function per operation, and the comments explaining why each body is a single call
-9. `query.go` — `GetOne`, `ListPage`, `SaveOne`: the generic half the wiring calls
+9. `runtime/query.go` — `GetOne`, `ListPage`, `SaveOne`: the generic half the wiring calls
 10. `funcs_softdelete.go` + `templates/softdelete.tmpl` — a graph-level generator, and the feature with its own behavioural proof (`internal/softdeleteproof`)
-11. `errors_map.go` + `templates/errors.tmpl` — the other graph-level generator: why the runtime takes predicates as function values, and why uniqueness is a third one the consumer installs
+11. `runtime/errors_map.go` + `templates/errors.tmpl` — the other graph-level generator: why the runtime takes predicates as function values, and why uniqueness is a third one the consumer installs
 11. `funcs_imports.go` — how each template declares its own imports, including the identifier's
 12. `funcs_codegen.go` — `fieldValueExpr`, the whole file since #7
 

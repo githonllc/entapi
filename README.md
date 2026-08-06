@@ -50,6 +50,17 @@ An [Ent](https://entgo.io) extension that generates HTTP request/response DTOs, 
 go get github.com/githonllc/entdomain
 ```
 
+One module, **two import paths**, and which one you need depends on what the file does:
+
+| Import | Used by | Links |
+|---|---|---|
+| `github.com/githonllc/entdomain` | `entc.go` and your schema files — the annotation builders, `Edge()`, `SoftDeleteMixin`, the extension | ent's codegen packages, the source formatter, the embedded templates |
+| `github.com/githonllc/entdomain/runtime` | generated code and your service/handler code — `ListPage`, `GetOne`, `SaveOne`, `ListRequest`, the error sentinels, `ErrorMapper`, `WithSoftDeleted` | the standard library, and nothing else |
+
+The runtime package is still **named** `entdomain`, so every call site reads
+`entdomain.ListPage` whichever path it arrived by. A file needing both imports
+both and aliases one.
+
 ## Setup
 
 Wire the extension in your `entc.go`:
@@ -69,7 +80,9 @@ import (
 
 func main() {
     ext := entdomain.NewExtensionWithOptions(
-        entdomain.WithEntDomainPackage("github.com/githonllc/entdomain"),
+        // The RUNTIME path — this is what generated files import. It is also
+        // the default, so the option only exists for a vendored copy.
+        entdomain.WithEntDomainPackage("github.com/githonllc/entdomain/runtime"),
     )
 
     if err := entc.Generate("./schema", &gen.Config{
@@ -200,10 +213,65 @@ copy, so a partially configured annotation is safe to reuse as a base.
 
 ## Runtime: generic CRUD
 
+```go
+import "github.com/githonllc/entdomain/runtime" // package name: entdomain
+```
+
 The algorithms every entity shares are written once in Go rather than once per
 entity in a template. The entity-specific parts arrive as type parameters and
 function values, so **this half imports no ent package** and the identifier type
 is not hardcoded.
+
+### Migrating to the runtime subpackage
+
+**The runtime types have moved out of `github.com/githonllc/entdomain` into
+`github.com/githonllc/entdomain/runtime`. The root package no longer declares
+them, and there are no deprecation aliases**
+([#15](https://github.com/githonllc/entdomain/issues/15)).
+
+```go
+// before
+import "github.com/githonllc/entdomain"
+
+// after — in generated code, and in any file that calls the runtime
+import entdomain "github.com/githonllc/entdomain/runtime"
+```
+
+The alias is what `goimports` writes, because the package name no longer matches
+the last element of the path. It is not required for compilation — an unaliased
+import still binds `entdomain` — but leaving it off means the next `goimports`
+run produces a diff.
+
+Nothing else changes. The new package is still `package entdomain`, so
+`entdomain.ListPage`, `entdomain.ErrValidation` and `entdomain.WithSoftDeleted`
+read exactly as before; the migration is one import line per file. Schema files
+and `entc.go` keep importing the root path and need no edit at all — the
+annotation builders, `Edge()` and `SoftDeleteMixin` did not move.
+
+Regenerating does the generated half for you: `WithEntDomainPackage`'s default
+is now the runtime path.
+
+**What moved:** `ListRequest`, `Page`, `Query`, `Saver`, `ListPage`, `GetOne`,
+`SaveOne`, `AppendIf`, `AppendIfSlice`, `ErrNotFound`, `ErrAlreadyExists`,
+`ErrValidation`, `IsNotFound`, `IsAlreadyExists`, `IsValidation`, `ErrorMapper`,
+`NewErrorMapper`, `DefaultPageSize`, `MaxPageSize`, `Ptr`, `PtrOrNil`,
+`PtrNilSafe`, `WithSoftDeleted`, `SoftDeletedIncluded`, `WithHardDelete`,
+`HardDeleteRequested`.
+
+**What stayed:** `DomainField` and every builder, `DomainEdge`/`Edge()`, the
+`Scope*` constants, `SoftDeleteMixin`, `DomainSoftDelete`, `SoftDeleteField`,
+`Extension` and the options. All of it is read at generation time, and a schema
+that imported the root path keeps compiling untouched.
+
+**Why no aliases.** A root package that re-exported the runtime would keep the
+coupling this split exists to remove: a consumer who imported it for
+`ErrNotFound` would still link ent's codegen packages, the source formatter and
+five embedded templates, and would still run the template loader during package
+initialisation. The module carries no version tag, so there is no released
+surface to preserve. `go list -deps` on the runtime package now reports **0**
+`entgo.io` packages out of 62 — all standard library — against **15** for the
+generator; `TestRuntimePackageIsGeneratorFree` is the checked-in guard, and it
+carries a control that fails if the probe itself stops working.
 
 ```go
 // Query is the subset of an ent query builder pagination needs. Q is
@@ -1034,7 +1102,9 @@ and then compiled by `TestCodegenFixtures`.
 ## Extension Options
 
 ```go
-entdomain.WithEntDomainPackage("custom/path") // override entdomain import path
+entdomain.WithEntDomainPackage("custom/path") // override the RUNTIME import path
+                                              // written into generated files
+                                              // (default: github.com/githonllc/entdomain/runtime)
 ```
 
 That is the whole set. `WithBaseService` and `WithBaseHandler` were removed with
@@ -1087,9 +1157,15 @@ cursor codec (`Cursor`, `EncodeCursor`, `DecodeCursor`, `PageInfo`) and the
 ([#6](https://github.com/githonllc/entdomain/issues/6)) — see
 [Migrating from the cursor codec and `PageInfo`](#migrating-from-the-cursor-codec-and-pageinfo).
 
-**Package import panics on Windows.** Template lookup joins paths with the OS separator
-while the embedded filesystem always uses forward slashes, so loading fails at package
-initialisation ([#4](https://github.com/githonllc/entdomain/issues/4)).
+**The generator package still loads every template during package initialisation.**
+`template_index.go` declares five package-level vars that call `mustLoadTemplate`, so
+importing `github.com/githonllc/entdomain` runs the loader whether or not anything
+generates. That is now confined to `entc.go` and schema files: the runtime moved to its
+own package, which embeds nothing and reaches neither the loader nor ent
+([#15](https://github.com/githonllc/entdomain/issues/15)) — see
+[Migrating to the runtime subpackage](#migrating-to-the-runtime-subpackage). The lookup
+itself is `path.Join`, not `filepath.Join`, so the Windows panic this bullet used to
+describe is gone ([#4](https://github.com/githonllc/entdomain/issues/4)).
 
 **Only the field shapes with a fixture are known to compile.** `TestCodegenFixtures`
 generates and compiles every schema under `internal/fixtures/`, which now covers the

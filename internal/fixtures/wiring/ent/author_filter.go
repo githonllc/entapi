@@ -6,9 +6,9 @@ package ent
 
 import (
 	"entgo.io/ent/dialect/sql"
-	entdomain "github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixtures/wiring/ent/author"
 	"github.com/githonllc/entdomain/internal/fixtures/wiring/ent/predicate"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // ============================================================================

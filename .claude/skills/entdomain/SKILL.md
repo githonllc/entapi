@@ -256,7 +256,9 @@ entdomain.ErrValidation    // validation failed
 
 ```go
 ext := entdomain.NewExtensionWithOptions(
-    entdomain.WithEntDomainPackage("github.com/githonllc/entdomain"),
+    // The RUNTIME path, and the default (#15). Generated files import this,
+    // not the generator, so nothing embeds templates in a production binary.
+    entdomain.WithEntDomainPackage("github.com/githonllc/entdomain/runtime"),
 )
 // WithBaseService / WithBaseHandler were removed with the templates they
 // selected (#29). Every artifact is generated unconditionally now.
@@ -274,16 +276,34 @@ ext := entdomain.NewExtensionWithOptions(
 
 ## Source Files
 
+Two packages, and which one a file belongs to is decided by when it runs (#15).
+
+**`github.com/githonllc/entdomain` — generation time.** Imported by `entc.go`
+and by schema files.
+
 | File | Purpose |
 |------|---------|
 | `annotations.go` | Annotation types, scope constants, fluent builders |
-| `types.go` | ListRequest, DefaultPageSize/MaxPageSize, Ptr/PtrOrNil/PtrNilSafe helpers |
-| `errors.go` | ErrNotFound, ErrAlreadyExists, ErrValidation sentinels |
+| `annotations_edge.go` | `Edge()` and the edge annotation |
+| `softdelete.go` | `SoftDeleteMixin` and the `DomainSoftDelete` marker |
 | `extension.go` | Extension configuration and generation hooks |
 | `funcs.go` | Template function registry |
 | `funcs_fields.go` | Field filtering (createFields, updateFields, etc.) |
 | `funcs_codegen.go` | Code generation helpers |
-| `query.go` | GetOne, ListPage, SaveOne — the generic runtime the wiring calls |
+
+**`github.com/githonllc/entdomain/runtime` — run time.** Package name is still
+`entdomain`. Imported by generated code and by consumer service/handler code.
+Standard library only: it embeds no template and reaches neither ent nor the
+formatter.
+
+| File | Purpose |
+|------|---------|
+| `runtime/types.go` | ListRequest, DefaultPageSize/MaxPageSize, Ptr/PtrOrNil/PtrNilSafe helpers |
+| `runtime/errors.go` | ErrNotFound, ErrAlreadyExists, ErrValidation sentinels |
+| `runtime/errors_map.go` | `ErrorMapper`, which takes its classification as function values |
+| `runtime/query.go` | GetOne, ListPage, SaveOne — the generic runtime the wiring calls |
+| `runtime/filter.go` | `AppendIf`/`AppendIfSlice`, used by every generated filter |
+| `runtime/softdelete_context.go` | `WithSoftDeleted`/`WithHardDelete` and their predicates |
 | `templates/dto.tmpl` | Template for DTOs (CreateRequest, PatchRequest, Response, Summary, eager-load plan) |
 | `templates/filter.tmpl` | Template for the filter struct, predicates and sort allow-list |
 | `templates/wiring.tmpl` | Template for the per-operation free functions |

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
-	entdomain "github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixtures/wiring/ent/article"
 	"github.com/githonllc/entdomain/internal/fixtures/wiring/ent/predicate"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // ============================================================================

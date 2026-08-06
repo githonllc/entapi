@@ -7,8 +7,8 @@ package ent
 import (
 	"context"
 
-	entdomain "github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixtures/intid/ent/counter"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // ============================================================================

@@ -21,7 +21,7 @@ import (
 	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent/note"
 )
 
-// Client is the client that holds all ent builderz.
+// Client is the client that holds all ent builders.
 type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.

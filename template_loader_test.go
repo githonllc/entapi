@@ -81,6 +81,33 @@ func TestEveryEmbeddedTemplateIsLoaded(t *testing.T) {
 	}
 }
 
+// TestRemovedTemplatesStayRemoved pins #29's deletion in both halves.
+//
+// The templates are gone, but the FILE NAMES they used to produce are not
+// forgotten: a consumer who generated with WithBaseService is holding two files
+// per entity that this extension wrote and will never write again. Keeping the
+// names in generatedFileNames is what makes the next generation run delete
+// them, instead of leaving code that compiles against a service the library no
+// longer describes. Dropping the names would turn the removal into a collision.
+func TestRemovedTemplatesStayRemoved(t *testing.T) {
+	for _, name := range []string{"base_service", "base_handler"} {
+		if _, err := templateFS.ReadFile("templates/" + name + ".tmpl"); err == nil {
+			t.Errorf("templates/%s.tmpl is still embedded; #29 removes the generated base service and handler", name)
+		}
+	}
+
+	names := generatedFileNames(newTestType("Widget"))
+	index := make(map[string]bool, len(names))
+	for _, n := range names {
+		index[n] = true
+	}
+	for _, legacy := range []string{"widget_base_service.go", "widget_base_handler.go"} {
+		if !index[legacy] {
+			t.Errorf("generatedFileNames() no longer lists %q; removeStaleArtifacts is the only thing that deletes it from a consumer's tree, so the name has to outlive the template", legacy)
+		}
+	}
+}
+
 // TestTemplateLoaderDoesNotUsePathFilepath pins the platform contract that the
 // directory walk above cannot observe on a slash-separated host: on darwin and
 // linux filepath.Join produces the same string as path.Join, so only on Windows

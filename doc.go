@@ -82,14 +82,22 @@
 //
 // # What the annotations actually do
 //
-// Eleven of the twenty-seven exported settings reach a template:
+// Eleven of the twenty-six exported settings reach a template:
 // [DomainField.Scopes], [DomainField.Required], [DomainEdge.Scopes],
 // [DomainEdge.JSONKey], [DomainField.Filterable], [DomainField.Searchable],
 // [DomainField.Sortable], and the [ScopeCreate], [ScopeUpdate], [ScopeQuery]
-// and [ScopeResponse] constants. Every other one — the whole [FieldMetadata]
-// block, [DomainField.Validation], [DomainField.Description] and
-// [DomainField.Example] — is accepted and stored but changes nothing that is
-// generated yet.
+// and [ScopeResponse] constants. The other fifteen are the whole
+// [FieldMetadata] block, which is accepted and stored but changes nothing that
+// is generated yet.
+//
+// # Migration
+//
+// DomainField.Validation and WithValidation are gone, with no replacement:
+// Validate() on the generated request types supersedes them. WithDescription
+// and WithExample still exist and still chain, but store onto [FieldMetadata]
+// rather than [DomainField] — read them as d.Metadata.Description and
+// d.Metadata.Example. The entity-level DomainConfig annotation is gone
+// entirely. See the README's migration sections for the before/after of each.
 //
 // The three query markers are opt-in per field: no preset builder grants them,
 // because they now produce real query parameters and a real sort allow-list,

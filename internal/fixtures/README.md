@@ -98,6 +98,7 @@ when the case passes.
 | `queryconflict` | query markers that contradict the schema: `Sortable` on a non-comparable field, `Searchable` on a type with no `Contains`, `Filterable` on a type with no predicates, and a marker on a field withholding `ScopeQuery` | generation refused |
 | `wiring` | a to-many response edge, a to-one response edge with the full query surface, and an entity with no edge at all | generates, compiles, and is exercised against SQLite by `wiring/e2e` |
 | `softdelete` | the soft-delete mixin: one entity embedding it, one hard-delete entity owning it by a to-many edge, and one declaring a `deleted_at` by hand that is NOT `Nillable` | generates and compiles, plus `internal/softdeleteproof` |
+| `reservednames` | an entity literally named `ErrorMap`, plus the ordinary annotated entity that makes `entdomain_errors.go` be emitted at all | generation refused, and see below |
 | `stale` | an entity that loses its annotations between two runs | generates twice, see below |
 
 ## The self-referential pair, in three fixtures
@@ -132,6 +133,27 @@ fails if goimports has to add or remove an import — that is what keeps the
 formatter a safety net rather than the mechanism. Every refused fixture is
 deliberately absent from it: generation stops before any template is rendered,
 so there is nothing to check.
+
+## The `reservednames` fixture, and its second job
+
+`reservednames` is a refusal fixture like `immutable` and `selfref`: `ErrorMap`
+is a perfectly legal ent entity whose only sin is its name, which is also the
+name `templates/errors.tmpl` gives the package-level classifier. Both would land
+in the consumer's one package, so the schema has no correct output and #62
+refuses it.
+
+Its second entity, `Probe`, is not scenery. It is the **probe entity** of
+`TestDerivedEntityNamesMatchTheTemplates`, which renders all five templates over
+this graph, reads the exported top-level declarations back out with `go/parser`,
+and compares them against `derivedEntityDecls` in both directions. That test is
+what keeps the reserved-name list from rotting as templates grow — the list
+arrived one name short (`New<N>ListResponse`) before it existed.
+
+So `Probe` carries a create scope, an update scope, an output-only field, all
+three query markers **and** the soft-delete mixin, because every conditional
+emission in the five templates has to fire or the guard's reverse direction
+passes while checking half the list. Removing an annotation from `Probe` narrows
+that guard silently. Do not.
 
 ## The `wiring/e2e` module
 

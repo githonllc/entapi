@@ -71,6 +71,17 @@ func (e *Extension) Templates() []*gen.Template {
 	return []*gen.Template{} // removed legacy GraphTemplate generation
 }
 
+// perTypeFileName is the file one per-type template's output for node lands in:
+// ent/{entity}_dto.go, _filter.go and _wiring.go.
+//
+// One function rather than three format strings, because the refusal messages in
+// schema_conflicts.go quote these names back to a schema author (#62). A message
+// naming a file the generator does not actually write is worse than no file name
+// at all — it sends the author looking for something that is not there.
+func perTypeFileName(node *gen.Type, kind string) string {
+	return fmt.Sprintf("%s_%s.go", strings.ToLower(node.Name), kind)
+}
+
 // pendingFile is one rendered, formatted file waiting to be written. Holding it
 // in memory is what makes the run atomic: see generatePerTypeFiles.
 type pendingFile struct {
@@ -222,8 +233,7 @@ func (e *Extension) renderDTOFile(g *gen.Graph, node *gen.Type) (pendingFile, er
 		return pendingFile{}, fmt.Errorf("failed to render DTO template: %w", err)
 	}
 
-	filename := fmt.Sprintf("%s_dto.go", strings.ToLower(node.Name))
-	outputPath := filepath.Join(g.Config.Target, filename)
+	outputPath := filepath.Join(g.Config.Target, perTypeFileName(node, "dto"))
 
 	formatted, err := formatFile(outputPath, buf.Bytes())
 	if err != nil {
@@ -253,8 +263,7 @@ func (e *Extension) renderFilterFile(g *gen.Graph, node *gen.Type) (pendingFile,
 		return pendingFile{}, fmt.Errorf("failed to render filter template: %w", err)
 	}
 
-	filename := fmt.Sprintf("%s_filter.go", strings.ToLower(node.Name))
-	outputPath := filepath.Join(g.Config.Target, filename)
+	outputPath := filepath.Join(g.Config.Target, perTypeFileName(node, "filter"))
 
 	formatted, err := formatFile(outputPath, buf.Bytes())
 	if err != nil {
@@ -286,8 +295,7 @@ func (e *Extension) renderWiringFile(g *gen.Graph, node *gen.Type) (pendingFile,
 		return pendingFile{}, fmt.Errorf("failed to render wiring template: %w", err)
 	}
 
-	filename := fmt.Sprintf("%s_wiring.go", strings.ToLower(node.Name))
-	outputPath := filepath.Join(g.Config.Target, filename)
+	outputPath := filepath.Join(g.Config.Target, perTypeFileName(node, "wiring"))
 
 	formatted, err := formatFile(outputPath, buf.Bytes())
 	if err != nil {

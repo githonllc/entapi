@@ -99,6 +99,12 @@ var fixtures = []fixtureCase{
 	{dir: "queryconflict", wantGenErr: []string{"Bad.tags", "Sortable", "Bad.count", "Searchable", "Bad.meta", "Filterable", "Bad.token", `scope "query"`}},
 	{dir: "wiring"},
 	{dir: "softdelete"},
+	// #62: an entity whose NAME is a symbol this extension generates. The three
+	// substrings are the three things the message has to carry — which entity,
+	// which generated file it collides in, and what to do about it — because a
+	// message that only says "conflict" leaves the author with a `redeclared`
+	// error in a file they did not write.
+	{dir: "reservednames", wantGenErr: []string{"ErrorMap", "entdomain_errors.go", "rename"}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the

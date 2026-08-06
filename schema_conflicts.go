@@ -49,6 +49,10 @@ func checkGraphConflicts(g *gen.Graph) error {
 		}
 		conflicts = append(conflicts, nodeConflicts(node)...)
 	}
+	// Outside the loop on purpose: this one is a property of the graph, not of
+	// any one entity, and it has to see the UNannotated nodes too — ent
+	// generates a type for those as well, and a type is all it takes to collide.
+	conflicts = append(conflicts, reservedNameConflicts(g)...)
 	if len(conflicts) == 0 {
 		return nil
 	}
@@ -294,6 +298,236 @@ func fieldHasOp(f *gen.Field, want gen.Op) bool {
 		}
 	}
 	return false
+}
+
+// errorMapSymbol and registerSoftDeleteSymbol are the two EXPORTED names this
+// extension declares once per graph, spelled exactly as templates/errors.tmpl
+// and templates/softdelete.tmpl spell them.
+//
+// The other two names softdelete.tmpl declares — softDeleteTraverser and
+// softDeleteHook — are deliberately absent. An ent schema type is a Go type
+// declared in the schema package, so its name is always exported; an unexported
+// generated name cannot be collided with by any entity, and listing one here
+// would refuse a schema that compiles.
+//
+// They are string literals because the templates spell them as string literals;
+// there is nothing to derive them from. TestDerivedEntityNamesMatchTheTemplates
+// is what keeps the two spellings the same — it renders the templates and reads
+// the declarations back out.
+const (
+	errorMapSymbol           = "ErrorMap"
+	registerSoftDeleteSymbol = "RegisterSoftDelete"
+)
+
+// reservedNameConflicts reports every entity whose NAME is also a name this
+// extension declares in the package it generates into.
+//
+// The failure it prevents (#62): ent generates `type ErrorMap` for an entity
+// called ErrorMap, templates/errors.tmpl generates `var ErrorMap` into
+// entdomain_errors.go, and Go gives types, variables and functions ONE
+// identifier namespace per package — so the consumer's own ent package stops
+// compiling with `ErrorMap redeclared in this block`, in two files they did not
+// write, with nothing naming the extension as the cause.
+//
+// It is a graph-level check for two reasons, and both are why it runs outside
+// checkGraphConflicts' per-node loop:
+//
+//   - whether a graph-level file is emitted at all is a property of the graph
+//     (any annotated entity; any soft-deletable entity), not of the node being
+//     examined;
+//   - the colliding entity does NOT have to be annotated. ent generates a type
+//     for every entity in the schema, annotated or not, so a bare `type
+//     ErrorMap struct{ ent.Schema }` collides just as hard — and the per-node
+//     loop skips exactly those.
+//
+// The derived half is checked against the MAXIMAL set of names an annotated
+// entity can produce, never against the set this particular entity's scopes
+// happen to trigger. An entity with no create-scoped field emits no
+// <Name>CreateRequest today, but adding one scope later would, and a refusal
+// that appears only after an unrelated annotation change is worse than one that
+// is stable. Refusing a name that would not have collided is the accepted cost.
+func reservedNameConflicts(g *gen.Graph) []string {
+	var annotated []*gen.Type
+	for _, node := range g.Nodes {
+		if len(domainFields(node)) > 0 {
+			annotated = append(annotated, node)
+		}
+	}
+
+	var out []string
+
+	// The two graph-level names, each gated on the condition its file is
+	// actually written under (see generatePerTypeFiles): the error classifier is
+	// emitted when anything is annotated, the soft-delete wiring when anything
+	// embeds the mixin.
+	if len(annotated) > 0 {
+		out = append(out, graphSymbolConflicts(g, errorMapSymbol, "var", errorMapFileName,
+			annotated, "carries entdomain annotations, so the error classifier is generated for this schema")...)
+	}
+	if sd := softDeleteTypes(g); len(sd) > 0 {
+		out = append(out, graphSymbolConflicts(g, registerSoftDeleteSymbol, "func", softDeleteFileName,
+			sd, "embeds entdomain.SoftDeleteMixin, so the soft-delete wiring is generated for this schema")...)
+	}
+
+	// The derived half: every pair of (annotated entity, any entity) where the
+	// second one's name is a name the first one's generated files declare.
+	for _, a := range annotated {
+		for _, d := range derivedEntityDecls(a) {
+			for _, b := range g.Nodes {
+				if b.Name == d.name {
+					out = append(out, derivedNameConflict(a, b, d))
+				}
+			}
+		}
+	}
+
+	return out
+}
+
+// graphSymbolConflicts describes an entity named after one of the two symbols
+// this extension declares once per graph.
+//
+// causes are the entities that make the file be generated at all, and one of
+// them is named in the message, because that is the fact the author cannot see:
+// entdomain_errors.go carries no entity name, and an author staring at a
+// redeclared ErrorMap has no way to tell which annotation summoned it. An entity
+// other than the colliding one is preferred as the witness — "ErrorMap is
+// annotated, therefore ErrorMap is generated" is true but says nothing.
+func graphSymbolConflicts(g *gen.Graph, name, kind, file string, causes []*gen.Type, because string) []string {
+	witness := causes[0]
+	for _, c := range causes {
+		if c.Name != name {
+			witness = c
+			break
+		}
+	}
+	why := witness.Name + " " + because
+
+	var out []string
+	for _, node := range g.Nodes {
+		if node.Name != name {
+			continue
+		}
+		out = append(out, fmt.Sprintf(
+			"%s: the schema declares an entity named %s, so ent generates `type %s` for it; this extension declares `%s %s` in %s (%s), "+
+				"and Go gives types, variables and functions one identifier namespace per package, so the generated package fails to compile with `%s redeclared in this block` — in two files the author did not write. "+
+				"So rename the entity: %s is a documented part of this package's API (README.md's init() example assigns to ErrorMap), and moving it would break every consumer that already refers to it",
+			node.Name, name, name, kind, name, file, why, name, name,
+		))
+	}
+	return out
+}
+
+// derivedName is one exported top-level declaration the per-type templates
+// derive from an entity's name, together with the file it lands in.
+type derivedName struct {
+	name string
+	file string
+}
+
+// derivedEntityDecls returns every EXPORTED top-level declaration the three
+// per-type templates emit for an annotated node.
+//
+// This is the list #62 turns on, and it is the one thing here that rots: a
+// template gains a declaration and this list does not, and the collision it was
+// written to refuse walks straight through. That is why
+// TestDerivedEntityNamesMatchTheTemplates renders all five templates over a
+// probe entity, reads the exported declarations back out with go/parser, and
+// compares the two sets in BOTH directions. Add to a template, and that test
+// tells you to add here — no reading required.
+//
+// Unexported declarations (<name>SortOptions, <name>ByID, <name>Get, the
+// presence tag slices) are deliberately absent: an ent schema type's name is
+// always exported, so an unexported generated name cannot be collided with.
+//
+// Methods are absent for the same class of reason — a method name lives in its
+// receiver's namespace, not the package's, so Predicates, Validate and Apply
+// collide with nothing.
+//
+// The plural forms go through ent's own plural function rather than a rule
+// written here. templates/wiring.tmpl calls `plural` from gen.Funcs, so a second
+// implementation could only ever disagree with the names actually generated —
+// and it would disagree exactly on the irregular nouns nobody tests with.
+func derivedEntityDecls(node *gen.Type) []derivedName {
+	n := node.Name
+	p := entPlural(n)
+	dto := perTypeFileName(node, "dto")
+	filter := perTypeFileName(node, "filter")
+	wiring := perTypeFileName(node, "wiring")
+
+	return []derivedName{
+		// templates/dto.tmpl
+		{n + "CreateRequest", dto},
+		{"Valid" + n + "CreateRequest", dto},
+		{n + "PatchRequest", dto},
+		{"Valid" + n + "PatchRequest", dto},
+		{n + "Summary", dto},
+		{"New" + n + "Summary", dto},
+		{n + "Response", dto},
+		{"New" + n + "Response", dto},
+		{n + "QueryWithResponseEdges", dto},
+		{n + "ListResponse", dto},
+		{"New" + n + "ListResponse", dto},
+		// templates/filter.tmpl
+		{n + "Filter", filter},
+		{n + "SortKeys", filter},
+		{n + "Order", filter},
+		// templates/wiring.tmpl
+		{"Get" + n, wiring},
+		{"List" + p, wiring},
+		{"Create" + n, wiring},
+		{"Update" + n, wiring},
+		{"Delete" + n, wiring},
+		{"DeleteBatch" + p, wiring},
+	}
+}
+
+// derivedEntityNames is derivedEntityDecls projected onto the identifiers
+// alone. It is what a caller that only asks "is this name taken?" wants, and it
+// is the form the consistency guard compares against.
+func derivedEntityNames(node *gen.Type) []string {
+	decls := derivedEntityDecls(node)
+	names := make([]string, 0, len(decls))
+	for _, d := range decls {
+		names = append(names, d.name)
+	}
+	return names
+}
+
+// entPlural is ent's own plural function, reached through the same map the
+// templates reach it through.
+//
+// Bound at package init, and panicking there, for the reason mustLoadTemplate
+// panics at init: a generator that cannot spell the names it is about to
+// generate has nothing correct left to do, and finding that out when the first
+// consumer runs `go generate` is strictly worse than finding it out on import.
+var entPlural = mustEntPlural()
+
+func mustEntPlural() func(string) string {
+	fn, ok := gen.Funcs["plural"].(func(string) string)
+	if !ok {
+		panic("entdomain: entc/gen no longer exposes \"plural\" as func(string) string, " +
+			"so the derived names in schema_conflicts.go can no longer be spelled the way templates/wiring.tmpl spells them")
+	}
+	return fn
+}
+
+// derivedNameConflict describes an entity named after a symbol another entity's
+// generated files declare — entity FooResponse against entity Foo's generated
+// FooResponse.
+//
+// The pair is named in the subject line because neither entity is wrong on its
+// own and the author has to pick which one moves. The message says which name is
+// derived and which is free, because that is what makes the choice obvious:
+// Foo's derived names follow from Foo's name and cannot be configured.
+func derivedNameConflict(a, b *gen.Type, d derivedName) string {
+	return fmt.Sprintf(
+		"%s / %s: the schema declares an entity named %s, so ent generates `type %s` for it; %s is also one of the names this extension derives from the annotated entity %s and declares in %s, "+
+			"so the two share one identifier in the generated package and it fails to compile with `%s redeclared in this block`. "+
+			"So rename one of the two entities — %s's derived names follow from its own name and cannot be configured. "+
+			"The name is reserved even if %s's current scopes do not happen to emit it: adding a scope later would, and a refusal that appears on an unrelated annotation change is worse than one that is stable",
+		b.Name, a.Name, b.Name, b.Name, d.name, a.Name, d.file, d.name, a.Name, a.Name,
+	)
 }
 
 // immutableUpdateConflict describes the field-level contradiction: a field ent

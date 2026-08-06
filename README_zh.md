@@ -1238,6 +1238,41 @@ schema 作者不必读到本表也能看见（[#67](https://github.com/githonllc
 表中每一行都有 `internal/fixtures/` 下的 fixture 覆盖，由 `TestCodegenFixtures`
 先生成再编译。
 
+## 本扩展保留的实体名
+
+实体名同时也是生成代码所落包里的一个 Go 标识符，所以一个与本扩展生成符号同名的
+实体，会让使用方自己的 `ent/` 包直接编译不过——`ErrorMap redeclared in this
+block`，出现在两个没人写过的文件里，而且没有任何东西指向真正的原因。因此这类
+schema **直接拒绝生成**（[#62](https://github.com/githonllc/entdomain/issues/62)）。
+
+图级保留两个名字，各自的条件就是对应文件的发射条件：
+
+| 名字 | 声明于 | 何时 |
+|---|---|---|
+| `ErrorMap` | `entdomain_errors.go` | 任一实体带 `DomainField` 注解 |
+| `RegisterSoftDelete` | `entdomain_softdelete.go` | 任一实体嵌入 `entdomain.SoftDeleteMixin` |
+
+其余保留名从带注解的实体自身派生。对实体 `Foo`，以下二十个名字被占用：
+
+`FooCreateRequest`、`ValidFooCreateRequest`、`FooPatchRequest`、
+`ValidFooPatchRequest`、`FooSummary`、`NewFooSummary`、`FooResponse`、
+`NewFooResponse`、`FooQueryWithResponseEdges`、`FooListResponse`、
+`NewFooListResponse`、`FooFilter`、`FooSortKeys`、`FooOrder`、`GetFoo`、
+`ListFoos`、`CreateFoo`、`UpdateFoo`、`DeleteFoo`、`DeleteBatchFoos`。
+
+因此同时含有 `Foo` 与 `FooResponse` 的 schema 会被拒绝，错误信息点名两个实体以及
+碰撞落在哪个生成文件里。撞名的那个实体**不需要**带注解：ent 为 schema 里的每个
+实体都生成类型，有个类型就足够撞车了。
+
+修法永远是**改实体名**——生成名由实体名派生，不可配置。尤其 `ErrorMap` 是本包
+published API 的一部分（[错误映射](#错误映射)一节的 `init()` 示例就是给它赋值的），
+挪动它会破坏所有已经引用它的使用方。
+
+保留列表是有意取最大集合的。即使该实体当前的作用域并不会发射某个名字——没有
+create 作用域字段的实体今天不生成 `FooCreateRequest`——该名字同样被拒绝，因为以后
+加一个作用域就会生成，而「因一次无关的注解改动才突然出现的拒绝」比一个稳定的拒绝
+更糟。
+
 ## 扩展选项
 
 ```go

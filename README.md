@@ -1381,6 +1381,49 @@ it in production.
 Every row is covered by a fixture under `internal/fixtures/` that is generated
 and then compiled by `TestCodegenFixtures`.
 
+## Entity names this extension reserves
+
+An entity name is a Go identifier in the very package the generated code lands
+in, so an entity named after a symbol this extension declares makes the
+consumer's own `ent/` package stop compiling — `ErrorMap redeclared in this
+block`, in two files nobody wrote, with nothing naming the extension as the
+cause. **Generation is refused instead**
+([#62](https://github.com/githonllc/entdomain/issues/62)).
+
+Two names are reserved at graph level, each under the condition its file is
+written under:
+
+| Name | Declared in | When |
+|---|---|---|
+| `ErrorMap` | `entdomain_errors.go` | any entity carries `DomainField` annotations |
+| `RegisterSoftDelete` | `entdomain_softdelete.go` | any entity embeds `entdomain.SoftDeleteMixin` |
+
+The rest are derived from the annotated entities themselves. For an entity
+`Foo`, these twenty names are taken:
+
+`FooCreateRequest`, `ValidFooCreateRequest`, `FooPatchRequest`,
+`ValidFooPatchRequest`, `FooSummary`, `NewFooSummary`, `FooResponse`,
+`NewFooResponse`, `FooQueryWithResponseEdges`, `FooListResponse`,
+`NewFooListResponse`, `FooFilter`, `FooSortKeys`, `FooOrder`, `GetFoo`,
+`ListFoos`, `CreateFoo`, `UpdateFoo`, `DeleteFoo`, `DeleteBatchFoos`.
+
+So a schema holding both `Foo` and `FooResponse` is refused, naming both
+entities and the file the collision lands in. The colliding entity does **not**
+have to be annotated: ent generates a type for every entity in the schema, and a
+type is all a collision takes.
+
+The fix is always to **rename an entity** — the generated names follow from the
+entity's own name and cannot be configured. `ErrorMap` in particular is part of
+this package's published API (the `init()` example under
+[Error mapping](#error-mapping) assigns to it), so moving it would break every
+consumer that already refers to it.
+
+The reserved list is maximal on purpose. A name is refused even when the
+entity's current scopes do not emit it — an entity with no create-scoped field
+generates no `FooCreateRequest` today — because adding a scope later would, and
+a refusal that appears on an unrelated annotation change is worse than one that
+is stable.
+
 ## Extension Options
 
 ```go

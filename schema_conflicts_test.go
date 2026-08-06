@@ -333,3 +333,109 @@ func TestCheckGraphConflicts_MarkedFieldsThatAgreeWithTheSchema(t *testing.T) {
 		t.Fatalf("expected no conflict, got: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Reserved names (#62). The internal/fixtures/reservednames fixture covers the
+// ErrorMap case end to end, through real ent; these cover the branches one
+// fixture cannot reach at once — the soft-delete symbol, a collision with an
+// UNannotated entity, and the two negatives.
+// ---------------------------------------------------------------------------
+
+// softDeletableDoc is a node that makes softDeleteTypes(g) non-empty, which is
+// the condition RegisterSoftDelete is generated under.
+func softDeletableDoc(name string) *gen.Type {
+	deletedAt := newTimeField(SoftDeleteField, nil)
+	deletedAt.Optional = true
+	deletedAt.Nillable = true
+	node := newSoftDeletableType(name, DomainSoftDelete{Field: SoftDeleteField}, deletedAt)
+	return node
+}
+
+func TestCheckGraphConflicts_EntityNamedRegisterSoftDelete(t *testing.T) {
+	g := graphOf(
+		softDeletableDoc("Doc"),
+		newTestType("RegisterSoftDelete", newStringField("title", ptr(DefaultField()))),
+	)
+
+	err := checkGraphConflicts(g)
+	if err == nil {
+		t.Fatal("expected an error for an entity named after the generated RegisterSoftDelete, got nil")
+	}
+	for _, want := range []string{"RegisterSoftDelete", "entdomain_softdelete.go", "Doc embeds entdomain.SoftDeleteMixin", "rename"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q\ngot: %v", want, err)
+		}
+	}
+}
+
+// TestCheckGraphConflicts_EntityNamedAfterAnotherEntitysDerivedType is the
+// cross-entity half, and the colliding entity carries NO annotations at all —
+// which is exactly why the check cannot live in checkGraphConflicts' per-node
+// loop. ent generates `type DocResponse` for it regardless, and that is all a
+// collision takes.
+func TestCheckGraphConflicts_EntityNamedAfterAnotherEntitysDerivedType(t *testing.T) {
+	g := graphOf(
+		newTestType("Doc", newStringField("title", ptr(DefaultField()))),
+		newTestType("DocResponse", newStringField("body", nil)),
+	)
+
+	err := checkGraphConflicts(g)
+	if err == nil {
+		t.Fatal("expected an error for an entity named after another entity's generated response type, got nil")
+	}
+	for _, want := range []string{"DocResponse / Doc", "doc_dto.go", "redeclared", "rename one of the two entities"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q\ngot: %v", want, err)
+		}
+	}
+}
+
+// TestCheckGraphConflicts_DerivedPluralNameIsReserved pins that the plural forms
+// come from ent's own plural function. "Doc" pluralises to "Docs" by the boring
+// rule, but the point is that whatever ent produces is what wiring.tmpl emits,
+// so the two can never disagree.
+func TestCheckGraphConflicts_DerivedPluralNameIsReserved(t *testing.T) {
+	g := graphOf(
+		newTestType("Doc", newStringField("title", ptr(DefaultField()))),
+		newTestType("List"+entPlural("Doc"), newStringField("body", nil)),
+	)
+
+	err := checkGraphConflicts(g)
+	if err == nil {
+		t.Fatalf("expected an error for an entity named List%s, got nil", entPlural("Doc"))
+	}
+	if want := "doc_wiring.go"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error does not mention %q\ngot: %v", want, err)
+	}
+}
+
+// TestCheckGraphConflicts_ReservedNamesAreConditionalOnTheEmission is the
+// negative: neither graph-level file is written for this schema, so neither name
+// is taken and nothing is refused. An unconditional refusal would reject a
+// schema that generates and compiles.
+func TestCheckGraphConflicts_ReservedNamesAreConditionalOnTheEmission(t *testing.T) {
+	// Nothing annotated anywhere -> no entdomain_errors.go.
+	// Nothing soft-deletable    -> no entdomain_softdelete.go.
+	g := graphOf(
+		newTestType("ErrorMap", newStringField("label", nil)),
+		newTestType("RegisterSoftDelete", newStringField("title", nil)),
+	)
+
+	if err := checkGraphConflicts(g); err != nil {
+		t.Fatalf("expected no conflict for a graph that generates neither graph-level file, got: %v", err)
+	}
+}
+
+// TestCheckGraphConflicts_DerivedNamesAreReservedByAnnotatedEntitiesOnly is the
+// other negative. A node with no domain fields is skipped by generation
+// entirely, so it declares nothing and reserves nothing.
+func TestCheckGraphConflicts_DerivedNamesAreReservedByAnnotatedEntitiesOnly(t *testing.T) {
+	g := graphOf(
+		newTestType("Doc", newStringField("title", nil)), // unannotated: generates nothing
+		newTestType("DocResponse", newStringField("body", nil)),
+	)
+
+	if err := checkGraphConflicts(g); err != nil {
+		t.Fatalf("expected no conflict when the entity whose name is derived from is unannotated, got: %v", err)
+	}
+}

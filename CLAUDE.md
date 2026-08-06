@@ -176,7 +176,7 @@ removal, not merely a redundancy one.
 carries. Nothing in the schema says "this field is the brief one", so the
 generator does not guess — a summary carries every response-scoped field, minus
 the edges. The spike's hand-written `UserSummary{ID, Name}` picked one field by
-judgement, which is the single thing in `internal/fixture/ent/dto/` that is not
+judgement, which is the single thing in `internal/fixture/spikeent/dto/` that is not
 mechanical. Narrowing it needs a new annotation, and that is a separate issue.
 
 ## Annotation model

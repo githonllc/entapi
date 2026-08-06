@@ -9,7 +9,7 @@ are unaffected by anything in this directory.
 
 ## What is hand-written, and why
 
-`ent/dto/user.go` is written by hand. It is the *target output* of the
+`spikeent/dto/user.go` is written by hand. It is the *target output* of the
 generator, not output of it.
 
 Writing the target first — then compiling it, running it, and reading it — is
@@ -25,22 +25,33 @@ which is the test for whether it belongs in generated code at all.
 
 | Path | Layer | Written by |
 |---|---|---|
-| `ent/schema/user.go` | schema | hand |
-| `ent/*` (except `dto/`) | ent's own output | `go generate ./ent` |
-| `ent/dto/user.go` | **Layer 1** — per-entity, schema-derived | hand, as the generator's target |
+| `spikeent/schema/user.go` | schema | hand |
+| `spikeent/*` (except `dto/`) | ent's own output | `go generate ./spikeent` |
+| `spikeent/dto/user.go` | **Layer 1** — per-entity, schema-derived | hand, as the generator's target |
 | `../../query.go` | **Layer 2** — CRUD algorithms | hand, once, for all entities |
 | `e2e_test.go` | proof | hand |
+
+The generated directory is `spikeent`, not `ent`, and that is not cosmetic
+(#49). goimports resolves a bare `ent.` reference by PACKAGE NAME against every
+candidate it finds by walking the filesystem — it never consults the module
+graph, so this module being a separate one hides nothing from it.
+`entgo.io/ent` is already `package ent`, so a second one here made the choice
+depend on goimports' cache state, and it rewrote `entgo.io/ent` in a *different*
+module's generated `client.go` to point at this directory. `package spikeent`
+cannot be picked by mistake. `TestNoAmbiguousEntPackages` in the root module
+censuses the whole repository tree, nested modules included, and fails if any
+package named `ent` reappears.
 
 ## Running
 
 ```
-go generate ./ent    # regenerate ent's own code
-go test ./...        # compile Layer 1 + Layer 2 and exercise them against SQLite
+go generate ./spikeent   # regenerate ent's own code
+go test ./...            # compile Layer 1 + Layer 2 and exercise them against SQLite
 ```
 
 ## What the tests establish
 
-- A generic `ListPage` written once drives a real `*ent.UserQuery`, with full
+- A generic `ListPage` written once drives a real `*spikeent.UserQuery`, with full
   type inference at the call site and no per-entity algorithm.
 - The identifier type is a type parameter, so nothing pins it to `uuid.UUID`.
 - `Filterable` / `Searchable` / `Sortable` compose into one query: per-field
@@ -93,7 +104,7 @@ unannotated, nothing is reported, and it silently never appears in a response.
 
 ### Inspecting the graph
 
-`ent/probe.go` (build-tagged `ignore`) prints every edge with its annotation,
+`spikeent/probe.go` (build-tagged `ignore`) prints every edge with its annotation,
 its uniqueness and whether `edge.Field()` is nil:
 
 ```

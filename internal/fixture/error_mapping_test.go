@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/githonllc/entdomain/internal/fixture/ent"
+	"github.com/githonllc/entdomain/internal/fixture/spikeent"
 	entdomain "github.com/githonllc/entdomain/runtime"
 	"github.com/google/uuid"
 )
@@ -15,7 +15,7 @@ import (
 // the runtime must be linkable without ent; this file checks that the fakes
 // were faithful to what ent actually does.
 func newMapper() entdomain.ErrorMapper {
-	return entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError).
+	return entdomain.NewErrorMapper(spikeent.IsNotFound, spikeent.IsConstraintError).
 		// The dialect-specific half belongs to the consumer, not the library.
 		// SQLite reports "UNIQUE constraint failed: tags.name (2067)"; Postgres
 		// would use SQLSTATE 23505.
@@ -62,13 +62,13 @@ func TestMapErrorAgainstRealEnt(t *testing.T) {
 
 	t.Run("foreign-key violation is not a duplicate", func(t *testing.T) {
 		// author_id references a user that does not exist. ent reports this as
-		// *ent.ConstraintError, exactly as it reports a duplicate key — which
-		// is why ent.IsConstraintError cannot drive the mapping on its own.
+		// *spikeent.ConstraintError, exactly as it reports a duplicate key — which
+		// is why spikeent.IsConstraintError cannot drive the mapping on its own.
 		_, err := c.Post.Create().SetTitle("orphan").SetAuthorID(uuid.New()).Save(ctx)
 		if err == nil {
 			t.Fatal("expected a foreign-key violation")
 		}
-		if !ent.IsConstraintError(err) {
+		if !spikeent.IsConstraintError(err) {
 			t.Fatalf("precondition: ent must call this a constraint error, got %T", err)
 		}
 		got := m.MapError(err)
@@ -85,12 +85,12 @@ func TestMapErrorAgainstRealEnt(t *testing.T) {
 }
 
 // TestTwoPredicatesCannotSeeUniqueness records against real ent why the
-// uniqueness predicate exists at all: ent.IsConstraintError returns true for a
+// uniqueness predicate exists at all: spikeent.IsConstraintError returns true for a
 // duplicate key and a foreign-key violation alike, so a mapper wired with only
 // the two predicates classifies neither rather than guessing.
 func TestTwoPredicatesCannotSeeUniqueness(t *testing.T) {
 	c, ctx := newClient(t)
-	m := entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+	m := entdomain.NewErrorMapper(spikeent.IsNotFound, spikeent.IsConstraintError)
 
 	c.Tag.Create().SetName("dup").SaveX(ctx)
 	dup, err := c.Tag.Create().SetName("dup").Save(ctx)
@@ -102,7 +102,7 @@ func TestTwoPredicatesCannotSeeUniqueness(t *testing.T) {
 		t.Fatal("expected a foreign-key violation")
 	}
 
-	if !ent.IsConstraintError(err) || !ent.IsConstraintError(fkErr) {
+	if !spikeent.IsConstraintError(err) || !spikeent.IsConstraintError(fkErr) {
 		t.Fatal("precondition: ent calls both a constraint error")
 	}
 	if entdomain.IsAlreadyExists(m.MapError(err)) {

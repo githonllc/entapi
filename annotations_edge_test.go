@@ -21,7 +21,7 @@ func newEdge(name string, raw any) *gen.Edge {
 //
 //	edge.To("posts", Post.Type).Annotations(entdomain.Edge().InResponse())
 //
-// captured from entc.LoadGraph against internal/fixture/ent/schema. Keeping the
+// captured from entc.LoadGraph against internal/fixture/spikeent/schema. Keeping the
 // literal here rather than a hand-guessed shape is the point: the map branch of
 // getDomainEdgeAnnotation exists for this value and no other.
 func realLoadedMap() map[string]interface{} {

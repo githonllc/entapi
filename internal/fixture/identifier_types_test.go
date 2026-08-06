@@ -3,7 +3,7 @@ package fixture
 import (
 	"testing"
 
-	"github.com/githonllc/entdomain/internal/fixture/ent"
+	"github.com/githonllc/entdomain/internal/fixture/spikeent"
 	entdomain "github.com/githonllc/entdomain/runtime"
 	"github.com/google/uuid"
 )
@@ -25,7 +25,7 @@ type tagView struct {
 	Name string `json:"name"`
 }
 
-func newTagView(t *ent.Tag) (*tagView, error) {
+func newTagView(t *spikeent.Tag) (*tagView, error) {
 	return &tagView{ID: t.ID, Name: t.Name}, nil
 }
 
@@ -34,7 +34,7 @@ type userView struct {
 	Name string    `json:"name"`
 }
 
-func newUserView(u *ent.User) (*userView, error) {
+func newUserView(u *spikeent.User) (*userView, error) {
 	return &userView{ID: u.ID, Name: u.Name}, nil
 }
 

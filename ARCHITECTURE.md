@@ -341,12 +341,14 @@ Two deliberate holes, both documented in the template: `DeleteBatch` skips Befor
 
 Cross-cutting concerns are mostly *absent by design* — no logging (one `log.Printf` in `writeFile`), no auth, no caching, no concurrency. `.claude/skills/entdomain/SKILL.md` describes tenant and soft-delete interceptors; those live in a **consumer** project (`internal/database/`), not here.
 
-Soft delete is convention-detected, not annotated:
+Soft delete is annotation-detected, and lives at ent's interceptor layer rather than in the generated service (#18). `entdomain.SoftDeleteMixin` (`softdelete.go`) declares the `deleted_at` field plus a `DomainSoftDelete` marker; ent merges a mixin's annotations into the schema's own (`entc/load/schema.go:314`), so embedding the mixin is what makes `isSoftDeletable` true:
 
 ```go
-// funcs_typechecks.go — hasSoftDelete
-if field.Name == "deleted_at" && isTimeField(field) && field.Nillable {
+// funcs_softdelete.go — isSoftDeletable
+return softDeleteAnnotation(node) != nil
 ```
+
+The convention it replaced (`hasSoftDelete`: a `Nillable` `time.Time` field literally named `deleted_at`) could not tell an entity that opted in from one that merely owned a column with that name. `templates/softdelete.tmpl` is the only template rendered over a `*gen.Graph` rather than a `*gen.Type`: it emits one type switch for the whole schema, plus the `RegisterSoftDelete` line a consumer calls.
 
 Enum predicates need two branches because Go type assertions do not match underlying types — the comment in `funcs_codegen.go:187` records the reasoning, and the emitted code tries `person.Gender` before falling back to `string`.
 
@@ -376,7 +378,7 @@ The route it took is the route any new field capability takes:
 6. `funcs_scope.go` — `getDomainFieldAnnotation`, the dual-format gate
 7. `funcs_filter.go` + `templates/filter.tmpl` — how the query markers become filter parameters and a sort allow-list
 8. `templates/base_service.tmpl` — hooks, CRUD, `Apply*Request`, `EntToResponse`
-9. `funcs_typechecks.go` — the conventions (`deleted_at`, UUID, complex types)
+9. `funcs_softdelete.go` + `templates/softdelete.tmpl` — the one graph-level generator, and the only feature with a behavioural proof (`internal/softdeleteproof`)
 10. `templates/base_handler.tmpl` — 60 lines, the whole handler contract
 11. `funcs_codegen.go` — `setFieldCallReq`, the whole file since #7
 

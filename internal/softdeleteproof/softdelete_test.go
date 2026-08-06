@@ -313,3 +313,50 @@ func ids(docs []*ent.Doc) []uuid.UUID {
 	}
 	return out
 }
+
+// TestGeneratedWiringRoutesThroughTheHook is criterion 5 again, for the other
+// generated delete. #28's wiring emits
+// `DeleteDoc → db.Doc.DeleteOneID(id).Exec(ctx)`, which is an ordinary ent
+// builder and therefore runs the client's hooks — but "therefore" is reasoning,
+// and the whole point of this module is that reasoning is not the standard here.
+//
+// The read half matters as much: GetDoc and ListDocs go through
+// DocQueryWithResponseEdges(db.Doc.Query()), so they must not surface a
+// tombstone either.
+func TestGeneratedWiringRoutesThroughTheHook(t *testing.T) {
+	c, db, ctx := newClient(t)
+
+	kept := newDoc(t, c, ctx, "kept")
+	gone := newDoc(t, c, ctx, "gone")
+
+	if err := ent.DeleteDoc(ctx, c, gone.ID); err != nil {
+		t.Fatalf("DeleteDoc: %v", err)
+	}
+	if n := rowsOnDisk(t, db, doc.Table, gone.ID); n != 1 {
+		t.Errorf("DeleteDoc hard-deleted the row: %d on disk, want 1", n)
+	}
+
+	if _, err := ent.GetDoc(ctx, c, gone.ID); err == nil {
+		t.Error("GetDoc returned a soft-deleted row")
+	}
+
+	page, err := ent.ListDocs(ctx, c, nil, entdomain.ListRequest{})
+	if err != nil {
+		t.Fatalf("ListDocs: %v", err)
+	}
+	if len(page.Data) != 1 || page.Data[0].ID != kept.ID {
+		t.Fatalf("ListDocs returned %d items, want only %s", len(page.Data), kept.ID)
+	}
+
+	// And the wiring delete on an entity WITHOUT the mixin still really deletes.
+	l, err := c.Ledger.Create().SetEntry("entry").Save(ctx)
+	if err != nil {
+		t.Fatalf("create ledger: %v", err)
+	}
+	if err := ent.DeleteLedger(ctx, c, l.ID); err != nil {
+		t.Fatalf("DeleteLedger: %v", err)
+	}
+	if n := rowsOnDisk(t, db, ledger.Table, l.ID); n != 0 {
+		t.Errorf("DeleteLedger left %d rows on disk, want 0", n)
+	}
+}

@@ -16,3 +16,10 @@ var filterTemplate = mustLoadTemplate("filter")
 // wiringTemplate is the wiring template: one free function per operation,
 // connecting this entity's generated artifacts to the generic runtime.
 var wiringTemplate = mustLoadTemplate("wiring")
+
+// softDeleteTemplate is the soft-delete traverser and delete-rewriting hook.
+// Unlike every other template here it is rendered once per GRAPH, not once per
+// type: it is a single type switch over the entities embedding
+// entdomain.SoftDeleteMixin, plus the one registration function a consumer
+// calls.
+var softDeleteTemplate = mustLoadTemplate("softdelete")

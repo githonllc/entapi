@@ -63,7 +63,8 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 | `funcs_fields.go` | field selection: `domainFields`, `createFields`, `patchFields`, `responseFields`, `responseEdges` |
 | `funcs_scope.go` | `hasDomainScope`, `isDomainRequired`, and `getDomainFieldAnnotation` |
 | `funcs_presence.go` | request field shape: `isCreatePointer`, `isCreateRequired`, `isPatchClearable` |
-| `funcs_typechecks.go` | `isTimeField`, `hasSoftDelete`, `isComplexFieldType` |
+| `funcs_typechecks.go` | `isComplexFieldType` |
+| `funcs_softdelete.go` | `isSoftDeletable`, `softDeleteTypes`, `softDeleteField`, `softDeleteImports` — the soft-delete mixin's marker |
 | `funcs_imports.go` | `dtoImports`: the import specs the DTO must declare for its field types |
 | `funcs_codegen.go` | string-emitting helpers (`setFieldCallReq`, `fieldValueExpr`) |
 | `funcs_strings.go` | `camelCase`, `contains`, `hasPrefix` |
@@ -186,7 +187,17 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
   exported `Apply{Entity}CreateRequest`/`Apply{Entity}UpdateRequest` free
   functions are gone, because taking a raw request is exactly the escape hatch
   that made validation optional (#26).
-- Soft delete is **convention-based**: `hasSoftDelete` matches a `Nillable` `time.Time` field literally named `deleted_at`, and switches Delete to `UpdateOneID().SetDeletedAt(now)`.
+- Soft delete is **annotation-based and lives at ent's layer, not the service's** (#18).
+  A consumer embeds `entdomain.SoftDeleteMixin` (field + `DomainSoftDelete` marker; ent
+  merges mixin annotations onto the type) and calls the generated
+  `ent.RegisterSoftDelete(client)` once. `Delete`/`DeleteBatch` in `base_service.tmpl`
+  issue an ordinary ent delete and let the hook rewrite it — there is no second tombstone
+  write. The old `deleted_at`/`Nillable` naming convention and `hasSoftDelete` are gone.
+- `templates/softdelete.tmpl` is the **only graph-level template**: it is rendered once
+  over `*gen.Graph`, not per `*gen.Type`, and it is generated for a soft-deletable entity
+  even when that entity has no domain fields at all. Its output file
+  (`entdomain_softdelete.go`) is cleaned up through `graphFileNames()`, not
+  `generatedFileNames(node)`.
 - Hook dispatch works via `SetSelf` + an embedded interface; without `SetSelf` the no-op defaults on `Base{Entity}Service` are used.
 - `Base{Entity}Handler` exists so consumer handler packages never import `ent` transitively for conversion — keep it dependency-free.
 

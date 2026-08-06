@@ -35,6 +35,13 @@ func checkGraphConflicts(g *gen.Graph, cfg *ExtensionConfig) error {
 
 	var conflicts []string
 	for _, node := range g.Nodes {
+		// Checked before the domain-field gate below: soft delete is declared
+		// on the ent schema, not on the HTTP surface, so an entity with no
+		// annotated field at all can still carry the mixin and still be
+		// generated for.
+		if msg := unusableSoftDeleteField(node); msg != "" {
+			conflicts = append(conflicts, msg)
+		}
 		if len(domainFields(node)) == 0 {
 			// Generation skips this node entirely, so nothing it declares can
 			// produce output to be wrong about.
@@ -52,6 +59,44 @@ func checkGraphConflicts(g *gen.Graph, cfg *ExtensionConfig) error {
 	}
 	return fmt.Errorf("entdomain: %d schema problem(s) prevent generation:\n  - %s",
 		len(conflicts), strings.Join(conflicts, "\n  - "))
+}
+
+// unusableSoftDeleteField reports an entity whose soft-delete marker names a
+// tombstone column the traverser cannot be written against, or "" when there is
+// none.
+//
+// Two ways that happens, and neither is reachable by embedding
+// entdomain.SoftDeleteMixin as documented — both mean the annotation was
+// attached by hand or by another mixin:
+//
+//   - the named field is not on the entity, so there is no column to filter on;
+//   - the field is not Optional, so ent generates no <Field>IsNil predicate and
+//     templates/softdelete.tmpl emits a call to a function that does not exist.
+//
+// The second is the one worth refusing loudly. The failure it prevents is a
+// compile error inside the consumer's own ent package, naming a predicate they
+// never wrote, with nothing pointing back at the mixin that asked for it.
+func unusableSoftDeleteField(node *gen.Type) string {
+	a := softDeleteAnnotation(node)
+	if a == nil {
+		return ""
+	}
+	f := softDeleteField(node)
+	if f == nil {
+		return fmt.Sprintf(
+			"%s: carries the %s marker naming field %q, but the entity has no such field. "+
+				"Soft delete is opted into by embedding entdomain.SoftDeleteMixin, which declares the field it marks; "+
+				"attaching %s by hand is not supported",
+			node.Name, SoftDeleteAnnotationName, a.Field, SoftDeleteAnnotationName)
+	}
+	if !f.Optional {
+		return fmt.Sprintf(
+			"%s.%s: is the soft-delete tombstone field but is not Optional, so ent generates no %s.%sIsNil predicate "+
+				"and the generated traverser (templates/softdelete.tmpl) would not compile. "+
+				"Use entdomain.SoftDeleteMixin, which declares the field Optional and Nillable",
+			node.Name, f.Name, node.Package(), f.StructField())
+	}
+	return ""
 }
 
 // supportedIDType is the one identifier type the generated base service and

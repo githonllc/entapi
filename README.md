@@ -33,7 +33,7 @@ An [Ent](https://entgo.io) extension that generates HTTP request/response DTOs, 
 - **Explicit presence** — a patch request tells an omitted key from an explicit `null` from a value, and a field omitted on create is never written, so the schema's `Default()` still applies
 - **BaseService** — CRUD operations with Before/After hooks, builder helpers, and entity→response conversion
 - **BaseHandler** — response conversion helpers and partial update support
-- **Soft-delete detection** — automatically generates `UpdateOneID().SetDeletedAt(now)` for entities with a `deleted_at` field
+- **Soft delete at the ent layer** — embed `entdomain.SoftDeleteMixin`, register one line at client construction, and deleted rows disappear from *every* read, including `client.User.Query()` calls that touch nothing generated here
 - **Cursor pagination** — ID-based keyset pagination in BaseService
 - **Source provenance** — generated files include schema name, template path, and regeneration command
 
@@ -467,6 +467,13 @@ For each annotated schema, up to five files are generated (all in the `ent/` pac
 | `{entity}_base_service.go` | `BaseService` with CRUD, Before/After hooks, `EntToResponse` |
 | `{entity}_base_handler.go` | `BaseHandler` with `ToResponse`, `ToResponseList`, `PartialUpdate` |
 
+Plus one file for the schema as a whole, written only when at least one entity
+embeds `entdomain.SoftDeleteMixin`:
+
+| File | Contains |
+|------|----------|
+| `entdomain_softdelete.go` | `RegisterSoftDelete`, the query traverser and the delete-rewriting hook — see [Soft delete](#soft-delete) |
+
 ### Create and patch requests
 
 The request half of `{entity}_dto.go` is two request types, each paired with a
@@ -659,6 +666,91 @@ func listMyArticles(ctx context.Context, db *ent.Client, f *ent.ArticleFilter, r
 Error classification is deliberately absent: mapping a driver error onto
 `ErrNotFound` or `ErrAlreadyExists` belongs to the runtime, and is issue #13.
 These functions return what ent returned.
+### Soft delete
+
+Soft delete lives in ent's own interceptor and hook layer, not in the generated
+service. That is not a preference. `Base{Entity}Service.DB` is an exported
+`*Client`, so a service that filtered its own queries would be bypassed by one
+line of ordinary consumer code:
+
+```go
+s.DB.User.Query().All(ctx)   // no generated method in the call path
+```
+
+Only an ORM-level interceptor sees that query, and only a mutation hook keyed on
+`OpDelete|OpDeleteOne` sees every delete.
+
+**Two steps, and there is no third.**
+
+```go
+// 1. ent/schema/doc.go — embed the mixin. This adds the deleted_at column.
+func (Doc) Mixin() []ent.Mixin {
+    return []ent.Mixin{entdomain.SoftDeleteMixin{}}
+}
+```
+
+```go
+// 2. wherever the client is constructed — install it.
+client := ent.NewClient(ent.Driver(drv))
+ent.RegisterSoftDelete(client)
+```
+
+`RegisterSoftDelete` is generated into your `ent` package, once for the whole
+schema, as a type switch over the entities that embed the mixin. After it, every
+read excludes deleted rows — direct client queries, `Count`, `Exist`, `Only`,
+`Get`, and sub-queries built for eager-loaded edges — and `Delete()` /
+`DeleteOneID()` stamp `deleted_at` instead of removing the row. Everything this
+project generates goes through that one hook and writes no tombstone of its own:
+`Delete{Entity}` in the wiring above, and `Delete`/`DeleteBatch` on the base
+service. `internal/softdeleteproof` asserts each of them leaves the row on disk.
+
+**The cost, stated rather than hidden.** A client built without that line filters
+nothing, and a delete on it removes the row. There is no compile error for
+forgetting it. It is one line in your own wiring on purpose: a filter that
+silently removes rows from every query in the process should be visible in setup
+code rather than installed by embedding a struct.
+
+**Getting back in, and getting rid of a row.** Two context switches, each doing
+exactly one thing:
+
+```go
+all, _ := client.Doc.Query().All(entdomain.WithSoftDeleted(ctx))  // includes tombstones
+_ = client.Doc.DeleteOneID(id).Exec(entdomain.WithHardDelete(ctx)) // really deletes
+```
+
+Neither implies the other, and both are per-call: the context you already had is
+unchanged. (ent's published recipe uses a single key for both, so a caller who
+wanted to read a tombstone also silently armed a real `DELETE`.)
+
+**No empty import is required, and that is a deliberate design consequence.**
+ent generates its schema-stitching runtime in two formats
+(`entc/gen/template/runtime.tmpl:12-17,50-63`): a separate `ent/runtime` package
+that **must be empty-imported from your main package**
+(`import _ "yourproject/ent/runtime"`) when any schema carries hooks, policies or
+interceptors, and an in-`ent` format when none does. A soft-delete mixin that
+carried its own hook and interceptor would flip your project to the first
+format, so adopting this feature would change how your whole project generates
+and add an import you would otherwise discover from a runtime panic
+(`ent: uninitialized interceptor (forgotten import ent/runtime?)`).
+
+`entdomain.SoftDeleteMixin` therefore declares **only the field and a marker
+annotation** — no `Hooks()`, no `Interceptors()`. Both halves are installed on
+the client by `RegisterSoftDelete` instead. If your schemas carry hooks for
+other reasons the empty import still applies to you; adopting soft delete just
+does not add that obligation.
+
+**What decides that an entity is soft-deletable.** Embedding the mixin, and
+nothing else. Earlier versions keyed on a field literally named `deleted_at`
+that was `Nillable` — so an entity that merely owned a column with that name
+acquired row-level filtering it never asked for, and one modifier separated the
+two cases. An entity that declares its own `deleted_at` and no mixin is an
+ordinary hard-delete entity.
+
+**Downstream `OpDelete` hooks do not fire.** The rewritten mutation carries
+`OpUpdate`, and the rewrite re-dispatches through the client rather than calling
+the next mutator, so a hook registered after `RegisterSoftDelete` for
+`OpDelete|OpDeleteOne` never runs. Register such hooks for `OpUpdate` and test
+for a non-nil `deleted_at`, or install them before `RegisterSoftDelete`.
 
 ### BaseService Pattern
 
@@ -816,11 +908,18 @@ ordering oracle. So `AsFilterable()`, `AsSearchable()` and `AsSortable()` are op
 field. Presets still grant `ScopeQuery`: eligibility is not exposure
 ([#27](https://github.com/githonllc/entdomain/issues/27)).
 
-**Soft delete silently disables downstream deletion hooks.** The generated delete is
-rewritten as an update, which carries an update operation flag. A consumer hook registered
-for the delete operations therefore never fires at all — this is not two mechanisms
-conflicting, it is one silently replacing the other
-([#12](https://github.com/githonllc/entdomain/issues/12)).
+**Soft delete disables downstream deletion hooks.** The rewritten mutation carries an
+update operation flag, so a consumer hook registered after `RegisterSoftDelete` for the
+delete operations never fires. It is now documented rather than silent (see
+[Soft delete](#soft-delete)) and it is a property of the rewrite itself, not of where the
+rewrite lives ([#18](https://github.com/githonllc/entdomain/issues/18)).
+
+**Soft delete has to be registered, and forgetting it fails open.** `RegisterSoftDelete` is
+one line at client construction and nothing enforces it — a client without it returns
+deleted rows and hard-deletes on `Delete()`. The alternative was a mixin carrying its own
+hook and interceptor, which would oblige every consumer to empty-import `ent/runtime` and
+would need reflection to reach the mutation's client; the trade is recorded on
+[#18](https://github.com/githonllc/entdomain/issues/18).
 
 **The generated service supports exactly one identifier type: `uuid.UUID`.** It is
 hardcoded in every hook signature, every CRUD method and the cursor round-trip of
@@ -839,10 +938,14 @@ initialisation ([#4](https://github.com/githonllc/entdomain/issues/4)).
 
 **Only the field shapes with a fixture are known to compile.** `TestCodegenFixtures`
 generates and compiles every schema under `internal/fixtures/`, which now covers the
-nillable, immutable, enum, JSON/map and named-`GoType` shapes above, plus the non-UUID
-identifier refusal ([#8](https://github.com/githonllc/entdomain/issues/8),
-[#10](https://github.com/githonllc/entdomain/issues/10)). Edges and soft delete have no
-fixture yet; a template change touching them is still unverified until one exists.
+nillable, immutable, enum, JSON/map and named-`GoType` shapes above, plus edges, the
+soft-delete mixin and the non-UUID identifier refusal
+([#8](https://github.com/githonllc/entdomain/issues/8),
+[#10](https://github.com/githonllc/entdomain/issues/10)). Soft delete is the one feature
+with a behavioural proof as well as a compile proof: `internal/softdeleteproof` is a
+separate module with a SQLite driver, so the claim that a direct `client.Doc.Query()`
+excludes deleted rows is checked against a real database rather than against the generated
+source.
 
 ## Contributing
 

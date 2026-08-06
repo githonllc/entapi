@@ -82,10 +82,12 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 		// written records this run's output set, which is what tells a file
 		// left over from an earlier run apart from one just produced.
 		written := make(map[string]bool)
+		wiredAny := false
 		for _, node := range g.Nodes {
 			if len(domainFields(node)) == 0 {
 				continue
 			}
+			wiredAny = true
 
 			// Generate DTO file → ent/{entity}_dto.go
 			path, err := e.generateDTOFile(g, node)
@@ -105,6 +107,22 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			path, err = e.generateWiringFile(g, node)
 			if err != nil {
 				return fmt.Errorf("failed to generate %s wiring: %w", node.Name, err)
+			}
+			written[path] = true
+		}
+
+		// The error classifier is generated once per GRAPH for the reason the
+		// wiring needs it to be: every entity's wiring lands in the one
+		// package, so one declaration serves all of them — and that is what
+		// makes a not-found read the same way whichever operation produced it.
+		//
+		// It is written only when at least one entity produced wiring. Nothing
+		// else would reference it, and an ErrorMap alone in a package is a
+		// public name this extension cannot explain.
+		if wiredAny {
+			path, err := e.generateErrorMapFile(g)
+			if err != nil {
+				return fmt.Errorf("failed to generate the error classifier: %w", err)
 			}
 			written[path] = true
 		}
@@ -214,6 +232,35 @@ func (e *Extension) generateWiringFile(g *gen.Graph, node *gen.Type) (string, er
 
 	filename := fmt.Sprintf("%s_wiring.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
+
+	if err := writeFile(outputPath, buf.Bytes()); err != nil {
+		return "", err
+	}
+	return outputPath, nil
+}
+
+// generateErrorMapFile generates the package-level error classifier the wiring
+// returns every error through.
+// Output: ent/entdomain_errors.go
+//
+// It names ent's own IsNotFound and IsConstraintError, which are generated into
+// the consumer's package rather than exported by the framework — so this one
+// line is the only place where the two halves can meet, and it is why the
+// runtime takes predicates as function values instead of importing ent.
+func (e *Extension) generateErrorMapFile(g *gen.Graph) (string, error) {
+	tmpl, err := template.New("errors").
+		Funcs(e.templateFuncMap()).
+		Parse(errorMapTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse error classifier template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, g); err != nil {
+		return "", fmt.Errorf("failed to render error classifier template: %w", err)
+	}
+
+	outputPath := filepath.Join(g.Config.Target, errorMapFileName)
 
 	if err := writeFile(outputPath, buf.Bytes()); err != nil {
 		return "", err

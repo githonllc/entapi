@@ -28,9 +28,11 @@ import (
 // The identifier type is uuid.UUID because that is what the schema says.
 // Nothing below is written for a particular one.
 //
-// Error classification is deliberately absent: mapping a driver error to
-// not-found or already-exists belongs to the runtime and is issue #13. These
-// functions return what ent returned.
+// Every exported function below returns its error through ErrorMap (see
+// entdomain_errors.go), and each one maps exactly once. That is what makes
+// entdomain.IsNotFound answer the same way whichever operation failed. The
+// sentinel is added to the chain rather than substituted for it, so ent's own
+// error is still reachable with errors.As.
 // ============================================================================
 
 // categoryByID fetches one Category through the eager-load plan.
@@ -53,13 +55,24 @@ func categoryByID(db *Client) func(context.Context, uuid.UUID) (*Category, error
 // response the same shape as a read.
 func categoryReloaded(ctx context.Context, db *Client) func(*Category) (*CategoryResponse, error) {
 	return func(e *Category) (*CategoryResponse, error) {
-		return GetCategory(ctx, db, e.ID)
+		return categoryGet(ctx, db, e.ID)
 	}
+}
+
+// categoryGet is the read without the error mapping.
+//
+// It exists so that a create or an update maps exactly once. Their response is
+// built by re-reading through the eager-load plan, and if that read applied
+// ErrorMap itself the caller would get a doubly wrapped error whose message
+// names the same sentinel twice.
+func categoryGet(ctx context.Context, db *Client, id uuid.UUID) (*CategoryResponse, error) {
+	return entdomain.GetOne(ctx, categoryByID(db), NewCategoryResponse, id)
 }
 
 // GetCategory reads one Category and converts it to its response.
 func GetCategory(ctx context.Context, db *Client, id uuid.UUID) (*CategoryResponse, error) {
-	return entdomain.GetOne(ctx, categoryByID(db), NewCategoryResponse, id)
+	r, err := categoryGet(ctx, db, id)
+	return r, ErrorMap.MapError(err)
 }
 
 // ListCategories runs a filtered, ordered, paginated query.
@@ -73,12 +86,17 @@ func GetCategory(ctx context.Context, db *Client, id uuid.UUID) (*CategoryRespon
 //
 // A nil filter contributes no predicates, so a caller with nothing to filter by
 // does not need a branch of its own.
+//
+// The sort-key failure returns before the mapping. It is already an
+// entdomain.ErrValidation and never reached the database, so there is nothing
+// for a persistence-layer classifier to say about it.
 func ListCategories(ctx context.Context, db *Client, f *CategoryFilter, r entdomain.ListRequest) (*entdomain.Page[CategoryResponse], error) {
 	order, err := CategoryOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	return entdomain.ListPage(ctx, CategoryQueryWithResponseEdges(db.Category.Query()), f.Predicates(), order, r, NewCategoryResponse)
+	p, err := entdomain.ListPage(ctx, CategoryQueryWithResponseEdges(db.Category.Query()), f.Predicates(), order, r, NewCategoryResponse)
+	return p, ErrorMap.MapError(err)
 }
 
 // CreateCategory inserts one Category and returns its response.
@@ -87,7 +105,8 @@ func ListCategories(ctx context.Context, db *Client, f *CategoryFilter, r entdom
 // else, so validation is a compile-time requirement here rather than a step
 // this function could forget on the caller's behalf.
 func CreateCategory(ctx context.Context, db *Client, v *ValidCategoryCreateRequest) (*CategoryResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.Category.Create()), categoryReloaded(ctx, db))
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.Category.Create()), categoryReloaded(ctx, db))
+	return r, ErrorMap.MapError(err)
 }
 
 // UpdateCategory applies a validated patch to one Category.
@@ -96,7 +115,8 @@ func CreateCategory(ctx context.Context, db *Client, v *ValidCategoryCreateReque
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
 func UpdateCategory(ctx context.Context, db *Client, id uuid.UUID, v *ValidCategoryPatchRequest) (*CategoryResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.Category.UpdateOneID(id)), categoryReloaded(ctx, db))
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.Category.UpdateOneID(id)), categoryReloaded(ctx, db))
+	return r, ErrorMap.MapError(err)
 }
 
 // DeleteCategory removes one Category.
@@ -106,7 +126,7 @@ func UpdateCategory(ctx context.Context, db *Client, id uuid.UUID, v *ValidCateg
 // soft-delete column is decided by an ent interceptor or mixin, not by a
 // filename convention read out of the schema.
 func DeleteCategory(ctx context.Context, db *Client, id uuid.UUID) error {
-	return db.Category.DeleteOneID(id).Exec(ctx)
+	return ErrorMap.MapError(db.Category.DeleteOneID(id).Exec(ctx))
 }
 
 // DeleteBatchCategories removes several Categories in one statement and
@@ -120,6 +140,11 @@ func DeleteCategory(ctx context.Context, db *Client, id uuid.UUID) error {
 // An empty list deletes nothing. That is ent's own reading of IDIn with no
 // arguments, not a guard written here — a guard would be a second place for the
 // rule to live, and the failure it protects against is unrecoverable.
+//
+// An id that matched nothing is not an error here, so this operation never
+// produces a not-found — but it can still fail a foreign-key check, which is
+// exactly the case the mapping must NOT report as already-exists.
 func DeleteBatchCategories(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
-	return db.Category.Delete().Where(category.IDIn(ids...)).Exec(ctx)
+	n, err := db.Category.Delete().Where(category.IDIn(ids...)).Exec(ctx)
+	return n, ErrorMap.MapError(err)
 }

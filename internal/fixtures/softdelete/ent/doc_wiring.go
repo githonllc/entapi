@@ -28,9 +28,11 @@ import (
 // The identifier type is uuid.UUID because that is what the schema says.
 // Nothing below is written for a particular one.
 //
-// Error classification is deliberately absent: mapping a driver error to
-// not-found or already-exists belongs to the runtime and is issue #13. These
-// functions return what ent returned.
+// Every exported function below returns its error through ErrorMap (see
+// entdomain_errors.go), and each one maps exactly once. That is what makes
+// entdomain.IsNotFound answer the same way whichever operation failed. The
+// sentinel is added to the chain rather than substituted for it, so ent's own
+// error is still reachable with errors.As.
 // ============================================================================
 
 // docByID fetches one Doc through the eager-load plan.
@@ -53,13 +55,24 @@ func docByID(db *Client) func(context.Context, uuid.UUID) (*Doc, error) {
 // response the same shape as a read.
 func docReloaded(ctx context.Context, db *Client) func(*Doc) (*DocResponse, error) {
 	return func(e *Doc) (*DocResponse, error) {
-		return GetDoc(ctx, db, e.ID)
+		return docGet(ctx, db, e.ID)
 	}
+}
+
+// docGet is the read without the error mapping.
+//
+// It exists so that a create or an update maps exactly once. Their response is
+// built by re-reading through the eager-load plan, and if that read applied
+// ErrorMap itself the caller would get a doubly wrapped error whose message
+// names the same sentinel twice.
+func docGet(ctx context.Context, db *Client, id uuid.UUID) (*DocResponse, error) {
+	return entdomain.GetOne(ctx, docByID(db), NewDocResponse, id)
 }
 
 // GetDoc reads one Doc and converts it to its response.
 func GetDoc(ctx context.Context, db *Client, id uuid.UUID) (*DocResponse, error) {
-	return entdomain.GetOne(ctx, docByID(db), NewDocResponse, id)
+	r, err := docGet(ctx, db, id)
+	return r, ErrorMap.MapError(err)
 }
 
 // ListDocs runs a filtered, ordered, paginated query.
@@ -73,12 +86,17 @@ func GetDoc(ctx context.Context, db *Client, id uuid.UUID) (*DocResponse, error)
 //
 // A nil filter contributes no predicates, so a caller with nothing to filter by
 // does not need a branch of its own.
+//
+// The sort-key failure returns before the mapping. It is already an
+// entdomain.ErrValidation and never reached the database, so there is nothing
+// for a persistence-layer classifier to say about it.
 func ListDocs(ctx context.Context, db *Client, f *DocFilter, r entdomain.ListRequest) (*entdomain.Page[DocResponse], error) {
 	order, err := DocOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	return entdomain.ListPage(ctx, DocQueryWithResponseEdges(db.Doc.Query()), f.Predicates(), order, r, NewDocResponse)
+	p, err := entdomain.ListPage(ctx, DocQueryWithResponseEdges(db.Doc.Query()), f.Predicates(), order, r, NewDocResponse)
+	return p, ErrorMap.MapError(err)
 }
 
 // CreateDoc inserts one Doc and returns its response.
@@ -87,7 +105,8 @@ func ListDocs(ctx context.Context, db *Client, f *DocFilter, r entdomain.ListReq
 // else, so validation is a compile-time requirement here rather than a step
 // this function could forget on the caller's behalf.
 func CreateDoc(ctx context.Context, db *Client, v *ValidDocCreateRequest) (*DocResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.Doc.Create()), docReloaded(ctx, db))
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.Doc.Create()), docReloaded(ctx, db))
+	return r, ErrorMap.MapError(err)
 }
 
 // UpdateDoc applies a validated patch to one Doc.
@@ -96,7 +115,8 @@ func CreateDoc(ctx context.Context, db *Client, v *ValidDocCreateRequest) (*DocR
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
 func UpdateDoc(ctx context.Context, db *Client, id uuid.UUID, v *ValidDocPatchRequest) (*DocResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.Doc.UpdateOneID(id)), docReloaded(ctx, db))
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.Doc.UpdateOneID(id)), docReloaded(ctx, db))
+	return r, ErrorMap.MapError(err)
 }
 
 // DeleteDoc removes one Doc.
@@ -106,7 +126,7 @@ func UpdateDoc(ctx context.Context, db *Client, id uuid.UUID, v *ValidDocPatchRe
 // soft-delete column is decided by an ent interceptor or mixin, not by a
 // filename convention read out of the schema.
 func DeleteDoc(ctx context.Context, db *Client, id uuid.UUID) error {
-	return db.Doc.DeleteOneID(id).Exec(ctx)
+	return ErrorMap.MapError(db.Doc.DeleteOneID(id).Exec(ctx))
 }
 
 // DeleteBatchDocs removes several Docs in one statement and
@@ -120,6 +140,11 @@ func DeleteDoc(ctx context.Context, db *Client, id uuid.UUID) error {
 // An empty list deletes nothing. That is ent's own reading of IDIn with no
 // arguments, not a guard written here — a guard would be a second place for the
 // rule to live, and the failure it protects against is unrecoverable.
+//
+// An id that matched nothing is not an error here, so this operation never
+// produces a not-found — but it can still fail a foreign-key check, which is
+// exactly the case the mapping must NOT report as already-exists.
 func DeleteBatchDocs(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
-	return db.Doc.Delete().Where(doc.IDIn(ids...)).Exec(ctx)
+	n, err := db.Doc.Delete().Where(doc.IDIn(ids...)).Exec(ctx)
+	return n, ErrorMap.MapError(err)
 }

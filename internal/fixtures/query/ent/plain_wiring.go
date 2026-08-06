@@ -28,9 +28,11 @@ import (
 // The identifier type is uuid.UUID because that is what the schema says.
 // Nothing below is written for a particular one.
 //
-// Error classification is deliberately absent: mapping a driver error to
-// not-found or already-exists belongs to the runtime and is issue #13. These
-// functions return what ent returned.
+// Every exported function below returns its error through ErrorMap (see
+// entdomain_errors.go), and each one maps exactly once. That is what makes
+// entdomain.IsNotFound answer the same way whichever operation failed. The
+// sentinel is added to the chain rather than substituted for it, so ent's own
+// error is still reachable with errors.As.
 // ============================================================================
 
 // plainByID fetches one Plain through the eager-load plan.
@@ -43,9 +45,20 @@ func plainByID(db *Client) func(context.Context, uuid.UUID) (*Plain, error) {
 	}
 }
 
+// plainGet is the read without the error mapping.
+//
+// It exists so that a create or an update maps exactly once. Their response is
+// built by re-reading through the eager-load plan, and if that read applied
+// ErrorMap itself the caller would get a doubly wrapped error whose message
+// names the same sentinel twice.
+func plainGet(ctx context.Context, db *Client, id uuid.UUID) (*PlainResponse, error) {
+	return entdomain.GetOne(ctx, plainByID(db), NewPlainResponse, id)
+}
+
 // GetPlain reads one Plain and converts it to its response.
 func GetPlain(ctx context.Context, db *Client, id uuid.UUID) (*PlainResponse, error) {
-	return entdomain.GetOne(ctx, plainByID(db), NewPlainResponse, id)
+	r, err := plainGet(ctx, db, id)
+	return r, ErrorMap.MapError(err)
 }
 
 // ListPlains runs a filtered, ordered, paginated query.
@@ -59,12 +72,17 @@ func GetPlain(ctx context.Context, db *Client, id uuid.UUID) (*PlainResponse, er
 //
 // A nil filter contributes no predicates, so a caller with nothing to filter by
 // does not need a branch of its own.
+//
+// The sort-key failure returns before the mapping. It is already an
+// entdomain.ErrValidation and never reached the database, so there is nothing
+// for a persistence-layer classifier to say about it.
 func ListPlains(ctx context.Context, db *Client, f *PlainFilter, r entdomain.ListRequest) (*entdomain.Page[PlainResponse], error) {
 	order, err := PlainOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	return entdomain.ListPage(ctx, PlainQueryWithResponseEdges(db.Plain.Query()), f.Predicates(), order, r, NewPlainResponse)
+	p, err := entdomain.ListPage(ctx, PlainQueryWithResponseEdges(db.Plain.Query()), f.Predicates(), order, r, NewPlainResponse)
+	return p, ErrorMap.MapError(err)
 }
 
 // CreatePlain inserts one Plain and returns its response.
@@ -73,7 +91,8 @@ func ListPlains(ctx context.Context, db *Client, f *PlainFilter, r entdomain.Lis
 // else, so validation is a compile-time requirement here rather than a step
 // this function could forget on the caller's behalf.
 func CreatePlain(ctx context.Context, db *Client, v *ValidPlainCreateRequest) (*PlainResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.Plain.Create()), NewPlainResponse)
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.Plain.Create()), NewPlainResponse)
+	return r, ErrorMap.MapError(err)
 }
 
 // UpdatePlain applies a validated patch to one Plain.
@@ -82,7 +101,8 @@ func CreatePlain(ctx context.Context, db *Client, v *ValidPlainCreateRequest) (*
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
 func UpdatePlain(ctx context.Context, db *Client, id uuid.UUID, v *ValidPlainPatchRequest) (*PlainResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.Plain.UpdateOneID(id)), NewPlainResponse)
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.Plain.UpdateOneID(id)), NewPlainResponse)
+	return r, ErrorMap.MapError(err)
 }
 
 // DeletePlain removes one Plain.
@@ -92,7 +112,7 @@ func UpdatePlain(ctx context.Context, db *Client, id uuid.UUID, v *ValidPlainPat
 // soft-delete column is decided by an ent interceptor or mixin, not by a
 // filename convention read out of the schema.
 func DeletePlain(ctx context.Context, db *Client, id uuid.UUID) error {
-	return db.Plain.DeleteOneID(id).Exec(ctx)
+	return ErrorMap.MapError(db.Plain.DeleteOneID(id).Exec(ctx))
 }
 
 // DeleteBatchPlains removes several Plains in one statement and
@@ -106,6 +126,11 @@ func DeletePlain(ctx context.Context, db *Client, id uuid.UUID) error {
 // An empty list deletes nothing. That is ent's own reading of IDIn with no
 // arguments, not a guard written here — a guard would be a second place for the
 // rule to live, and the failure it protects against is unrecoverable.
+//
+// An id that matched nothing is not an error here, so this operation never
+// produces a not-found — but it can still fail a foreign-key check, which is
+// exactly the case the mapping must NOT report as already-exists.
 func DeleteBatchPlains(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
-	return db.Plain.Delete().Where(plain.IDIn(ids...)).Exec(ctx)
+	n, err := db.Plain.Delete().Where(plain.IDIn(ids...)).Exec(ctx)
+	return n, ErrorMap.MapError(err)
 }

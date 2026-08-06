@@ -28,9 +28,11 @@ import (
 // The identifier type is uuid.UUID because that is what the schema says.
 // Nothing below is written for a particular one.
 //
-// Error classification is deliberately absent: mapping a driver error to
-// not-found or already-exists belongs to the runtime and is issue #13. These
-// functions return what ent returned.
+// Every exported function below returns its error through ErrorMap (see
+// entdomain_errors.go), and each one maps exactly once. That is what makes
+// entdomain.IsNotFound answer the same way whichever operation failed. The
+// sentinel is added to the chain rather than substituted for it, so ent's own
+// error is still reachable with errors.As.
 // ============================================================================
 
 // enumWidgetByID fetches one EnumWidget through the eager-load plan.
@@ -43,9 +45,20 @@ func enumWidgetByID(db *Client) func(context.Context, uuid.UUID) (*EnumWidget, e
 	}
 }
 
+// enumWidgetGet is the read without the error mapping.
+//
+// It exists so that a create or an update maps exactly once. Their response is
+// built by re-reading through the eager-load plan, and if that read applied
+// ErrorMap itself the caller would get a doubly wrapped error whose message
+// names the same sentinel twice.
+func enumWidgetGet(ctx context.Context, db *Client, id uuid.UUID) (*EnumWidgetResponse, error) {
+	return entdomain.GetOne(ctx, enumWidgetByID(db), NewEnumWidgetResponse, id)
+}
+
 // GetEnumWidget reads one EnumWidget and converts it to its response.
 func GetEnumWidget(ctx context.Context, db *Client, id uuid.UUID) (*EnumWidgetResponse, error) {
-	return entdomain.GetOne(ctx, enumWidgetByID(db), NewEnumWidgetResponse, id)
+	r, err := enumWidgetGet(ctx, db, id)
+	return r, ErrorMap.MapError(err)
 }
 
 // ListEnumWidgets runs a filtered, ordered, paginated query.
@@ -59,12 +72,17 @@ func GetEnumWidget(ctx context.Context, db *Client, id uuid.UUID) (*EnumWidgetRe
 //
 // A nil filter contributes no predicates, so a caller with nothing to filter by
 // does not need a branch of its own.
+//
+// The sort-key failure returns before the mapping. It is already an
+// entdomain.ErrValidation and never reached the database, so there is nothing
+// for a persistence-layer classifier to say about it.
 func ListEnumWidgets(ctx context.Context, db *Client, f *EnumWidgetFilter, r entdomain.ListRequest) (*entdomain.Page[EnumWidgetResponse], error) {
 	order, err := EnumWidgetOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	return entdomain.ListPage(ctx, EnumWidgetQueryWithResponseEdges(db.EnumWidget.Query()), f.Predicates(), order, r, NewEnumWidgetResponse)
+	p, err := entdomain.ListPage(ctx, EnumWidgetQueryWithResponseEdges(db.EnumWidget.Query()), f.Predicates(), order, r, NewEnumWidgetResponse)
+	return p, ErrorMap.MapError(err)
 }
 
 // CreateEnumWidget inserts one EnumWidget and returns its response.
@@ -73,7 +91,8 @@ func ListEnumWidgets(ctx context.Context, db *Client, f *EnumWidgetFilter, r ent
 // else, so validation is a compile-time requirement here rather than a step
 // this function could forget on the caller's behalf.
 func CreateEnumWidget(ctx context.Context, db *Client, v *ValidEnumWidgetCreateRequest) (*EnumWidgetResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.EnumWidget.Create()), NewEnumWidgetResponse)
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.EnumWidget.Create()), NewEnumWidgetResponse)
+	return r, ErrorMap.MapError(err)
 }
 
 // UpdateEnumWidget applies a validated patch to one EnumWidget.
@@ -82,7 +101,8 @@ func CreateEnumWidget(ctx context.Context, db *Client, v *ValidEnumWidgetCreateR
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
 func UpdateEnumWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidEnumWidgetPatchRequest) (*EnumWidgetResponse, error) {
-	return entdomain.SaveOne(ctx, v.Apply(db.EnumWidget.UpdateOneID(id)), NewEnumWidgetResponse)
+	r, err := entdomain.SaveOne(ctx, v.Apply(db.EnumWidget.UpdateOneID(id)), NewEnumWidgetResponse)
+	return r, ErrorMap.MapError(err)
 }
 
 // DeleteEnumWidget removes one EnumWidget.
@@ -92,7 +112,7 @@ func UpdateEnumWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidEnu
 // soft-delete column is decided by an ent interceptor or mixin, not by a
 // filename convention read out of the schema.
 func DeleteEnumWidget(ctx context.Context, db *Client, id uuid.UUID) error {
-	return db.EnumWidget.DeleteOneID(id).Exec(ctx)
+	return ErrorMap.MapError(db.EnumWidget.DeleteOneID(id).Exec(ctx))
 }
 
 // DeleteBatchEnumWidgets removes several EnumWidgets in one statement and
@@ -106,6 +126,11 @@ func DeleteEnumWidget(ctx context.Context, db *Client, id uuid.UUID) error {
 // An empty list deletes nothing. That is ent's own reading of IDIn with no
 // arguments, not a guard written here — a guard would be a second place for the
 // rule to live, and the failure it protects against is unrecoverable.
+//
+// An id that matched nothing is not an error here, so this operation never
+// produces a not-found — but it can still fail a foreign-key check, which is
+// exactly the case the mapping must NOT report as already-exists.
 func DeleteBatchEnumWidgets(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
-	return db.EnumWidget.Delete().Where(enumwidget.IDIn(ids...)).Exec(ctx)
+	n, err := db.EnumWidget.Delete().Where(enumwidget.IDIn(ids...)).Exec(ctx)
+	return n, ErrorMap.MapError(err)
 }

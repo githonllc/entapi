@@ -894,7 +894,7 @@ runtime switch brings it back.
 | `{Entity}Filter` | one parameter per operator per `Filterable` field, plus `Q` when any field is `Searchable` |
 | `(*{Entity}Filter).Predicates() []predicate.{Entity}` | the ent predicates, combined conjunctively by `Where(...)` |
 | `{Entity}SortKeys []string` | the sort allow-list: exactly the `Sortable` fields |
-| `{Entity}Order(entdomain.ListRequest) ([]{entity}.OrderOption, error)` | validates the requested key against the allow-list and returns ent's own order builders |
+| `{Entity}Order(entdomain.ListRequest) ([]{entity}.OrderOption, error)` | validates the requested key against the allow-list and returns ent's own order builders, always ending with the primary key |
 
 **Operator coverage is whatever ent derives for the field's type**, read from
 `$field.Ops` rather than from a table this package keeps. A string gets thirteen
@@ -925,9 +925,9 @@ paging — an ordering oracle over columns the caller was never meant to read. T
 caller's string is checked against `{Entity}SortKeys` and then thrown away: what
 reaches the query is the `By<Field>` builder ent generated for that column,
 looked up by an already-validated key. A key outside the list is an
-`ErrValidation`, never a silent fallback. There is **no default sort key** —
-which column to order by when the caller names none is a policy the schema does
-not contain.
+`ErrValidation`, never a silent fallback. There is still **no default sort
+column** — which column to order by when the caller names none is a policy the
+schema does not contain.
 
 ```go
 os, err := ent.RecordOrder(req)          // ErrValidation if req.SortBy is not allowed
@@ -942,6 +942,44 @@ than emitting a call ent never wrote: a marker on a field withholding
 `ScopeQuery`, `Searchable` on a type with no `Contains` predicate, `Filterable`
 on a type with no predicates at all, and `Sortable` on a type ent's order
 builders skip because it is not comparable.
+
+### Migrating from unordered list results
+
+**Every generated list query now carries an `ORDER BY`, and a request that names
+no sort comes back in ascending primary-key order** instead of whatever the
+engine felt like ([#59](https://github.com/githonllc/entdomain/issues/59),
+[ADR-0002](docs/adr/0002-deterministic-pagination-pk-tiebreak.md)).
+
+`{Entity}Order` used to return no order options at all when the request named no
+sort key, and `ListPage` then issued `LIMIT`/`OFFSET` with no `ORDER BY`. SQL row
+order without one is unspecified, so walking the pages could hand the same row
+out twice and never hand out another — **with zero concurrent writes**. The same
+hazard applied *with* a requested sort whenever the sort column was non-unique:
+equal keys have unspecified relative order, so a page boundary cut through them
+differently on each query.
+
+```go
+// before: ORDER BY created_at        — ties cut nondeterministically by page
+// after:  ORDER BY created_at, id    — the tiebreak follows the requested direction
+os, _ := ent.RecordOrder(entdomain.ListRequest{SortBy: "created_at", Order: "desc"})
+
+// before: no ORDER BY at all         — offset paging over an unspecified order
+// after:  ORDER BY id ASC
+os, _ = ent.RecordOrder(entdomain.ListRequest{})
+```
+
+The primary key is unique, so appending it turns any prefix order into a total
+one; that is the entire correctness argument. It is a **determinism floor, not a
+default sort**: the response claims no ordering the caller did not ask for, it
+merely stops being random, and the "no default sort column" policy above is
+unchanged. The term is skipped when the requested key already *is* the primary
+key — never `ORDER BY id, id`.
+
+What to expect when upgrading: generated `{entity}_filter.go` files change and
+must be regenerated; a test that pinned "no sort requested means no ordering"
+now fails and should assert the primary-key term instead; and a list endpoint
+that was accidentally relying on insertion order will start returning primary-key
+order. A consumer who wants a different default still passes `SortBy` itself.
 
 ### Wiring
 

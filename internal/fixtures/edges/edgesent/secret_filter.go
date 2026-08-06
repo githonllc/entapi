@@ -77,21 +77,38 @@ var SecretSortKeys = []string{}
 // a request to sort by a column that is out of bounds has no correct answer,
 // and quietly serving a differently-ordered page is worse than refusing.
 //
-// There is no default sort key. Which column to order by when the caller names
-// none is a policy the schema does not contain, so generation does not invent
-// one; a consumer that wants a default passes SortBy itself.
+// There is still no default sort COLUMN. Which column to order by when the
+// caller names none is a policy the schema does not contain, so generation does
+// not invent one; a consumer that wants a default passes SortBy itself.
+//
+// Every result nevertheless ends with the primary key (ADR-0002). Offset
+// pagination is only correct over a TOTAL order: LIMIT/OFFSET over a result set
+// that is unordered, or ordered by a column with ties, lets rows repeat or
+// vanish between pages with zero concurrent writes. The primary key is unique,
+// so appending it turns any prefix order into a total one — that is the whole
+// correctness argument.
+//
+// The primary-key term is a determinism floor, not a default sort: the response
+// does not claim an ordering the caller never requested, it merely stops being
+// random. The tiebreak follows the requested direction so that a descending
+// walk stays descending, and it is skipped when the requested key IS the
+// primary key, since ORDER BY id, id says nothing the first term did not.
 func SecretOrder(r entdomain.ListRequest) ([]secret.OrderOption, error) {
 	key, desc, err := r.SortKey(SecretSortKeys, "")
 	if err != nil {
 		return nil, err
 	}
+	dir := sql.OrderAsc()
+	if desc {
+		dir = sql.OrderDesc()
+	}
 	by, ok := secretSortOptions[key]
 	if !ok {
-		// Only reachable when no sort was requested and no default applies.
-		return nil, nil
+		return []secret.OrderOption{secret.ByID(sql.OrderAsc())}, nil
 	}
-	if desc {
-		return []secret.OrderOption{by(sql.OrderDesc())}, nil
+	order := []secret.OrderOption{by(dir)}
+	if key != "id" {
+		order = append(order, secret.ByID(dir))
 	}
-	return []secret.OrderOption{by(sql.OrderAsc())}, nil
+	return order, nil
 }

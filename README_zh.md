@@ -818,7 +818,7 @@ golden JSON 测试守着。
 | `{Entity}Filter` | 每个 `Filterable` 字段按操作符各一个参数；只要有 `Searchable` 字段就额外带 `Q` |
 | `(*{Entity}Filter).Predicates() []predicate.{Entity}` | 生成 ent 谓词，由 `Where(...)` 合取组合 |
 | `{Entity}SortKeys []string` | 排序白名单：恰好是那些 `Sortable` 字段 |
-| `{Entity}Order(entdomain.ListRequest) ([]{entity}.OrderOption, error)` | 用白名单校验请求的排序键，返回 ent 自己的排序构建器 |
+| `{Entity}Order(entdomain.ListRequest) ([]{entity}.OrderOption, error)` | 用白名单校验请求的排序键，返回 ent 自己的排序构建器，并总以主键收尾 |
 
 **操作符覆盖面就是 ent 为该字段类型推导出的那一套**，取自 `$field.Ops`，而不是本包
 自备的一张表。string 得到 13 个参数，enum 4 个，可选 `int` 8 + 1 个，`time.Time` 8 个。
@@ -845,7 +845,8 @@ type RecordFilter struct {
 扫描的触发点，配合分页还是一个针对调用方本不该读到的列的排序预言机。调用方给的字符串
 先与 `{Entity}SortKeys` 比对，然后被丢弃：真正进入查询的是 ent 为该列生成的
 `By<Field>` 构建器，用一个已经校验过的键查出来。白名单之外的键返回 `ErrValidation`，
-绝不静默降级。**没有默认排序键**——调用方没指定时该按哪列排序是 schema 里不存在的策略。
+绝不静默降级。**仍然没有默认排序列**——调用方没指定时该按哪列排序是 schema 里不存在
+的策略。
 
 ```go
 os, err := ent.RecordOrder(req)          // req.SortBy 不在白名单内时返回 ErrValidation
@@ -859,6 +860,37 @@ page, err := entdomain.ListPage(ctx, client.Record.Query(), filter.Predicates(),
 调用：标记加在没有 `ScopeQuery` 的字段上、`Searchable` 加在没有 `Contains` 谓词的
 类型上、`Filterable` 加在完全没有谓词的类型上，以及 `Sortable` 加在因不可比较而被
 ent 排序构建器跳过的类型上。
+
+### 从无序的列表结果迁移
+
+**现在所有生成的列表查询都必带 `ORDER BY`；未请求排序的请求返回稳定的主键升序**，
+而不再是引擎当时碰巧给出的顺序（[#59](https://github.com/githonllc/entdomain/issues/59)、
+[ADR-0002](docs/adr/0002-deterministic-pagination-pk-tiebreak.md)）。
+
+此前请求没指定排序键时 `{Entity}Order` 返回空的排序选项，`ListPage` 于是发出不带
+`ORDER BY` 的 `LIMIT`/`OFFSET`。SQL 在没有 `ORDER BY` 时的行序是未定义的，所以翻页
+可能把同一行发两次、另一行一次都不发——**且不需要任何并发写入**。请求了排序也一样：
+只要排序列不唯一，相等键之间的相对次序就是未定义的，页边界每次查询都可能切在不同的
+位置。
+
+```go
+// 之前：ORDER BY created_at        —— 相等键处的页边界不确定
+// 之后：ORDER BY created_at, id    —— tiebreak 跟随请求的方向
+os, _ := ent.RecordOrder(entdomain.ListRequest{SortBy: "created_at", Order: "desc"})
+
+// 之前：完全没有 ORDER BY          —— 在未定义次序上做 offset 分页
+// 之后：ORDER BY id ASC
+os, _ = ent.RecordOrder(entdomain.ListRequest{})
+```
+
+主键唯一，因此任何前缀序追加主键之后即成为全序——这就是本改动正确性的全部论证。它是
+**确定性下限，不是默认排序**：响应不声称调用者未请求的排序，只是不再随机，上面「没有
+默认排序列」的政策不变。当请求的排序键本身就是主键时会跳过追加——绝不产生
+`ORDER BY id, id`。
+
+升级时会看到：生成的 `{entity}_filter.go` 变化，需要重新生成；钉住「未请求排序就没有
+排序」的测试会失败，应改为断言主键项；原先无意中依赖插入顺序的列表端点将开始返回主键
+序。想要别的默认顺序的消费者，仍然自己传 `SortBy`。
 
 ### 接线（wiring）
 

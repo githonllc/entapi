@@ -123,6 +123,11 @@ func TestSortRejectsAnythingOutsideTheAllowList(t *testing.T) {
 // TestSortAcceptsAnAllowedKeyInBothDirections shows the allow-list is a
 // checkpoint rather than a wall, and that the column reaching SQL is ent's own
 // constant rather than anything the caller spelled.
+//
+// It also pins ADR-0002's tiebreak: the requested column comes first and the
+// primary key follows it, in the SAME direction, so a descending walk stays
+// descending all the way down. created_at is not unique, so without that second
+// term the page boundaries cut through ties nondeterministically.
 func TestSortAcceptsAnAllowedKeyInBothDirections(t *testing.T) {
 	for _, tc := range []struct {
 		order   string
@@ -138,30 +143,62 @@ func TestSortAcceptsAnAllowedKeyInBothDirections(t *testing.T) {
 			if err != nil {
 				t.Fatalf("RecordOrder: unexpected error %v", err)
 			}
-			if len(opts) != 1 {
-				t.Fatalf("got %d order options, want 1", len(opts))
+			if len(opts) != 2 {
+				t.Fatalf("got %d order options, want 2 (the requested column plus the primary-key tiebreak)", len(opts))
 			}
 			query := selectorSQL(orderFns(opts)...)
-			if !strings.Contains(query, record.FieldCreatedAt) {
-				t.Errorf("ORDER BY does not name %q: %s", record.FieldCreatedAt, query)
+			at := strings.Index(query, record.FieldCreatedAt)
+			if at < 0 {
+				t.Fatalf("ORDER BY does not name %q: %s", record.FieldCreatedAt, query)
 			}
-			if got := strings.Contains(query, "DESC"); got != tc.wantDsc {
-				t.Errorf("order %q produced DESC = %v, want %v: %s", tc.order, got, tc.wantDsc, query)
+			if id := strings.Index(query[at:], "`"+record.FieldID+"`"); id < 0 {
+				t.Errorf("ORDER BY does not append %q after %q: %s", record.FieldID, record.FieldCreatedAt, query)
+			}
+			// Both terms carry the direction, or neither does — a tiebreak that
+			// disagreed with its primary term would reverse inside every group
+			// of equal keys.
+			wantDesc := 0
+			if tc.wantDsc {
+				wantDesc = 2
+			}
+			if got := strings.Count(query, "DESC"); got != wantDesc {
+				t.Errorf("order %q produced %d DESC term(s), want %d: %s", tc.order, got, wantDesc, query)
 			}
 		})
 	}
 }
 
-// TestNoSortRequestedOrdersByNothing pins the generated default: none. Picking
-// a column to order by when the caller named none is a policy decision the
-// schema does not contain, so generation does not make one.
-func TestNoSortRequestedOrdersByNothing(t *testing.T) {
+// TestNoSortRequestedOrdersByID pins ADR-0002's determinism floor. The policy
+// this replaced — "no sort requested means no ORDER BY" — was not a neutral
+// default: LIMIT/OFFSET over an unordered result set lets rows repeat or vanish
+// between pages with zero concurrent writes, so offset pagination was simply
+// incorrect without it.
+//
+// There is still no default sort COLUMN, which is the policy the schema does
+// not contain. The primary key is not a guess: it is unique, so ordering by it
+// makes the result total, and it is the only term returned here — the response
+// claims no ordering the caller did not request, it merely stops being random.
+func TestNoSortRequestedOrdersByID(t *testing.T) {
 	opts, err := RecordOrder(entdomain.ListRequest{})
 	if err != nil {
 		t.Fatalf("RecordOrder: unexpected error %v", err)
 	}
-	if len(opts) != 0 {
-		t.Fatalf("got %d order options for an empty request, want 0", len(opts))
+	if len(opts) != 1 {
+		t.Fatalf("got %d order options for an empty request, want exactly 1 (the primary key)", len(opts))
+	}
+
+	query := selectorSQL(orderFns(opts)...)
+	want := selectorSQL(orderFns([]record.OrderOption{record.ByID(sql.OrderAsc())})...)
+	if query != want {
+		t.Errorf("unsorted request rendered\n  %s\nwant the primary-key ascending term alone\n  %s", query, want)
+	}
+	if strings.Contains(query, "DESC") {
+		t.Errorf("the determinism floor must be ascending: %s", query)
+	}
+	for _, column := range []string{record.FieldTitle, record.FieldCreatedAt} {
+		if strings.Contains(query, column) {
+			t.Errorf("unsorted request ordered by %q, which the caller never asked for: %s", column, query)
+		}
 	}
 }
 

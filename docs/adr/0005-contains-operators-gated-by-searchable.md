@@ -1,7 +1,11 @@
 # 0005 — Substring operators require the Searchable marker, not just Filterable
 
-**Status:** Proposed (owner decision required — this breaks generated URL
-contracts) · **Date:** 2026-08-06 · **Tracking issue:** [#64](https://github.com/githonllc/entdomain/issues/64)
+**Status:** Accepted (2026-08-06, owner-ratified via arbitration — panel
+`[degraded]`: Gemini 3.1 Pro + Fable seats, both → this option; deciding fact:
+the repo has **zero released tags**, local and remote, and the one documented
+consumer has no `_contains` dependency, so pre-tag is the only window in which
+a URL-contract fix costs nothing) · **Date:** 2026-08-06 ·
+**Tracking issue:** [#64](https://github.com/githonllc/entdomain/issues/64)
 
 ## Context
 
@@ -33,6 +37,16 @@ Operator classes, not one bucket:
   `_contains`, `_icontains`, `_ieq`, `_suffix` — the operators whose cost
   profile matches the free-text disjunction that marker already owns.
 
+Two classification notes, recorded from the ratification audit:
+
+- `_ieq` (EqualFold) is **exact-match semantics**, not substring — it sits in
+  the expensive class purely for its cost profile: `LOWER(x) = LOWER(?)` is
+  unindexable without a functional index, exactly like a substring scan.
+- A field that is Searchable but **not** Filterable emits **no structured
+  parameters** (unchanged from today): Filterable is what opens the structured
+  surface; Searchable widens an already-open surface with the substring class,
+  and alone it still only feeds the free-text `q` disjunction.
+
 `schema_conflicts.go` keeps refusing markers the type cannot honour; the
 conflict message for Searchable-without-Contains stays accurate under the new
 split.
@@ -47,6 +61,12 @@ split.
   both READMEs per the established convention, and a major-version tag.
 - Field annotations become honest: the expensive surface is opt-in per field,
   consistent with the sort allow-list's security posture.
+- **An accepted coupling, stated rather than silent:** wanting the structured
+  `_contains` parameter now requires `AsSearchable()`, which *also* enrolls
+  the field in the free-text `q` disjunction — the two are not separately
+  expressible. That is the price of refusing a third marker, and it is paid
+  knowingly; a consumer who needs one without the other writes their own
+  predicate against ent directly.
 - `queryconflict` fixture gains rows; `query` fixture regenerates with a
   Searchable+Filterable field demonstrating both classes.
 

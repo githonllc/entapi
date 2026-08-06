@@ -1,6 +1,6 @@
 # 0002 — Every generated list order ends with a primary-key tiebreak
 
-**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** TBD
+**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** [#59](https://github.com/githonllc/entdomain/issues/59)
 
 ## Context
 

@@ -1,7 +1,7 @@
 # 0005 — Substring operators require the Searchable marker, not just Filterable
 
 **Status:** Proposed (owner decision required — this breaks generated URL
-contracts) · **Date:** 2026-08-06 · **Tracking issue:** TBD
+contracts) · **Date:** 2026-08-06 · **Tracking issue:** [#64](https://github.com/githonllc/entdomain/issues/64)
 
 ## Context
 

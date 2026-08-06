@@ -1,6 +1,6 @@
 # 0001 — Request key matching is strict: a case-variant key is an error, never a silent no-op
 
-**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** TBD
+**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** [#58](https://github.com/githonllc/entdomain/issues/58)
 
 ## Context
 

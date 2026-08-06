@@ -1,6 +1,6 @@
 # 0004 — The ownership marker, not the current schema, decides what cleanup may delete
 
-**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** TBD
+**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** [#63](https://github.com/githonllc/entdomain/issues/63)
 
 ## Context
 

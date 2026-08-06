@@ -1,6 +1,6 @@
 # 0003 — Generation is atomic per run, not per file
 
-**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** TBD
+**Status:** Proposed · **Date:** 2026-08-06 · **Tracking issue:** [#61](https://github.com/githonllc/entdomain/issues/61)
 
 ## Context
 

@@ -25,14 +25,14 @@ import (
 // classes share one list for that reason: they are one answer to "why did
 // generation stop", and each line names its own subject.
 //
-// cfg decides which checks apply, because not every refusal is unconditional:
-// the identifier-type check is a property of the base service and base handler
-// templates, which are opt-in. A DTO-only generation is correct for any
-// identifier type and must not be refused. A nil cfg applies only the
-// unconditional checks.
-func checkGraphConflicts(g *gen.Graph, cfg *ExtensionConfig) error {
-	emitsIDSignatures := cfg != nil && (cfg.GenerateBaseService || cfg.GenerateBaseHandler)
-
+// Every check here is unconditional, because every artifact is now generated
+// unconditionally. This function used to take the extension config as well, to
+// decide whether the identifier-type refusal applied: base_service.tmpl and
+// base_handler.tmpl wrote "uuid.UUID" into every signature, so an int-keyed
+// entity had no correct output. Those templates are gone (#29) and the
+// remaining ones render the id through $.ID.Type, so there is no identifier
+// this package refuses and no configuration left to consult.
+func checkGraphConflicts(g *gen.Graph) error {
 	var conflicts []string
 	for _, node := range g.Nodes {
 		// Checked before the domain-field gate below: soft delete is declared
@@ -48,11 +48,6 @@ func checkGraphConflicts(g *gen.Graph, cfg *ExtensionConfig) error {
 			continue
 		}
 		conflicts = append(conflicts, nodeConflicts(node)...)
-		if emitsIDSignatures {
-			if msg := unsupportedIDType(node); msg != "" {
-				conflicts = append(conflicts, msg)
-			}
-		}
 	}
 	if len(conflicts) == 0 {
 		return nil
@@ -99,48 +94,16 @@ func unusableSoftDeleteField(node *gen.Type) string {
 	return ""
 }
 
-// supportedIDType is the one identifier type the generated base service and
-// base handler can express, spelled exactly as the templates emit it.
+// supportedIDType and unsupportedIDType used to live here. They refused any
+// primary key that was not uuid.UUID, because base_service.tmpl and
+// base_handler.tmpl spelled that type into every signature they emitted.
 //
-// It is a single constant rather than a set because the templates hardcode the
-// type: base_service.tmpl and base_handler.tmpl write "uuid.UUID" into every
-// hook signature, every CRUD method and the cursor round-trip. Widening the set
-// means teaching the templates the entity's own id type, which is #29.
-const supportedIDType = "uuid.UUID"
-
-// unsupportedIDType reports an entity whose primary key the generated base
-// service and base handler cannot be written against, or "" when there is none.
-//
-// The identifier type is not a matter of taste here. base_service.tmpl declares
-// GetByID, Update, Delete, DeleteBatch and both delete hooks in terms of
-// uuid.UUID, and base_handler.tmpl repeats it. Against an int-keyed entity ent
-// generates Get(ctx, int), so the emitted file fails to compile in seven places
-// — inside the consumer's own ent package, naming ent's methods, with nothing
-// pointing back at the annotation that asked for it. Refusing here is the only
-// place the cause is still visible.
-//
-// The comparison is against the rendered type name rather than the ent type
-// constant, because the rendered name is exactly what the template writes: an
-// id declared with a GoType of its own is a distinct Go type even when ent
-// still classifies it as a UUID, and the generated signatures would not accept
-// it.
-func unsupportedIDType(node *gen.Type) string {
-	if node.ID == nil || node.ID.Type == nil {
-		return ""
-	}
-	actual := node.ID.Type.String()
-	if actual == supportedIDType {
-		return ""
-	}
-	return fmt.Sprintf(
-		"%s.%s: primary key is of type %q, but the generated base service and base handler declare every identifier as %s "+
-			"(templates/base_service.tmpl, templates/base_handler.tmpl), so the emitted code would not compile against this entity. "+
-			"entdomain generates a base service for %s primary keys only (see issue #29); give %s a field.UUID(%q, uuid.UUID{}) primary key, "+
-			"or generate this schema without WithBaseService/WithBaseHandler",
-		node.Name, node.ID.Name, actual, supportedIDType,
-		supportedIDType, node.Name, node.ID.Name,
-	)
-}
+// #29 deleted both templates, and with them the only reason the refusal
+// existed. dto.tmpl, filter.tmpl and wiring.tmpl all render the identifier
+// through $.ID.Type and import its package through wiringImports, so an
+// int-keyed or string-keyed entity generates code that compiles — which the
+// "intid" fixture now asserts by generating and building, where it previously
+// asserted the refusal message.
 
 // nodeConflicts returns one human-readable message per contradiction found on
 // one entity — its fields first, then its edges. Each message names the entity,

@@ -94,3 +94,18 @@ func UpdateNote(ctx context.Context, db *Client, id uuid.UUID, v *ValidNotePatch
 func DeleteNote(ctx context.Context, db *Client, id uuid.UUID) error {
 	return db.Note.DeleteOneID(id).Exec(ctx)
 }
+
+// DeleteBatchNotes removes several Notes in one statement and
+// returns how many rows it deleted.
+//
+// The count is returned rather than discarded because ent computes it and the
+// caller cannot recover it afterwards: a batch delete reports no error for an
+// id that matched nothing, so "how many of the ids existed" is answerable here
+// and nowhere else.
+//
+// An empty list deletes nothing. That is ent's own reading of IDIn with no
+// arguments, not a guard written here — a guard would be a second place for the
+// rule to live, and the failure it protects against is unrecoverable.
+func DeleteBatchNotes(ctx context.Context, db *Client, ids []uuid.UUID) (int, error) {
+	return db.Note.Delete().Where(note.IDIn(ids...)).Exec(ctx)
+}

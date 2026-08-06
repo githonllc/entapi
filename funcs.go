@@ -64,14 +64,17 @@ func templateFuncs() template.FuncMap {
 		"isSortable":   isSortable,
 		"filterParams": filterParams,
 
-		// Field type checking
-		"isComplexFieldType": isComplexFieldType,
-
 		// Soft delete: the graph-level traverser (funcs_softdelete.go)
 		"softDeleteTypes": softDeleteTypes,
 		"softDeleteField": softDeleteField,
 
 		// Code generation helpers
+		//
+		// isComplexFieldType is deliberately NOT registered. It is still live
+		// Go code — fieldValueExpr consults it to choose between PtrOrNil and
+		// PtrNilSafe — but no template calls it by name any more, and this map
+		// means "a template calls this". Registration is a claim, not a
+		// convenience.
 		"fieldValueExpr": fieldValueExpr,
 	}
 }

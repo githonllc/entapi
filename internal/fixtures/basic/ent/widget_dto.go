@@ -35,9 +35,9 @@ import (
 //    - Used by the Handler layer to return HTTP responses.
 //
 // Key Design Principles:
-// - Handler (BaseHandler) → Service (BaseService) → ent.Client
-// - HTTP scope only affects struct generation for the Handler layer.
-// - The Service layer operates directly on ent entities with full ORM capabilities.
+// - transport → widget_wiring.go → entdomain runtime → ent.Client
+// - HTTP scope only affects struct generation; it restricts nothing at the ent layer.
+// - The consumer's own code operates directly on ent entities with full ORM capabilities.
 // ============================================================================================
 
 // WidgetCreateRequest is the create request for Widget.

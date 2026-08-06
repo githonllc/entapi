@@ -49,6 +49,14 @@ func graphFileNames() []string {
 
 // generatedFileNames returns the file names this extension can write for node,
 // whether or not this run wrote them.
+//
+// The last two are names it can no longer write and must still delete. #29
+// removed the base service and base handler templates, so a consumer upgrading
+// past it is holding two files per entity that this extension wrote and will
+// never write again. This list is the only thing that removes them: drop the
+// names and the removal becomes a collision, leaving code that compiles against
+// a service the library no longer describes. TestRemovedTemplatesStayRemoved
+// pins both halves.
 func generatedFileNames(node *gen.Type) []string {
 	base := strings.ToLower(node.Name)
 	return []string{

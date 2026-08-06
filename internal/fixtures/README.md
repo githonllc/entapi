@@ -92,7 +92,7 @@ when the case passes.
 | `selfrefpartial` | a self-referential pair exposing one end only, the other end holding a bare `entdomain.Edge()` | generates and compiles |
 | `presence` | a defaulted field, an omitted optional field, an explicit null, a required non-string field, an `Immutable()` create-only field | generates, compiles, and is exercised by `ent/account_presence_test.go` |
 | `immutable` | `Immutable()` fields carrying `ScopeUpdate` | generation refused |
-| `intid` | a domain-annotated entity with ent's default `int` primary key, with the base service enabled | generation refused |
+| `intid` | a domain-annotated entity with ent's default `int` primary key | generates and compiles — this fixture was a refusal case until #29 deleted the two templates that hardcoded `uuid.UUID`, and compiling is what proves no identifier is hardcoded anywhere else |
 | `selfref` | a self-referential pair declared in the chained form, so annotated on one end only | generation refused |
 | `query` | the query surface: a string, an enum, an optional int and a time field, plus a searchable-not-filterable field, a query-scoped-but-unmarked field, an input-only field, and a second entity that marks nothing | generates and compiles |
 | `queryconflict` | query markers that contradict the schema: `Sortable` on a non-comparable field, `Searchable` on a type with no `Contains`, `Filterable` on a type with no predicates, and a marker on a field withholding `ScopeQuery` | generation refused |

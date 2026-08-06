@@ -44,19 +44,29 @@ type fixtureCase struct {
 	wantGenErr []string
 }
 
+// Every case now runs with no options at all. WithBaseService and
+// WithBaseHandler were the only two, and #29 removed both along with the
+// templates they selected; every artifact is emitted unconditionally for an
+// annotated entity.
 var fixtures = []fixtureCase{
-	{dir: "basic", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
-	{dir: "fieldshapes", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
-	{dir: "immutable", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Doc.origin", "Doc.source", "Immutable()", `scope "update"`, "SetOrigin", "SetSource"}},
-	{dir: "edges", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
-	{dir: "intid", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Counter.id", `type "int"`, "uuid.UUID", "#29"}},
-	{dir: "selfref", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Tree.children", "Tree.parent", "chained", "edge.From(", "entdomain.Edge()"}},
-	{dir: "selfrefpartial", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
-	{dir: "presence", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
-	{dir: "query", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
-	{dir: "queryconflict", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Bad.tags", "Sortable", "Bad.count", "Searchable", "Bad.meta", "Filterable", "Bad.token", `scope "query"`}},
-	{dir: "wiring", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
-	{dir: "softdelete", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "basic"},
+	{dir: "fieldshapes"},
+	{dir: "immutable", wantGenErr: []string{"Doc.origin", "Doc.source", "Immutable()", `scope "update"`, "SetOrigin", "SetSource"}},
+	{dir: "edges"},
+	// "intid" was a REFUSAL case until #29. Its entity has ent's default int
+	// primary key, which base_service.tmpl and base_handler.tmpl could not be
+	// written against because they spelled uuid.UUID into every signature. With
+	// those templates gone the remaining ones render the id through $.ID.Type,
+	// so the fixture flips to the ordinary generate-and-compile assertion — and
+	// compiling is what proves the identifier is no longer hardcoded anywhere.
+	{dir: "intid"},
+	{dir: "selfref", wantGenErr: []string{"Tree.children", "Tree.parent", "chained", "edge.From(", "entdomain.Edge()"}},
+	{dir: "selfrefpartial"},
+	{dir: "presence"},
+	{dir: "query"},
+	{dir: "queryconflict", wantGenErr: []string{"Bad.tags", "Sortable", "Bad.count", "Searchable", "Bad.meta", "Filterable", "Bad.token", `scope "query"`}},
+	{dir: "wiring"},
+	{dir: "softdelete"},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the
@@ -160,9 +170,9 @@ func TestCodegenFixtureStaleArtifacts(t *testing.T) {
 
 	fixtureDir := filepath.Join(root, "internal", "fixtures", "stale")
 	targetDir := filepath.Join(fixtureDir, "ent")
-	opts := []Option{WithBaseService(true), WithBaseHandler(true)}
+	var opts []Option
 
-	generated := []string{"sprocket_dto.go", "sprocket_filter.go", "sprocket_wiring.go", "sprocket_base_service.go", "sprocket_base_handler.go"}
+	generated := []string{"sprocket_dto.go", "sprocket_filter.go", "sprocket_wiring.go"}
 
 	// The hand-written file that must survive: it occupies a name cleanup
 	// considers, and carries ent's generic header instead of entdomain's marker.

@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/githonllc/entdomain)](https://goreportcard.com/report/github.com/githonllc/entdomain)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-一个 [Ent](https://entgo.io) 扩展，从带注解的 schema 自动生成 HTTP 请求/响应 DTO、基础服务和基础处理器。
+一个 [Ent](https://entgo.io) 扩展，从带注解的 schema 自动生成 HTTP 请求/响应 DTO、查询表面，以及每个操作一个的接线函数。
 
 
 > ### 状态：原型，正在重新设计
@@ -21,17 +21,18 @@
 > 采用之前请先读[已知限制](#已知限制)。其中有几条是陷阱而不是缺口，
 > 并且**有一个注解描述了它并不提供的保证**。
 >
-> `go test ./...` 在干净 checkout 上是**红的**（[#2](https://github.com/githonllc/entdomain/issues/2)）。
+> `go test ./...`、`make check`、`gofmt -l .` 与 `make lint` 在干净 checkout 上**全绿**。
+> 这一行过去警告的红色测试套件已在 [#2](https://github.com/githonllc/entdomain/issues/2) 修复。
 
 ## 特性
 
 - **注解驱动** — 使用简洁的构建器标记字段作用域（`DefaultField`、`InputOnlyField`、`OutputOnlyField` 等）
 - **HTTP DTO** — 为每个实体生成 `CreateRequest`、`PatchRequest`、`Response`、`ListResponse`
 - **显式的存在性（presence）** — patch 请求能区分「键缺席」「显式 null」「有值」三种状态；create 时省略的字段根本不会被写入，schema 的 `Default()` 因此依然生效
-- **BaseService** — 带 Before/After 钩子的 CRUD 操作、构建器辅助和实体→响应转换
-- **BaseHandler** — 响应转换辅助和部分更新支持
+- **查询表面** — 过滤器结构体（每个 ent 推导出的操作符一个参数）、全文检索 `q`，以及排序白名单
+- **接线** — 每个操作一个自由函数，函数体是对「只写一次的泛型运行时」的一次调用
+- **任意标识符类型** — id 在每个模板里都来自 schema，到运行时则是一个类型参数
 - **ent 层软删除** — 嵌入 `entdomain.SoftDeleteMixin`，在构造 client 处注册一行，被删除的行就从**每一条**读路径消失，包括完全不经过本项目生成物的 `client.User.Query()`
-- **游标分页** — BaseService 中基于 ID 的键集分页
 - **来源追溯** — 生成的文件包含 schema 名称、模板路径和重新生成命令
 
 ## 环境要求
@@ -65,8 +66,6 @@ import (
 func main() {
     ext := entdomain.NewExtensionWithOptions(
         entdomain.WithEntDomainPackage("github.com/githonllc/entdomain"),
-        entdomain.WithBaseService(true),
-        entdomain.WithBaseHandler(true),
     )
 
     if err := entc.Generate("./schema", &gen.Config{
@@ -400,46 +399,52 @@ graph TD
     end
 
     subgraph "ent/ 包 <small>(全部生成)</small>"
-        BH["BaseHandler<br/><small>ToResponse · ToResponseList · PartialUpdate</small>"]
-        BS["BaseService<br/><small>Create · GetByID · Update · Delete<br/>ListWithCursor · DeleteBatch<br/>Before/After 钩子</small>"]
-        DTO["DTOs<br/><small>{entity}_dto.go</small>"]
+        DTO["DTOs<br/><small>{entity}_dto.go<br/>请求 · 响应 · 摘要<br/>预加载计划</small>"]
+        FLT["查询表面<br/><small>{entity}_filter.go<br/>Filter · Predicates · SortKeys</small>"]
+        WIR["接线<br/><small>{entity}_wiring.go<br/>Get · List · Create · Update<br/>Delete · DeleteBatch</small>"]
     end
 
+    RT["entdomain 运行时<br/><small>GetOne · ListPage · SaveOne</small>"]
     EC["ent.Client<br/><small>Ent ORM</small>"]
     DB[("PostgreSQL")]
 
-    CR --> BH
-    UR --> BH
-    BH --> RS
-    BH --> BS
-    BS --> EC
+    CR --> WIR
+    UR --> WIR
+    WIR --> RS
+    DTO -.- WIR
+    FLT -.- WIR
+    WIR --> RT
+    RT --> EC
+    WIR --> EC
     EC --> DB
-    DTO -.- BH
-    DTO -.- BS
 
     style CR fill:#e1f5fe,stroke:#0288d1
     style UR fill:#e1f5fe,stroke:#0288d1
     style RS fill:#e8f5e9,stroke:#388e3c
-    style BH fill:#fff3e0,stroke:#f57c00
-    style BS fill:#fff3e0,stroke:#f57c00
     style DTO fill:#fff3e0,stroke:#f57c00
+    style FLT fill:#fff3e0,stroke:#f57c00
+    style WIR fill:#fff3e0,stroke:#f57c00
+    style RT fill:#ede7f6,stroke:#5e35b1
     style EC fill:#f3e5f5,stroke:#7b1fa2
     style DB fill:#fce4ec,stroke:#c62828
 ```
 
-**核心原则**：作用域仅控制 HTTP 层结构体生成。服务层直接操作 ent 实体，拥有完整的 ORM 能力。
+**核心原则**：作用域仅控制 HTTP 层结构体生成。生成的任何东西都不限制消费者自己的代码怎么使用 ent 实体。
 
 ## 生成的代码
 
-为每个带注解的 schema 最多生成五个文件（均在 `ent/` 包中）：
+为每个带注解的 schema 生成三个文件（均在 `ent/` 包中）：
 
 | 文件 | 内容 |
 |------|------|
 | `{entity}_dto.go` | `CreateRequest`、`PatchRequest`、它们的 `Validate()`/`Apply` 组合，以及下述响应部分 |
 | `{entity}_filter.go` | `{Entity}Filter` 及其 `Predicates()`、`{Entity}SortKeys`、`{Entity}Order`——下述查询部分 |
 | `{entity}_wiring.go` | 每个操作一个自由函数，把本实体的产物交给运行时——下述接线部分 |
-| `{entity}_base_service.go` | 带 CRUD、Before/After 钩子、`EntToResponse` 的 `BaseService` |
-| `{entity}_base_handler.go` | 带 `ToResponse`、`ToResponseList`、`PartialUpdate` 的 `BaseHandler` |
+
+以前还有两个文件，藏在可选开关 `WithBaseService` / `WithBaseHandler` 后面。两者都已删除，
+见[从 `BaseService` 与 `BaseHandler` 迁移](#从-baseservice-与-basehandler-迁移)。
+生成运行会**删除**目标目录里遗留的 `{entity}_base_service.go` 与
+`{entity}_base_handler.go`，所以升级不会留下一堆「编译得过、但本库已不再描述」的代码。
 
 另外为整个 schema 生成一个文件，仅当至少有一个实体嵌入了 `entdomain.SoftDeleteMixin`：
 
@@ -591,13 +596,14 @@ ent 排序构建器跳过的类型上。
 | `Create{Entity}(ctx, db, v)` | `entdomain.SaveOne(ctx, v.Apply(db.{Entity}.Create()), …)` |
 | `Update{Entity}(ctx, db, id, v)` | `entdomain.SaveOne(ctx, v.Apply(db.{Entity}.UpdateOneID(id)), …)` |
 | `Delete{Entity}(ctx, db, id)` | `db.{Entity}.DeleteOneID(id).Exec(ctx)` |
+| `DeleteBatch{Entities}(ctx, db, ids)` | `db.{Entity}.Delete().Where({entity}.IDIn(ids...)).Exec(ctx)`，并返回受影响行数 |
 
 标识符类型来自 schema，没有一处是为某一种类型写死的。创建与更新收的是**已校验**的
 请求，因为 `Apply` 只定义在那个类型上——跳过校验是编译错误，不是纪律问题。读取走
 `Query` 加生成的预加载计划，而不是 `{Entity}Client.Get`：后者不应用任何计划，因此
 无法服务声明了边的响应类型；同理，带响应边的实体在保存后会把行重新读回来再转换。
 
-五个函数里有四个的函数体是单次调用。`List` 是例外，原因值得写明而不是藏起来：
+除一个之外，所有函数体都是单次调用。`List` 是例外，原因值得写明而不是藏起来：
 `{Entity}Order` 会失败，而 `ListPage` 收的是已解析的排序选项、不是一个可能失败的
 生产者，所以白名单校验只能是独立的一条语句。
 
@@ -686,37 +692,85 @@ client 重新派发而不是调用下一个 mutator，所以在 `RegisterSoftDel
 `OpDelete|OpDeleteOne` 注册的 hook 永远不会跑。请改按 `OpUpdate` 注册并检查
 `deleted_at` 非 nil，或者把它们装在 `RegisterSoftDelete` 之前。
 
-### BaseService 模式
+### 从 `BaseService` 与 `BaseHandler` 迁移
 
-生成的 `Base{Entity}Service` 提供带钩子扩展点的 CRUD 操作。嵌入它，覆盖钩子即可添加自定义逻辑：
+**`Base{Entity}Service`、`Base{Entity}Handler`、`{Entity}EntToResponse`，以及选项
+`WithBaseService` / `WithBaseHandler` 已全部删除。** 两个开关的默认值都是 `false`，
+所以从未传过它们的消费者不受影响；删掉调用即可重新编译。
+
+每个成员都有替代品，其中一个不是改名而是修 bug：
+
+| 已删除 | 改用 |
+|---|---|
+| `svc.GetByID(ctx, id)` | `ent.Get{Entity}(ctx, db, id)`——而且它会应用预加载计划，`Client.Get` 从来不会 |
+| `svc.Create(ctx, req)` | `ent.Create{Entity}(ctx, db, v)`，其中 `v, err := req.Validate()` |
+| `svc.Update(ctx, id, req)` | `ent.Update{Entity}(ctx, db, id, v)` |
+| `svc.Delete(ctx, id)` | `ent.Delete{Entity}(ctx, db, id)` |
+| `svc.DeleteBatch(ctx, ids)` | `ent.DeleteBatch{Entities}(ctx, db, ids)`，并且会返回受影响行数 |
+| `svc.ListWithCursor(ctx, limit, cursor, order)` | `ent.List{Entities}(ctx, db, filter, req)`——**偏移分页**，见下 |
+| `ent.{Entity}EntToResponse(e)` | `ent.New{Entity}Response(e)`——**见下** |
+| `h.ToResponse(e)` / `h.ToResponseList(es)` | `ent.New{Entity}Response(e)`，或直接用已返回 `*entdomain.Page[…]` 的 `ent.List{Entities}` |
+| `h.PartialUpdate(ctx, svc, id, req)` | `ent.Update{Entity}(ctx, db, id, v)` |
+| `SetSelf` 与 `Before*` / `After*` 钩子 | 你自己的函数。没有契约要满足，也没有东西要注册 |
+
+**`{Entity}EntToResponse` 不只是冗余——它会吞掉错误。** 对于响应声明了边的实体，
+它调用 `New{Entity}Response`，出错时**返回 `nil`**。于是「查询没有加载边」在调用点
+表现为一个空指针，而不是一个点名了那条边的错误。`New{Entity}Response` 返回
+`(*{Entity}Response, error)`，请处理那个 error。即使你从未用过钩子，这一条也足以
+构成迁移的理由。
+
+**游标分页不再被生成。** `ListWithCursor` 是按 ID 排序的键集分页，且在 `limit == 0`
+时有一个已记录的 panic；`ent.List{Entities}` 是走 `entdomain.ListPage` 的偏移分页，
+页大小上界在唯一一处被 clamp。如果你依赖键集分页，请自己写查询——生成的过滤器、
+排序与转换函数都还在，直接交给它就行：
 
 ```go
-type myUserService struct {
-    ent.BaseUserService
-}
+q := ent.ArticleQueryWithResponseEdges(db.Article.Query()).
+    Where(article.IDGT(after)).
+    Order(article.ByID()).
+    Limit(size)
+```
 
-func NewMyUserService(db *ent.Client) *myUserService {
-    s := &myUserService{
-        BaseUserService: ent.BaseUserService{DB: db},
+**钩子变成普通代码。** 过去的 `BeforeCreate` 就是调用前的一行，过去的 `AfterCreate`
+就是调用后的一行：
+
+```go
+func createArticle(ctx context.Context, db *ent.Client, req *ent.ArticleCreateRequest) (*ent.ArticleResponse, error) {
+    if err := authorize(ctx, req); err != nil {   // 原 BeforeCreate
+        return nil, err
     }
-    s.SetSelf(s) // 启用钩子分发到此结构体
-    return s
-}
-
-func (s *myUserService) BeforeCreate(ctx context.Context, req *ent.UserCreateRequest) error {
-    // 自定义验证
-    return nil
-}
-
-func (s *myUserService) AfterCreate(ctx context.Context, entity *ent.User) (*ent.User, error) {
-    // 发布事件等
-    return entity, nil
+    v, err := req.Validate()
+    if err != nil {
+        return nil, err
+    }
+    resp, err := ent.CreateArticle(ctx, db, v)
+    if err != nil {
+        return nil, err
+    }
+    publish(ctx, resp)                            // 原 AfterCreate
+    return resp, nil
 }
 ```
 
+旧机制不可能是这个形状：派发要经过 `SetSelf`，因此忘记调用它——或者把钩子方法名
+拼错——都能正常编译，而钩子静默地永不执行
+（[#16](https://github.com/githonllc/entdomain/issues/16)）。
+
+**`Base{Entity}Handler` 存在的理由是「让 handler 代码不必导入 `ent`」，而它从未做到**：
+嵌入 `ent.Base{Entity}Handler` 本身就是一次 `ent` 导入。这个目标是对的，但它应当由
+DTO 包所在的位置来兑现，而不是由一个要求嵌入的基类型。
+
+**软删除不再靠字段名检测。** 过去只要实体拥有一个 Nillable 的 `deleted_at` 字段，
+生成的 `Delete` 就会把自己改写成 `UpdateOneID().SetDeletedAt(now)`。那是只写的——
+没有任何东西在读取时过滤掉墓碑行——并且它静默废掉了消费者按删除操作注册的每一个钩子，
+因为它发出的是一次更新（[#12](https://github.com/githonllc/entdomain/issues/12)）。
+现在 `ent.Delete{Entity}` 调用 ent 自己的删除 builder，于是「删除意味着什么」由 ent
+mixin 或拦截器决定，读路径也一并遵守
+（[#18](https://github.com/githonllc/entdomain/issues/18)）。
+
 ## 类型化错误
 
-BaseService 将 Ent 错误包装为标准哨兵值：
+运行时导出生成的校验与错误映射器会产生的哨兵值：
 
 ```go
 var (
@@ -795,8 +849,7 @@ var (
 | 底层为切片或映射的 `field.JSON(...)` | 正常生成；可选字段用 `entdomain.PtrNilSafe` 转换，因为 `entdomain.PtrOrNil` 约束是 `[T comparable]` |
 | 底层为切片或映射的具名 `GoType` | 同上。判定依据是类型的 reflect kind 而不是它的书写形式，因此 `type Tags []string` 会被识别为切片 |
 | 底层可比较的具名 `GoType`（string、int、成员皆可比较的 struct） | 正常生成，走 `entdomain.PtrOrNil` |
-| 非 `uuid.UUID` 主键，**且启用了 `WithBaseService` 或 `WithBaseHandler`** | **生成失败。** 这两个模板把所有标识符都声明为 `uuid.UUID`，生成的 service 无法针对该实体编译。拒绝信息会点名实体与它真实的 id 类型。改用 `field.UUID("id", uuid.UUID{})` 主键，或只生成 DTO |
-| 非 `uuid.UUID` 主键，仅生成 DTO | 正常生成。`dto.tmpl` 通过 `$.ID.Type` 渲染 id，对任何标识符类型都正确 |
+| 任意类型的主键——`int`、`string`、`uuid.UUID`、具名 `GoType` | 正常生成。每个模板都通过 `$.ID.Type` 渲染 id，并按字段索取它的 import，因此 `int` 主键根本不需要任何 import。过去在启用 `WithBaseService` 或 `WithBaseHandler` 时这里是**拒绝**的，因为那两个模板把 `uuid.UUID` 写死进了每一个签名；两者现已删除（[#29](https://github.com/githonllc/entdomain/issues/29)）|
 
 注意 `DefaultField()` 会授予 `ScopeUpdate`，所以带默认注解的 immutable 字段
 必然触发上面的拒绝。这是有意的：另一种做法——悄悄把该字段从更新请求里剔除——
@@ -809,10 +862,12 @@ var (
 ## 扩展选项
 
 ```go
-entdomain.WithBaseService(true)              // 生成 BaseService（默认：false）
-entdomain.WithBaseHandler(true)              // 生成 BaseHandler（默认：false）
 entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 ```
+
+就这一个。`WithBaseService` 与 `WithBaseHandler` 已随它们所选择的模板一起删除——
+其余产物一律为带注解的实体无条件生成，因为一个「有时不存在」的产物，是下一个生成
+文件无法依赖的东西。
 
 ## 已知限制
 
@@ -839,14 +894,23 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 并且需要反射才能拿到 mutation 的 client；这笔取舍记录在
 [#18](https://github.com/githonllc/entdomain/issues/18)。
 
-**生成的 service 只支持一种主键类型：`uuid.UUID`。** 它被硬编码进 `base_service.tmpl`
-与 `base_handler.tmpl` 的每个钩子签名、每个 CRUD 方法以及游标往返。其他主键类型现在会在
-**生成阶段被拒绝**，并点名实体与它真实的 id 类型，而不再生成一个编译不过的 service。
-只生成 DTO 不受影响。放宽支持范围是
-[#29](https://github.com/githonllc/entdomain/issues/29)。
+**生成的代码不做任何错误分类。** 接线原样返回 ent 返回的错误；把驱动错误映射成
+`ErrNotFound` 或 `ErrAlreadyExists` 是 `entdomain.ErrorMapper` 的职责，而接线还没有
+调用它（[#13](https://github.com/githonllc/entdomain/issues/13)）。
 
-**钩子派发用错时静默失败。** 忘记调用 `SetSelf`，或者钩子方法名拼错，
-都能正常编译，而钩子永远不执行（[#16](https://github.com/githonllc/entdomain/issues/16)）。
+**生成代码里的分页只有偏移分页。** `ent.List{Entities}` 走 `entdomain.ListPage`，
+深翻是 O(n)，每页还要付一次 `COUNT`。导出的游标编解码器（`Cursor`、`EncodeCursor`、
+`DecodeCursor`、`PageInfo`）虽然在公开 API 上可达，却没有任何生成代码使用它，
+并且它在 2^53 以上会丢精度（[#6](https://github.com/githonllc/entdomain/issues/6)）。
+
+**生成的代码不做任何错误分类。** 接线原样返回 ent 返回的错误；把驱动错误映射成
+`ErrNotFound` 或 `ErrAlreadyExists` 是 `entdomain.ErrorMapper` 的职责，而接线还没有
+调用它（[#13](https://github.com/githonllc/entdomain/issues/13)）。
+
+**生成代码里的分页只有偏移分页。** `ent.List{Entities}` 走 `entdomain.ListPage`，
+深翻是 O(n)，每页还要付一次 `COUNT`。导出的游标编解码器（`Cursor`、`EncodeCursor`、
+`DecodeCursor`、`PageInfo`）虽然在公开 API 上可达，却没有任何生成代码使用它，
+并且它在 2^53 以上会丢精度（[#6](https://github.com/githonllc/entdomain/issues/6)）。
 
 **在 Windows 上导入本包会 panic。** 模板查找用操作系统分隔符拼路径，
 而嵌入文件系统恒用正斜杠，因此在包初始化阶段就加载失败
@@ -854,12 +918,13 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 
 **只有带 fixture 的字段形态才是「已知能编译」的。** `TestCodegenFixtures` 会生成并
 编译 `internal/fixtures/` 下的每个 schema，现已覆盖上表中的 nillable、immutable、
-枚举、JSON/映射与具名 `GoType` 形态，以及边、软删除 mixin 和非 UUID 主键的拒绝路径
+枚举、JSON/映射与具名 `GoType` 形态，以及边、自引用边、presence 模型、查询表面、
+`int` 主键、接线与软删除 mixin
 （[#8](https://github.com/githonllc/entdomain/issues/8)、
-[#10](https://github.com/githonllc/entdomain/issues/10)）。软删除是唯一同时有行为证明
-的特性：`internal/softdeleteproof` 是一个带 SQLite 驱动的独立 module，
-所以「直接的 `client.Doc.Query()` 会排除已删除行」这个论断是对着真实数据库验证的，
-而不是对着生成的源码。
+[#10](https://github.com/githonllc/entdomain/issues/10)）。其中两项除编译证明外还有
+行为证明，各自是一个带 SQLite 驱动的独立 module：`internal/fixtures/wiring/e2e`
+把每个生成的操作都对着真实数据库跑一遍，`internal/softdeleteproof` 则验证直接的
+`client.Doc.Query()` 会排除已删除行，以及两个生成的删除操作都把行留在磁盘上。
 
 ## 贡献
 

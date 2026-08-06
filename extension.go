@@ -19,14 +19,13 @@ type Extension struct {
 	Config *ExtensionConfig
 }
 
-// ExtensionConfig holds configuration for the extension
+// ExtensionConfig holds configuration for the extension.
+//
+// GenerateBaseService and GenerateBaseHandler used to live here. Both are gone
+// with the templates they selected (#29); every generated artifact is now
+// emitted unconditionally for an annotated entity, so there is nothing left to
+// switch on. See the migration note in README.md.
 type ExtensionConfig struct {
-	// GenerateBaseService controls whether BaseService structs are generated
-	GenerateBaseService bool
-
-	// GenerateBaseHandler controls whether BaseHandler structs are generated
-	GenerateBaseHandler bool
-
 	// EntDomainPackage is the import path for the entdomain package
 	// Default: "github.com/githonllc/entdomain"
 	EntDomainPackage string
@@ -68,7 +67,7 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 		// contradiction cannot be generated into code that compiles, so the
 		// only honest outcomes are a clear error here or a compile error in the
 		// consumer's package. See schema_conflicts.go.
-		if err := checkGraphConflicts(g, e.Config); err != nil {
+		if err := checkGraphConflicts(g); err != nil {
 			return err
 		}
 
@@ -108,24 +107,6 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 				return fmt.Errorf("failed to generate %s wiring: %w", node.Name, err)
 			}
 			written[path] = true
-
-			// Generate base service file → ent/{entity}_base_service.go
-			if e.Config.GenerateBaseService {
-				path, err := e.generateBaseServiceFile(g, node)
-				if err != nil {
-					return fmt.Errorf("failed to generate %s base service file: %w", node.Name, err)
-				}
-				written[path] = true
-			}
-
-			// Generate base handler file → ent/{entity}_base_handler.go
-			if e.Config.GenerateBaseHandler {
-				path, err := e.generateBaseHandlerFile(g, node)
-				if err != nil {
-					return fmt.Errorf("failed to generate %s base handler file: %w", node.Name, err)
-				}
-				written[path] = true
-			}
 		}
 
 		// The soft-delete traverser is generated once per GRAPH, not per type:
@@ -274,54 +255,6 @@ func (e *Extension) generateSoftDeleteFile(g *gen.Graph) (string, error) {
 	return outputPath, nil
 }
 
-// generateBaseServiceFile generates a base service file for a single Type.
-// Output: ent/{entity}_base_service.go
-func (e *Extension) generateBaseServiceFile(g *gen.Graph, node *gen.Type) (string, error) {
-	tmpl, err := template.New("base_service").
-		Funcs(e.templateFuncMap()).
-		Parse(baseServiceTemplate)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse base service template: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, node); err != nil {
-		return "", fmt.Errorf("failed to render base service template: %w", err)
-	}
-
-	filename := fmt.Sprintf("%s_base_service.go", strings.ToLower(node.Name))
-	outputPath := filepath.Join(g.Config.Target, filename)
-
-	if err := writeFile(outputPath, buf.Bytes()); err != nil {
-		return "", err
-	}
-	return outputPath, nil
-}
-
-// generateBaseHandlerFile generates a base handler file for a single Type.
-// Output: ent/{entity}_base_handler.go
-func (e *Extension) generateBaseHandlerFile(g *gen.Graph, node *gen.Type) (string, error) {
-	tmpl, err := template.New("base_handler").
-		Funcs(e.templateFuncMap()).
-		Parse(baseHandlerTemplate)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse base handler template: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, node); err != nil {
-		return "", fmt.Errorf("failed to render base handler template: %w", err)
-	}
-
-	filename := fmt.Sprintf("%s_base_handler.go", strings.ToLower(node.Name))
-	outputPath := filepath.Join(g.Config.Target, filename)
-
-	if err := writeFile(outputPath, buf.Bytes()); err != nil {
-		return "", err
-	}
-	return outputPath, nil
-}
-
 // writeFile formats the generated Go source with goimports and writes it to disk.
 //
 // A formatting failure aborts. imports.Process only fails on source it cannot
@@ -406,19 +339,11 @@ func (e *Extension) templateFuncMap() template.FuncMap {
 // Option is a function type for configuring the extension.
 type Option func(*ExtensionConfig)
 
-// WithBaseService controls whether BaseService structs are generated
-func WithBaseService(generate bool) Option {
-	return func(c *ExtensionConfig) {
-		c.GenerateBaseService = generate
-	}
-}
-
-// WithBaseHandler controls whether BaseHandler structs are generated
-func WithBaseHandler(generate bool) Option {
-	return func(c *ExtensionConfig) {
-		c.GenerateBaseHandler = generate
-	}
-}
+// WithBaseService and WithBaseHandler have been removed along with the
+// templates they selected (#29). They were the only two options, so a call site
+// that passed them now passes nothing — which is also the whole configuration
+// this extension has left, apart from the import path below. See the migration
+// note in README.md.
 
 // WithEntDomainPackage sets the import path for the entdomain package
 func WithEntDomainPackage(pkg string) Option {

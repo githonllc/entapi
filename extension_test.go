@@ -8,35 +8,21 @@ import (
 
 func TestExtension_NewExtension(t *testing.T) {
 	config := &ExtensionConfig{
-		GenerateBaseService: true,
+		EntDomainPackage: "example.com/entdomain",
 	}
 
 	ext := NewExtension(config)
 
-	if !ext.Config.GenerateBaseService {
-		t.Error("GenerateBaseService should be true")
+	if ext.Config != config {
+		t.Error("NewExtension should keep the config it was given")
 	}
-}
-
-func TestExtension_NewExtensionWithOptions(t *testing.T) {
-	ext := NewExtensionWithOptions(
-		WithBaseService(true),
-		WithBaseHandler(true),
-	)
-
-	if !ext.Config.GenerateBaseService {
-		t.Error("GenerateBaseService should be true")
-	}
-
-	if !ext.Config.GenerateBaseHandler {
-		t.Error("GenerateBaseHandler should be true")
+	if ext.Config.EntDomainPackage != "example.com/entdomain" {
+		t.Errorf("EntDomainPackage = %q, want %q", ext.Config.EntDomainPackage, "example.com/entdomain")
 	}
 }
 
 func TestExtension_Templates(t *testing.T) {
-	ext := NewExtension(&ExtensionConfig{
-		GenerateBaseService: true,
-	})
+	ext := NewExtension(nil)
 
 	templates := ext.Templates()
 
@@ -57,7 +43,7 @@ func TestExtension_Options(t *testing.T) {
 
 func TestExtension_Annotations(t *testing.T) {
 	config := &ExtensionConfig{
-		GenerateBaseService: true,
+		EntDomainPackage: "example.com/entdomain",
 	}
 	ext := NewExtension(config)
 	annotations := ext.Annotations()
@@ -68,11 +54,11 @@ func TestExtension_Annotations(t *testing.T) {
 
 	configAnnotation, ok := annotations[0].(*ConfigAnnotation)
 	if !ok {
-		t.Errorf("Expected *ConfigAnnotation, got %T", annotations[0])
+		t.Fatalf("Expected *ConfigAnnotation, got %T", annotations[0])
 	}
 
-	if !configAnnotation.Config.GenerateBaseService {
-		t.Error("GenerateBaseService should be true")
+	if configAnnotation.Config.EntDomainPackage != "example.com/entdomain" {
+		t.Errorf("annotation carries EntDomainPackage %q, want %q", configAnnotation.Config.EntDomainPackage, "example.com/entdomain")
 	}
 }
 
@@ -83,26 +69,20 @@ func TestConfigAnnotation_Name(t *testing.T) {
 	}
 }
 
-func TestExtensionOptions(t *testing.T) {
-	t.Run("WithBaseService", func(t *testing.T) {
-		config := &ExtensionConfig{}
-		opt := WithBaseService(true)
-		opt(config)
+// TestNewExtensionWithOptions_NoOptions pins what is left of the option set:
+// WithEntDomainPackage alone. WithBaseService and WithBaseHandler went with the
+// templates they selected (#29), so calling NewExtensionWithOptions with
+// nothing is the ordinary case rather than a degenerate one, and it must still
+// produce a usable default configuration.
+func TestNewExtensionWithOptions_NoOptions(t *testing.T) {
+	ext := NewExtensionWithOptions()
 
-		if !config.GenerateBaseService {
-			t.Error("GenerateBaseService should be true")
-		}
-	})
-
-	t.Run("WithBaseHandler", func(t *testing.T) {
-		config := &ExtensionConfig{}
-		opt := WithBaseHandler(true)
-		opt(config)
-
-		if !config.GenerateBaseHandler {
-			t.Error("GenerateBaseHandler should be true")
-		}
-	})
+	if ext.Config == nil {
+		t.Fatal("NewExtensionWithOptions() returned a nil config")
+	}
+	if ext.Config.EntDomainPackage != defaultEntDomainPackage {
+		t.Errorf("EntDomainPackage = %q, want the default %q", ext.Config.EntDomainPackage, defaultEntDomainPackage)
+	}
 }
 
 func TestWithEntDomainPackage(t *testing.T) {

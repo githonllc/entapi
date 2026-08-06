@@ -8,8 +8,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixtures/softdelete/ent/doc"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // RegisterSoftDelete installs soft delete on c. It is the one line a consumer

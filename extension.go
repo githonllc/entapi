@@ -26,12 +26,24 @@ type Extension struct {
 // emitted unconditionally for an annotated entity, so there is nothing left to
 // switch on. See the migration note in README.md.
 type ExtensionConfig struct {
-	// EntDomainPackage is the import path for the entdomain package
-	// Default: "github.com/githonllc/entdomain"
+	// EntDomainPackage is the import path generated code imports for the Layer 2
+	// runtime — ErrValidation, ListRequest, ListPage, the error mapper.
+	// Default: "github.com/githonllc/entdomain/runtime"
 	EntDomainPackage string
 }
 
-const defaultEntDomainPackage = "github.com/githonllc/entdomain"
+// defaultEntDomainPackage is the RUNTIME package, not this one (#15).
+//
+// The two were the same string until the runtime types moved out, and that is
+// what put the embedded templates and the template loader's init into every
+// consumer's production binary: generated code imported a sentinel error and
+// linked the generator. They are now different packages, and
+// TestRuntimePackageIsGeneratorFree is what keeps them apart.
+//
+// The runtime package is still named `entdomain`, so this changes the import
+// LINE in generated output and nothing else — every `entdomain.X` reference in
+// every generated file and every consumer call site is unaffected.
+const defaultEntDomainPackage = "github.com/githonllc/entdomain/runtime"
 
 // NewExtension creates a new extension instance
 func NewExtension(config *ExtensionConfig) *Extension {

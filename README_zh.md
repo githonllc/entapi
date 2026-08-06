@@ -46,6 +46,16 @@
 go get github.com/githonllc/entdomain
 ```
 
+一个 module，**两条导入路径**，用哪条取决于文件在做什么：
+
+| 导入路径 | 使用方 | 会链接进来的东西 |
+|---|---|---|
+| `github.com/githonllc/entdomain` | `entc.go` 与 schema 文件——注解构建器、`Edge()`、`SoftDeleteMixin`、扩展本体 | ent 的 codegen 包、源码格式化器、嵌入的模板 |
+| `github.com/githonllc/entdomain/runtime` | 生成的代码，以及你自己的 service / handler 代码——`ListPage`、`GetOne`、`SaveOne`、`ListRequest`、错误哨兵、`ErrorMapper`、`WithSoftDeleted` | 只有标准库 |
+
+runtime 包的**包名仍然是** `entdomain`，所以无论从哪条路径进来，调用点都还是写
+`entdomain.ListPage`。同时需要两边的文件就两条都导入，给其中一条起个别名。
+
 ## 配置
 
 在 `entc.go` 中注册扩展：
@@ -65,7 +75,9 @@ import (
 
 func main() {
     ext := entdomain.NewExtensionWithOptions(
-        entdomain.WithEntDomainPackage("github.com/githonllc/entdomain"),
+        // RUNTIME 路径——这是生成文件里写的那一条。它同时也是默认值，
+        // 这个选项只为 vendored 副本而存在。
+        entdomain.WithEntDomainPackage("github.com/githonllc/entdomain/runtime"),
     )
 
     if err := entc.Generate("./schema", &gen.Config{
@@ -187,9 +199,57 @@ func (Post) Edges() []ent.Edge {
 
 ## 运行时：泛型 CRUD
 
+```go
+import "github.com/githonllc/entdomain/runtime" // 包名：entdomain
+```
+
 每个实体共有的算法在 Go 里只写一次，而不是在模板里每个实体写一遍。实体相关的
 部分以类型参数和函数值的形式传入，因此**这一半不 import 任何 ent 包**，
 标识符类型也不再被写死。
+
+### 迁移到 runtime 子包
+
+**运行时类型已从 `github.com/githonllc/entdomain` 移动到
+`github.com/githonllc/entdomain/runtime`。根包不再声明它们，也没有任何过渡别名**
+（[#15](https://github.com/githonllc/entdomain/issues/15)）。
+
+```go
+// 之前
+import "github.com/githonllc/entdomain"
+
+// 之后——生成的代码，以及任何调用运行时的文件
+import entdomain "github.com/githonllc/entdomain/runtime"
+```
+
+这个别名是 `goimports` 会写进去的，因为包名已经和路径最后一段不一致了。编译并不
+需要它——不写别名也照样绑定到 `entdomain`——但不写的话，下一次跑 `goimports` 就会
+产生一个 diff。
+
+除此之外什么都不变。新包仍然是 `package entdomain`，因此 `entdomain.ListPage`、
+`entdomain.ErrValidation`、`entdomain.WithSoftDeleted` 的写法与之前完全一致；
+整个迁移就是每个文件改一行 import。schema 文件与 `entc.go` 继续导入根路径，一个
+字都不用动——注解构建器、`Edge()` 与 `SoftDeleteMixin` 没有移动。
+
+生成的那一半重新生成一次即可：`WithEntDomainPackage` 的默认值已经是 runtime 路径。
+
+**移动了的：** `ListRequest`、`Page`、`Query`、`Saver`、`ListPage`、`GetOne`、
+`SaveOne`、`AppendIf`、`AppendIfSlice`、`ErrNotFound`、`ErrAlreadyExists`、
+`ErrValidation`、`IsNotFound`、`IsAlreadyExists`、`IsValidation`、`ErrorMapper`、
+`NewErrorMapper`、`DefaultPageSize`、`MaxPageSize`、`Ptr`、`PtrOrNil`、
+`PtrNilSafe`、`WithSoftDeleted`、`SoftDeletedIncluded`、`WithHardDelete`、
+`HardDeleteRequested`。
+
+**留下的：** `DomainField` 及其全部构建器、`DomainEdge`/`Edge()`、`Scope*` 常量、
+`SoftDeleteMixin`、`DomainSoftDelete`、`SoftDeleteField`、`Extension` 与各选项。
+它们全部只在生成期被读取，所以原本导入根路径的 schema 一行都不用改。
+
+**为什么不留别名。** 一个把运行时再导出一遍的根包，会原样保留这次拆分要消除的那个
+耦合：为了 `ErrNotFound` 而导入它的消费者，照样会链接 ent 的 codegen 包、源码格式
+化器和五个嵌入模板，照样会在包初始化阶段跑一遍模板加载器。本 module 没有任何版本
+tag，也就没有已发布的表面需要保。现在 `go list -deps` 对 runtime 包给出的
+`entgo.io` 包数是 **0**（总共 62 个，全是标准库），对生成器则是 **15**；
+`TestRuntimePackageIsGeneratorFree` 是签入仓库的守卫，并且带一个对照组——探针本身
+失效时它会失败。
 
 ```go
 // Query 是分页所需的 ent query builder 子集。Q 是自引用的，因为 ent 的链式
@@ -936,7 +996,8 @@ var (
 ## 扩展选项
 
 ```go
-entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
+entdomain.WithEntDomainPackage("custom/path") // 覆盖写进生成文件的 RUNTIME 导入路径
+                                              // （默认：github.com/githonllc/entdomain/runtime）
 ```
 
 就这一个。`WithBaseService` 与 `WithBaseHandler` 已随它们所选择的模板一起删除——
@@ -981,8 +1042,13 @@ entdomain.WithEntDomainPackage("custom/path") // 覆盖 entdomain 导入路径
 （[#6](https://github.com/githonllc/entdomain/issues/6)）——见
 [从游标编解码器与 `PageInfo` 迁移](#从游标编解码器与-pageinfo-迁移)。
 
-**在 Windows 上导入本包会 panic。** 模板查找用操作系统分隔符拼路径，
-而嵌入文件系统恒用正斜杠，因此在包初始化阶段就加载失败
+**生成器包仍然会在包初始化阶段加载全部模板。** `template_index.go` 声明了五个调用
+`mustLoadTemplate` 的包级变量，因此只要 import `github.com/githonllc/entdomain`，
+无论是否真的要生成，加载器都会跑。这件事现在被限制在 `entc.go` 与 schema 文件里：
+运行时已经搬进自己的包，它不嵌入任何东西，也够不到加载器和 ent
+（[#15](https://github.com/githonllc/entdomain/issues/15)）——见
+[迁移到 runtime 子包](#迁移到-runtime-子包)。查找本身用的是 `path.Join` 而非
+`filepath.Join`，所以本条过去描述的那个 Windows panic 已经不存在
 （[#4](https://github.com/githonllc/entdomain/issues/4)）。
 
 **只有带 fixture 的字段形态才是「已知能编译」的。** `TestCodegenFixtures` 会生成并

@@ -3,8 +3,8 @@ package fixture
 import (
 	"testing"
 
-	"github.com/githonllc/entdomain"
 	"github.com/githonllc/entdomain/internal/fixture/ent"
+	entdomain "github.com/githonllc/entdomain/runtime"
 	"github.com/google/uuid"
 )
 

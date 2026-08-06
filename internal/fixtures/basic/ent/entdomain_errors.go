@@ -5,7 +5,7 @@
 package ent
 
 import (
-	entdomain "github.com/githonllc/entdomain"
+	entdomain "github.com/githonllc/entdomain/runtime"
 )
 
 // ErrorMap is the classifier every generated wiring function passes its error

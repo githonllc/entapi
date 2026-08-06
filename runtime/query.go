@@ -3,6 +3,7 @@ package entdomain
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 )
@@ -55,11 +56,29 @@ func (r ListRequest) Limit() int {
 }
 
 // Offset returns the row offset for offset-based pagination.
+//
+// Like [Limit] it bounds rather than rejects, and for the same reason: it sits
+// on the only path into [ListPage], so it holds whether or not anyone remembers
+// to call Validate(). A page number large enough to overflow the multiplication
+// saturates at [math.MaxInt] — an absurd page is an empty page, which every one
+// of SQLite, Postgres and MySQL will accept as an OFFSET and answer with zero
+// rows.
+//
+// The overflow is caught by dividing back out rather than by testing the
+// product's sign, because the wrapped product can land on a small positive
+// number and be served as a perfectly ordinary page. Clamping to 0 is likewise
+// wrong: it is precisely the silent "page 1, relabelled" that #60 is about.
+// [Limit] never returns zero, so the division is safe.
 func (r ListRequest) Offset() int {
 	if r.Page <= 1 {
 		return 0
 	}
-	return (r.Page - 1) * r.Limit()
+	limit := r.Limit()
+	off := (r.Page - 1) * limit
+	if off/limit != r.Page-1 {
+		return math.MaxInt
+	}
+	return off
 }
 
 // SortKey validates the requested sort field against an allow-list and reports

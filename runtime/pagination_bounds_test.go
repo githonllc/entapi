@@ -2,6 +2,7 @@ package entdomain
 
 import (
 	"context"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -139,6 +140,51 @@ func TestListRequestLimitAndOffset(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestOffsetOverflowIsEmptyPage pins #60. (Page-1)*Limit() overflows int on a
+// large-but-JSON-expressible page number, and the wrapped product used to reach
+// the query as the OFFSET: Postgres rejects a negative one as an unclassified
+// 500, SQLite treats it as 0 and serves page 1 relabelled with the absurd page
+// number. An absurd page is an *empty* page, so Offset() saturates at
+// math.MaxInt — accepted by SQLite, Postgres and MySQL, and answered by all
+// three with zero rows.
+//
+// Overflow is detected by dividing back out, not by testing off < 0, because
+// the product can wrap round to a small *positive* number; see the last case,
+// where the naive product is 4 and clamping on sign would hand back row 4 of a
+// table the caller asked to skip nine quintillion rows of.
+func TestOffsetOverflowIsEmptyPage(t *testing.T) {
+	cases := []struct {
+		name string
+		req  ListRequest
+		want int
+	}{
+		{"MaxInt page", ListRequest{Page: math.MaxInt, Size: 20}, math.MaxInt},
+		{"MaxInt/10 page at the size ceiling", ListRequest{Page: math.MaxInt / 10, Size: 100}, math.MaxInt},
+		{"wraps past MaxInt", ListRequest{Page: math.MaxInt/20 + 2, Size: 20}, math.MaxInt},
+		{"wraps round to a small positive", ListRequest{Page: math.MaxInt/10 + 2, Size: 20}, math.MaxInt},
+		{"sanity: an ordinary page still pages", ListRequest{Page: 3, Size: 20}, 40},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.req.Offset(); got != c.want {
+				t.Fatalf("Offset() = %d, want %d", got, c.want)
+			}
+		})
+	}
+
+	// The three cases #60 originally named all wrap *negative*, so on their own
+	// they cannot tell the division check apart from the `off < 0` sketch the
+	// issue's refinement rejected. This pins that the fourth case really is the
+	// positive wraparound that separates them.
+	t.Run("the positive-wraparound case is one", func(t *testing.T) {
+		page, size := math.MaxInt/10+2, 20
+		if naive := (page - 1) * size; naive <= 0 {
+			t.Fatalf("(Page-1)*Size = %d; this case no longer wraps round to a positive "+
+				"offset, so nothing here distinguishes division re-verification from off < 0", naive)
+		}
+	})
 }
 
 // --- a query builder shaped like ent's, with no ent in sight ---------------

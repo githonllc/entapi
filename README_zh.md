@@ -147,6 +147,78 @@ field.String("password").
 一个本包并不存在的受众维度
 （[#3](https://github.com/githonllc/entdomain/issues/3)）。
 
+### 从 `WithValidation()` 迁移
+
+`DomainField.Validation` 与 `WithValidation()` **已删除，且没有替代品**——因为生成的
+请求类型上的 `Validate()` 是它的后继。
+
+```go
+// 之前——一条本包从不执行的规则
+field.String("name").
+    Annotations(entdomain.DefaultField().
+        WithValidation(map[string]interface{}{"min": 1, "max": 100}))
+
+// 之后——删掉这次调用；规则应该写在 Validate() 里
+field.String("name").
+    Annotations(entdomain.DefaultField())
+```
+
+删掉调用不会改变任何行为，因为它本来就没有行为：没有任何代码读过那个 map。规则现在
+的去处是生成的 `{Entity}CreateRequest` / `{Entity}PatchRequest` 上的 `Validate()`，
+它是通往 `Valid{Entity}…Request` 的 `Apply` 的唯一入口
+（[#26](https://github.com/githonllc/entdomain/issues/26)）——所以写在那里的规则**绕
+不过去**，而这恰恰是一个被忽略的注解无法承诺的。
+
+### `WithDescription()` 与 `WithExample()` 迁到了 metadata 块
+
+**两个构建器都还在，也照样支持链式调用。变的只是值存在哪里**——从 `DomainField` 移到
+了 `FieldMetadata`。schema 代码无需改动：
+
+```go
+// 不变——照样编译，照样链式
+field.String("email").
+    Annotations(entdomain.DefaultField().
+        WithDescription("主要联系地址").
+        WithExample("user@example.com"))
+```
+
+变的是读取侧，只影响直接检视注解的代码：
+
+```go
+d := entdomain.DefaultField().WithDescription("主要联系地址")
+
+d.Description            // 之前
+d.Metadata.Description   // 之后
+```
+
+它们迁移，是因为二者都是 OpenAPI schema 字段，而它们的每一个同类——`Title`、
+`Format`、`Pattern`、`Enum`、`ReadOnly` 等等——早已在 `FieldMetadata` 上，处于那段
+「保留给 spec 生成」的文档注释之下。与同类分居是不一致，不是一个放置决策；这也让它们
+处于「被接受并被默默忽略」的状态，而不是被一条明示的前向契约覆盖。和其余 metadata
+构建器一样，它们每次调用都新分配一个 `*FieldMetadata`，所以从同一个基注解分叉出的两条
+链彼此独立（[#5](https://github.com/githonllc/entdomain/issues/5)）。
+
+### `DomainConfig` 已删除
+
+实体级注解 `DomainConfig` **已删除**，没有替代品。请把它从任何 `Annotations()` 调用里
+去掉：
+
+```go
+// 之前
+func (User) Annotations() []schema.Annotation {
+    return []schema.Annotation{entdomain.DomainConfig{}}
+}
+
+// 之后——如果这是唯一一项，整个方法都可以删掉
+```
+
+它早已一无所有：`EntityName` 在
+[#17](https://github.com/githonllc/entdomain/issues/17) 被删（生成器一律用 schema 自己的
+名字命名每个产出类型），[#29](https://github.com/githonllc/entdomain/issues/29) 又随
+base service / base handler 模板删掉了那两个开关。剩下的是一个 schema 可以挂上、却产生
+不了任何可观察效果的注解。今天生成流程不读取任何实体级配置；若将来需要，新注解会和赋予
+它意义的读取方一起到来。
+
 ### 边注解
 
 边有自己的注解。此前边的暴露与否是从它的外键字段推导的，那把两个不同的决定
@@ -945,7 +1017,7 @@ var (
 | `DomainField.Searchable`，由 `.AsSearchable()` 设置 | 把字段加入 `q` 全文检索的析取式 |
 | `DomainField.Sortable`，由 `.AsSortable()` 设置 | 把字段加入排序白名单 `{Entity}SortKeys` |
 
-二十七个设置中的十一个（作用域常量分开计数）。下面其余的全部只是被接受并存储，
+二十六个设置中的十一个（作用域常量分开计数）。下面其余的全部只是被接受并存储，
 不改变任何生成结果。
 
 **已接受但尚未消费。** 每一项都有明确的保留理由与跟踪 issue；一旦某项悄悄变得可达
@@ -953,14 +1025,18 @@ var (
 
 | 设置 | 等待 |
 |---|---|
-| `Metadata` 及 `FieldMetadata` 全部字段（`Title`、`Format`、`Pattern`、`Minimum`、`Maximum`、`MinLength`、`MaxLength`、`Enum`、`ReadOnly`、`WriteOnly`、`Deprecated`、`Tags`），经由 `WithTitle`、`WithFormat`、`WithPattern`、`WithRange`、`WithLength`、`WithEnum`、`AsReadOnly`、`AsWriteOnly`、`AsDeprecated`、`WithTags` 设置 | OpenAPI/Swagger spec 生成，目前尚无 issue 实现。`annotations.go` 中已标注 RESERVED |
-| `Validation`、`Description`、`Example` | 未决。它们既没有读取方也没有后继方案；已在 [#17](https://github.com/githonllc/entdomain/issues/17) 上提出 |
+| `Metadata` 及 `FieldMetadata` 全部字段（`Title`、`Description`、`Format`、`Pattern`、`Minimum`、`Maximum`、`MinLength`、`MaxLength`、`Enum`、`Example`、`ReadOnly`、`WriteOnly`、`Deprecated`、`Tags`），经由 `WithTitle`、`WithDescription`、`WithFormat`、`WithPattern`、`WithRange`、`WithLength`、`WithEnum`、`WithExample`、`AsReadOnly`、`AsWriteOnly`、`AsDeprecated`、`WithTags` 设置 | OpenAPI/Swagger spec 生成，目前尚无 issue 实现。`annotations.go` 中已标注 RESERVED |
+
+共十五项，全部属于 metadata 块。没有第三类：每一个导出设置要么在上面那张表里，要么在
+这张表里。
 
 **已删除。** `AsUniqueLookup()` / `AsRangeLookup()` 及其 `UniqueLookup` / `RangeLookup`
-字段已删除，`DomainConfig.EntityName` 亦然。这两个 lookup 标记本意是生成 `FindByX`
+字段已删除，整个 `DomainConfig` 注解与 `DomainField.Validation` 亦然。这两个 lookup
+标记本意是生成 `FindByX`
 方法，但从来没有任何东西生成过它们；而 [#27](https://github.com/githonllc/entdomain/issues/27)
 的操作符集合直接取自 ent 自己的按类型操作符表，因此它们是**冗余**而不只是未实现。
-`EntityName` 既无读取方也无后继。删掉这些调用不会改变任何行为，因为它们本来就没有行为。
+删掉这些调用不会改变任何行为，因为它们本来就没有行为。`Validation` 与 `DomainConfig`
+的迁移说明见上文。
 
 ## 字段形态：ent 修饰符与作用域如何相互作用
 

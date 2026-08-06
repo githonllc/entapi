@@ -156,6 +156,85 @@ could carry that scopes cannot — visible to some callers but not others — ne
 an audience dimension this package does not have
 ([#3](https://github.com/githonllc/entdomain/issues/3)).
 
+### Migrating from `WithValidation()`
+
+`DomainField.Validation` and `WithValidation()` **have been removed, with no
+replacement**, because `Validate()` on the generated request types supersedes
+them.
+
+```go
+// before — a rule nothing in this package enforced
+field.String("name").
+    Annotations(entdomain.DefaultField().
+        WithValidation(map[string]interface{}{"min": 1, "max": 100}))
+
+// after — delete the call; the rule belongs in Validate()
+field.String("name").
+    Annotations(entdomain.DefaultField())
+```
+
+Removing the call changes no behaviour, because there was none: nothing read
+the map. Where the rule now goes is `Validate()` on the generated
+`{Entity}CreateRequest` / `{Entity}PatchRequest`, which is the only door to
+`Apply` on a `Valid{Entity}…Request`
+([#26](https://github.com/githonllc/entdomain/issues/26)) — so a rule written
+there cannot be skipped, which is exactly what an ignored annotation could not
+promise.
+
+### `WithDescription()` and `WithExample()` moved onto the metadata block
+
+**Both builders still exist and still chain. Only where the value is stored
+changed**, from `DomainField` to `FieldMetadata`. Schema code needs no edit:
+
+```go
+// unchanged — still compiles, still chains
+field.String("email").
+    Annotations(entdomain.DefaultField().
+        WithDescription("Primary contact address").
+        WithExample("user@example.com"))
+```
+
+What changed is the read side, for anyone inspecting an annotation directly:
+
+```go
+d := entdomain.DefaultField().WithDescription("Primary contact address")
+
+d.Description            // before
+d.Metadata.Description   // after
+```
+
+They moved because they are OpenAPI schema fields, and every sibling —
+`Title`, `Format`, `Pattern`, `Enum`, `ReadOnly` and the rest — already sat on
+`FieldMetadata` under the doc comment reserving that block for spec generation.
+Sitting apart from them was an inconsistency, not a placement decision, and it
+left them accepted-and-silently-ignored rather than covered by a stated forward
+contract. Like every other metadata builder, they allocate a fresh
+`*FieldMetadata` per call, so two chains forked from one base annotation stay
+independent ([#5](https://github.com/githonllc/entdomain/issues/5)).
+
+### `DomainConfig` removed
+
+The entity-level `DomainConfig` annotation **has been removed**, with no
+replacement. Delete it from any `Annotations()` call:
+
+```go
+// before
+func (User) Annotations() []schema.Annotation {
+    return []schema.Annotation{entdomain.DomainConfig{}}
+}
+
+// after — drop the method if that was its only entry
+```
+
+It had already lost everything it carried: `EntityName` went on
+[#17](https://github.com/githonllc/entdomain/issues/17) (generation names every
+emitted type from the schema's own name), and
+[#29](https://github.com/githonllc/entdomain/issues/29) took the base-service
+and base-handler switches along with the templates they selected. What was left
+was an annotation a schema could attach with no detectable effect. Nothing in
+generation reads entity-level configuration today; if that changes, the new
+annotation arrives together with the reader that gives it meaning.
+
 ### Edge Annotations
 
 Edges carry their own annotation. Exposure used to be derived from the edge's
@@ -1043,7 +1122,7 @@ table exists to prevent.
 | `DomainField.Searchable`, set by `.AsSearchable()` | Adds the field to the `q` free-text disjunction |
 | `DomainField.Sortable`, set by `.AsSortable()` | Adds the field to `{Entity}SortKeys`, the sort allow-list |
 
-Eleven of the twenty-seven settings, counting the scope constants separately.
+Eleven of the twenty-six settings, counting the scope constants separately.
 Everything else below is accepted and stored, and changes nothing that is
 generated.
 
@@ -1053,16 +1132,20 @@ without this table being updated:
 
 | Setting | Waiting on |
 |---|---|
-| `Metadata` and all of `FieldMetadata` (`Title`, `Format`, `Pattern`, `Minimum`, `Maximum`, `MinLength`, `MaxLength`, `Enum`, `ReadOnly`, `WriteOnly`, `Deprecated`, `Tags`), set through `WithTitle`, `WithFormat`, `WithPattern`, `WithRange`, `WithLength`, `WithEnum`, `AsReadOnly`, `AsWriteOnly`, `AsDeprecated`, `WithTags` | OpenAPI/Swagger spec generation, which no issue implements yet. Declared RESERVED in `annotations.go` |
-| `Validation`, `Description`, `Example` | Undecided. They have no reader and no successor; raised on [#17](https://github.com/githonllc/entdomain/issues/17) |
+| `Metadata` and all of `FieldMetadata` (`Title`, `Description`, `Format`, `Pattern`, `Minimum`, `Maximum`, `MinLength`, `MaxLength`, `Enum`, `Example`, `ReadOnly`, `WriteOnly`, `Deprecated`, `Tags`), set through `WithTitle`, `WithDescription`, `WithFormat`, `WithPattern`, `WithRange`, `WithLength`, `WithEnum`, `WithExample`, `AsReadOnly`, `AsWriteOnly`, `AsDeprecated`, `WithTags` | OpenAPI/Swagger spec generation, which no issue implements yet. Declared RESERVED in `annotations.go` |
+
+Fifteen settings, all of them the metadata block. There is no third category:
+every exported setting is either in the table above it or in this one.
 
 **Removed.** `AsUniqueLookup()` / `AsRangeLookup()` and their `UniqueLookup` /
-`RangeLookup` fields are gone, along with `DomainConfig.EntityName`. The lookup
+`RangeLookup` fields are gone, along with the whole `DomainConfig` annotation
+and `DomainField.Validation`. The lookup
 markers were meant to generate `FindByX` methods; nothing generated them, and
 [#27](https://github.com/githonllc/entdomain/issues/27) derives its operator
 set from ent's own per-type operator table instead, which makes them redundant
-rather than merely unimplemented. `EntityName` had no reader and no successor.
-Deleting these calls changes no behaviour, because there was none.
+rather than merely unimplemented. Deleting these calls changes no behaviour,
+because there was none. See the migration notes below for `Validation` and
+`DomainConfig`.
 
 ## Field shapes: how ent modifiers and scopes interact
 

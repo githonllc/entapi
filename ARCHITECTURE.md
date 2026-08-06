@@ -147,19 +147,18 @@ class DomainField <<annotation>> {
   AsSearchable() DomainField
 }
 class FieldMetadata <<value object>> {
-  Title/Format/Pattern string
+  Title/Description/Format/Pattern string
   Minimum/Maximum *float64
   Enum []interface{}
+  Example interface{}
 }
+note bottom of FieldMetadata : Description and Example\nmoved here from DomainField\nin #17
 enum FieldScope {
   ScopeCreate
   ScopeUpdate
   ScopeQuery
   ScopeResponse
 }
-class DomainConfig <<annotation>> {
-}
-note bottom of DomainConfig : carries no options\nsince #17
 class Extension <<aggregate root>> {
   Config *ExtensionConfig
   Hooks() []gen.Hook
@@ -386,8 +385,8 @@ The route it took is the route any new field capability takes:
 | **`{Entity}ListResponse` is emitted but unused** | `dto.tmpl`; the wiring returns `entdomain.Page[…]` instead | two list-response shapes ship, only one of which any generated function produces |
 | Formatting failure is non-fatal | `extension.go:170` logs a warning and writes unformatted source | a broken template yields a broken-but-written `.go` file |
 
-The declared-only surface is no longer established by grepping. `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` (`annotation_surface_test.go`) derives every exported knob by reflection over `DomainField`, `FieldMetadata`, `DomainEdge`, `DomainConfig` and the scope vocabulary, then decides reachability by toggling each and asking whether any *registered* template function returns anything different. 20 of the 27 knobs change nothing. The seven that reach generation are `DomainField.Scopes`, `DomainField.Required`, `DomainEdge.Scopes`, `DomainEdge.JSONKey`, `ScopeCreate`, `ScopeUpdate` and `ScopeResponse`.
+The declared-only surface is no longer established by grepping. `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` (`annotation_surface_test.go`) derives every exported knob by reflection over `DomainField`, `FieldMetadata`, `DomainEdge` and the scope vocabulary, then decides reachability by toggling each and asking whether any *registered* template function returns anything different. 15 of the 26 knobs change nothing. The eleven that reach generation are `DomainField.Scopes`, `DomainField.Required`, `DomainField.Filterable`, `DomainField.Searchable`, `DomainField.Sortable`, `DomainEdge.Scopes`, `DomainEdge.JSONKey`, `ScopeCreate`, `ScopeUpdate`, `ScopeQuery` and `ScopeResponse`.
 
-Each of the 20 carries a written pending status naming an issue, and the test fails in both directions — an unlisted dead knob and a listed knob that has come alive both break the build. #17 deleted `UniqueLookup`/`RangeLookup` (redundant with the operator table #27 derives from ent's `$field.Ops`) and `DomainConfig.EntityName` (no reader, no successor); `FieldMetadata` stayed, because `annotations.go:44` labels it RESERVED for spec generation, which is a stated forward contract rather than an unfalsifiable promise. `Sensitive` was a third shape again — a security promise in its godoc — so #3 deleted it outright.
+Each of the 15 carries a written pending status naming an issue, and the test fails in both directions — an unlisted dead knob and a listed knob that has come alive both break the build. All 15 are the `FieldMetadata` block, which stayed because `annotations.go` labels it RESERVED for spec generation — a stated forward contract rather than an unfalsifiable promise. The knobs that went instead each had a successor or a redundancy, never merely a missing reader: #17 deleted `UniqueLookup`/`RangeLookup` (redundant with the operator table #27 derives from ent's `$field.Ops`), `DomainConfig` entirely (`EntityName` had no successor and #29 emptied the rest), and `DomainField.Validation` (superseded by #26's `Validate()`), while moving `Description` and `Example` onto `FieldMetadata` where their OpenAPI siblings already lived. `Sensitive` was a third shape again — a security promise in its godoc — so #3 deleted it outright.
 
 ⚠️ Needs verification: everything about *emitted* code in §5.2 and §4 is read off the templates, not off compiled output — this repo contains no ent project, so no generated file was ever compiled during this analysis.

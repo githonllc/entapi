@@ -76,13 +76,19 @@ README's "Annotation surface" section for the issue tracking each:
   in: no preset builder grants them. They generate `{Entity}Filter`, the `q` free-text
   disjunction and `{Entity}SortKeys` in `{entity}_filter.go`. Each also needs `ScopeQuery`
   on the same field, or generation is refused.
-- `.WithDescription(desc)`, `.WithExample(val)` — no reader, disposition undecided (#17)
-- `.WithTitle()`, `.WithFormat()`, `.WithPattern()`, `.WithRange()`,
-  `.WithLength()`, `.WithEnum()`, `.AsReadOnly()`, `.AsWriteOnly()`,
-  `.AsDeprecated()`, `.WithTags()` — RESERVED for spec generation
+- `.WithTitle()`, `.WithDescription()`, `.WithFormat()`, `.WithPattern()`,
+  `.WithRange()`, `.WithLength()`, `.WithEnum()`, `.WithExample()`,
+  `.AsReadOnly()`, `.AsWriteOnly()`, `.AsDeprecated()`, `.WithTags()` —
+  RESERVED for spec generation. All of them write onto `DomainField.Metadata`;
+  `WithDescription` and `WithExample` joined them there on #17, so read them
+  back as `d.Metadata.Description` / `d.Metadata.Example`, not off
+  `DomainField`.
 
 `.AsUniqueLookup()` and `.AsRangeLookup()` were **removed** on #17; nothing ever
-generated the `FindByX` methods they promised.
+generated the `FindByX` methods they promised. `.WithValidation()` was removed
+on #17 too, with no replacement: `Validate()` on the generated request types
+(#26) is where handler-layer validation lives. The entity-level `DomainConfig`
+annotation was removed entirely — delete it from any `Annotations()` call.
 
 ## Generated Files Per Entity
 

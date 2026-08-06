@@ -206,19 +206,38 @@ func copyValidation(rules map[string]interface{}) map[string]interface{} {
 	return out
 }
 
+// No preset builder grants Searchable, Filterable or Sortable.
+//
+// They used to, and while nothing consumed them that was inert. #27 makes them
+// generate real query parameters and a real sort allow-list, at which point a
+// preset that grants them makes essentially every response-visible field
+// orderable — which defeats the reason the allow-list exists. Sorting an
+// arbitrary column is an unindexed-scan trigger and, combined with paging, an
+// ordering oracle over values the caller was never meant to read.
+//
+// So the three markers are opt-in: a field becomes filterable, searchable or
+// sortable because someone wrote AsFilterable(), AsSearchable() or AsSortable()
+// on it, not because they reached for the convenient constructor. ScopeQuery
+// stays on the presets — it says the field may be reached from the query API at
+// all, which is the same kind of statement the other three scopes make; the
+// marker is what decides the dimension.
+
 // DefaultField creates a standard business field (fully accessible at the HTTP layer).
 // Suitable for: most business fields such as name, email, address, etc.
 // Layer impact:
 // - Handler layer: can be populated from HTTP requests, supports querying, appears in responses
 // - Service layer: fully accessible, unrestricted by scopes
 // - Repository layer: fully accessible, unrestricted by scopes
+//
+// It grants no query marker. Chain AsFilterable(), AsSearchable() or
+// AsSortable() on the fields that should carry one.
 func DefaultField() DomainField {
 	return DomainField{
 		// A copy: handing out the package-level slice would let any caller
 		// that assigns to an element corrupt AllFieldScopes for every
 		// subsequent caller.
 		Scopes: copyScopes(AllFieldScopes),
-	}.AsSearchable().AsFilterable().AsSortable()
+	}
 }
 
 // InputOnlyField creates an HTTP-input-only field (excluded from HTTP responses).
@@ -246,7 +265,7 @@ func InputOnlyField() DomainField {
 func OutputOnlyField() DomainField {
 	return DomainField{
 		Scopes: []FieldScope{ScopeQuery, ScopeResponse},
-	}.AsSearchable().AsFilterable().AsSortable()
+	}
 }
 
 // CreateOnlyField creates a write-once field (immutable after creation at the HTTP layer).
@@ -258,7 +277,7 @@ func OutputOnlyField() DomainField {
 func CreateOnlyField() DomainField {
 	return DomainField{
 		Scopes: []FieldScope{ScopeCreate, ScopeQuery, ScopeResponse},
-	}.AsSearchable().AsFilterable().AsSortable()
+	}
 }
 
 // IdField creates an entity identifier field.

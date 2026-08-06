@@ -30,13 +30,13 @@ func (h *BasePlainHandler) ToResponseList(entities []*Plain) []*PlainResponse {
 
 // plainUpdater is the interface required by PartialUpdate.
 type plainUpdater interface {
-	Update(context.Context, uuid.UUID, *PlainUpdateRequest) (*Plain, error)
+	Update(context.Context, uuid.UUID, *PlainPatchRequest) (*Plain, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BasePlainHandler) PartialUpdate(
 	ctx context.Context, svc plainUpdater,
-	id uuid.UUID, req *PlainUpdateRequest,
+	id uuid.UUID, req *PlainPatchRequest,
 ) (*PlainResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

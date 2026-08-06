@@ -65,7 +65,10 @@ Scopes control which **handler-layer DTOs** include a field. They do NOT restric
 Everything below is accepted and stored but generates nothing today. See the
 README's "Annotation surface" section for the issue tracking each:
 
-- `.AsSearchable()`, `.AsFilterable()`, `.AsSortable()` — pending #27
+- `.AsSearchable()`, `.AsFilterable()`, `.AsSortable()` — opt-in per field, and the only way
+  in: no preset builder grants them. They generate `{Entity}Filter`, the `q` free-text
+  disjunction and `{Entity}SortKeys` in `{entity}_filter.go`. Each also needs `ScopeQuery`
+  on the same field, or generation is refused.
 - `.WithDescription(desc)`, `.WithExample(val)` — no reader, disposition undecided (#17)
 - `.WithTitle()`, `.WithFormat()`, `.WithPattern()`, `.WithRange()`,
   `.WithLength()`, `.WithEnum()`, `.AsReadOnly()`, `.AsWriteOnly()`,

@@ -95,6 +95,13 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			}
 			written[path] = true
 
+			// Generate the query surface → ent/{entity}_filter.go
+			path, err = e.generateFilterFile(g, node)
+			if err != nil {
+				return fmt.Errorf("failed to generate %s filter: %w", node.Name, err)
+			}
+			written[path] = true
+
 			// Generate base service file → ent/{entity}_base_service.go
 			if e.Config.GenerateBaseService {
 				path, err := e.generateBaseServiceFile(g, node)
@@ -141,6 +148,36 @@ func (e *Extension) generateDTOFile(g *gen.Graph, node *gen.Type) (string, error
 	}
 
 	filename := fmt.Sprintf("%s_dto.go", strings.ToLower(node.Name))
+	outputPath := filepath.Join(g.Config.Target, filename)
+
+	if err := writeFile(outputPath, buf.Bytes()); err != nil {
+		return "", err
+	}
+	return outputPath, nil
+}
+
+// generateFilterFile generates the query surface for a single Type: the filter
+// struct, its predicates and the sort allow-list.
+// Output: ent/{entity}_filter.go
+//
+// It is emitted for every annotated entity, including one that marks no field
+// filterable, searchable or sortable. Such an entity gets an empty filter type
+// and an empty allow-list, which is the honest answer — and the safe one, since
+// an empty allow-list makes the entity orderable by nothing at all.
+func (e *Extension) generateFilterFile(g *gen.Graph, node *gen.Type) (string, error) {
+	tmpl, err := template.New("filter").
+		Funcs(e.templateFuncMap()).
+		Parse(filterTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse filter template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, node); err != nil {
+		return "", fmt.Errorf("failed to render filter template: %w", err)
+	}
+
+	filename := fmt.Sprintf("%s_filter.go", strings.ToLower(node.Name))
 	outputPath := filepath.Join(g.Config.Target, filename)
 
 	if err := writeFile(outputPath, buf.Bytes()); err != nil {

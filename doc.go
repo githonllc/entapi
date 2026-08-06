@@ -70,12 +70,21 @@
 //
 // # What the annotations actually do
 //
-// Seven of the twenty-seven exported settings reach a template:
+// Eleven of the twenty-seven exported settings reach a template:
 // [DomainField.Scopes], [DomainField.Required], [DomainEdge.Scopes],
-// [DomainEdge.JSONKey], and the [ScopeCreate], [ScopeUpdate] and
-// [ScopeResponse] constants. Every other one — the searchable/sortable/
-// filterable markers, [ScopeQuery], and the whole [FieldMetadata] block — is
-// accepted and stored but changes nothing that is generated yet.
+// [DomainEdge.JSONKey], [DomainField.Filterable], [DomainField.Searchable],
+// [DomainField.Sortable], and the [ScopeCreate], [ScopeUpdate], [ScopeQuery]
+// and [ScopeResponse] constants. Every other one — the whole [FieldMetadata]
+// block, [DomainField.Validation], [DomainField.Description] and
+// [DomainField.Example] — is accepted and stored but changes nothing that is
+// generated yet.
+//
+// The three query markers are opt-in per field: no preset builder grants them,
+// because they now produce real query parameters and a real sort allow-list,
+// and a permissive default would make essentially every response-visible field
+// orderable. [ScopeQuery] is the gate the markers sit behind — it says the
+// field may be reached from the query API, and the marker says in which
+// dimension.
 //
 // The README's "Annotation surface" section lists each with the issue that will
 // consume it. That list is derived by a test, not maintained by hand, so it

@@ -24,11 +24,17 @@ committed. A clean checkout plus a test run leaves `git status` clean; a dirty
 tree means generation changed, not that the test misbehaved.
 
 Everything under `<dir>/ent/` except `<dir>/ent/schema/` is generated and carries
-a DO NOT EDIT header. Regenerate; never hand-edit. Two files are deliberate
-exceptions, and both say so in their own header:
+a DO NOT EDIT header. Regenerate; never hand-edit. Three files are deliberate
+exceptions, and each says so in its own header:
 
 - `stale/ent/trinket_dto.go`, hand-written to prove cleanup keys on entdomain's
   marker rather than on a file name.
+- `presence/ent/account_presence_test.go`, hand-written and in `package ent`. It
+  asserts what compilation cannot: that an omitted field is never written to the
+  builder's mutation, so ent's `Default()` still applies, and that a patch tells
+  absent from explicit null from value. ent records every `Set`/`Clear` on the
+  mutation, which is the last observable point before the query — and the only
+  one available in a module with no SQL driver.
 - `edges/ent/orerr_contract_test.go`, hand-written and in `package ent`. It has
   to be, because the contract it pins is exactly that `Edges.loadedTypes` is
   unreachable from anywhere else — setting that flag is the only way to build the
@@ -69,6 +75,7 @@ when the case passes.
 | `fieldshapes` | nillable, enum, JSON/map and named-`GoType` fields, optional and required | generates and compiles |
 | `edges` | to-one, to-many, a self-referential pair declared separately, a response-scoped foreign key whose edge is deliberately unannotated, and an entity with no response-scoped field at all | generates and compiles |
 | `selfrefpartial` | a self-referential pair exposing one end only, the other end holding a bare `entdomain.Edge()` | generates and compiles |
+| `presence` | a defaulted field, an omitted optional field, an explicit null, a required non-string field, an `Immutable()` create-only field | generates, compiles, and is exercised by `ent/account_presence_test.go` |
 | `immutable` | `Immutable()` fields carrying `ScopeUpdate` | generation refused |
 | `intid` | a domain-annotated entity with ent's default `int` primary key, with the base service enabled | generation refused |
 | `selfref` | a self-referential pair declared in the chained form, so annotated on one end only | generation refused |
@@ -100,7 +107,7 @@ at risk is that an *empty* annotation survives the schema load, which reaches
 codegen through a JSON round-trip, and `DomainEdge{}` marshals to `{}`. If ent
 dropped it, the refusal message would be recommending a fix that does not work.
 
-`basic`, `fieldshapes` and `edges` are also the corpus for
+`basic`, `fieldshapes`, `edges` and `presence` are also the corpus for
 `TestTemplatesDeclareTheirImports`, which renders each template over them and
 fails if goimports has to add or remove an import — that is what keeps the
 formatter a safety net rather than the mechanism. Every refused fixture is

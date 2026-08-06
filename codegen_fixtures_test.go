@@ -52,6 +52,7 @@ var fixtures = []fixtureCase{
 	{dir: "intid", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Counter.id", `type "int"`, "uuid.UUID", "#29"}},
 	{dir: "selfref", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Tree.children", "Tree.parent", "chained", "edge.From(", "entdomain.Edge()"}},
 	{dir: "selfrefpartial", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "presence", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the

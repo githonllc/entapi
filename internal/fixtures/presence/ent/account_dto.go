@@ -402,11 +402,16 @@ func AccountQueryWithResponseEdges(q *AccountQuery) *AccountQuery {
 	return q
 }
 
-// AccountListResponse represents the list response for Account
+// AccountListResponse represents the list response for Account.
+//
+// Its four fields are offset pagination in full, and match entdomain.Page —
+// which is what ListAccounts actually returns. A fifth field,
+// PageInfo, held a has-next-page flag and an opaque cursor. Nothing ever set
+// it: the cursor lister that would have left with the base service (#29), so
+// it left with the rest of the cursor surface on #6.
 type AccountListResponse struct {
-	Data     []*AccountResponse  `json:"data"`
-	Total    int                 `json:"total"`
-	Page     int                 `json:"page"`
-	Size     int                 `json:"size"`
-	PageInfo *entdomain.PageInfo `json:"pageInfo,omitempty"`
+	Data  []*AccountResponse `json:"data"`
+	Total int                `json:"total"`
+	Page  int                `json:"page"`
+	Size  int                `json:"size"`
 }

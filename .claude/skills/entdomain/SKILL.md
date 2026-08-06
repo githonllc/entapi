@@ -109,7 +109,9 @@ For entity `Courier`, three files are generated in `ent/`:
   - `Has<Field>() bool` — absent, explicit `null` and value are three states:
     absent leaves the field alone, `null` clears it, a value sets it
 - `CourierResponse` — fields with `ScopeResponse`, plus nested edge responses
-- `CourierListResponse` — paginated response wrapper with `PageInfo`
+- `CourierListResponse` — paginated response wrapper: `data`, `total`, `page`, `size`.
+  The same four fields as `entdomain.Page`, which is what the wiring returns.
+  It carried a fifth, `PageInfo`, until #6 removed the cursor surface
 
 ### `ent/courier_wiring.go`
 
@@ -261,9 +263,8 @@ ext := entdomain.NewExtensionWithOptions(
 | File | Purpose |
 |------|---------|
 | `annotations.go` | Annotation types, scope constants, fluent builders |
-| `types.go` | PageInfo, Ptr/PtrOrNil/PtrNilSafe helpers |
+| `types.go` | ListRequest, DefaultPageSize/MaxPageSize, Ptr/PtrOrNil/PtrNilSafe helpers |
 | `errors.go` | ErrNotFound, ErrAlreadyExists, ErrValidation sentinels |
-| `cursor.go` | Cursor, PageInfo, EncodeCursor/DecodeCursor |
 | `extension.go` | Extension configuration and generation hooks |
 | `funcs.go` | Template function registry |
 | `funcs_fields.go` | Field filtering (createFields, updateFields, etc.) |

@@ -29,8 +29,14 @@ const (
 )
 
 // ListRequest represents a paginated list request with optional sorting.
-// Supports both offset-based (Page/Size) and cursor-based (Cursor/Size) pagination.
-// When Cursor is set, keyset pagination is used; otherwise offset pagination applies.
+//
+// Pagination is offset-based, and only offset-based: Page and Size are the
+// whole of it. There used to be a Cursor field here, documented as "when Cursor
+// is set, keyset pagination is used", and no code anywhere branched on it — a
+// consumer who believed the comment got offset page one, silently, forever. It
+// was removed on #6 along with the base64(json) codec that named its format;
+// see the README migration note. Adding keyset paging later is additive, which
+// is the asymmetry that decided it.
 //
 // The zero value is usable and needs no preparation. Read the effective values
 // through [ListRequest.Limit] and [ListRequest.Offset], never off the fields
@@ -49,7 +55,6 @@ type ListRequest struct {
 	Page   int    `json:"page,omitempty" form:"page"`
 	SortBy string `json:"sort_by,omitempty" form:"sort_by"`
 	Order  string `json:"order,omitempty" form:"order"`
-	Cursor string `json:"cursor,omitempty" form:"cursor"` // opaque cursor for keyset pagination
 }
 
 // Validate reports input that nothing downstream can silently repair. Errors

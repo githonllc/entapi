@@ -331,6 +331,63 @@ relied on `SetDefaults()` mutating the request before serialising it back, set
 clamped, not refused. If your API returned `400` for `size=5000`, compare
 against `MaxPageSize` yourself.
 
+### Migrating from the cursor codec and `PageInfo`
+
+**`Cursor`, `PageInfo`, `EncodeCursor`, `DecodeCursor` and the `ListRequest.Cursor`
+field have all been removed, and generated `{Entity}ListResponse` no longer
+carries a `PageInfo` field.** This package publishes offset pagination and
+nothing else ([#6](https://github.com/githonllc/entdomain/issues/6)).
+
+None of them ever did anything. No generated code called the codec, and the one
+generated lister that encoded a cursor — `ListWithCursor` on the base service —
+went away with the base service itself. `ListRequest.Cursor` was documented as
+"when `Cursor` is set, keyset pagination is used" and **no code anywhere branched
+on it**: a caller who set it got offset page one, silently, on every request.
+That is the failure this removal is about. `DecodeCursor` was also lossy above
+2^53 — `ID any` came back from `json.Unmarshal` as a `float64`, and the
+`f == float64(int64(f))` check used to repair it is already true of a truncated
+value, so it could not detect its own defect.
+
+```go
+// before
+req := entdomain.ListRequest{Cursor: token, Size: 20}   // token was ignored
+page, err := ent.ListArticles(ctx, db, filter, req)
+
+// after
+req := entdomain.ListRequest{Page: 2, Size: 20}
+page, err := ent.ListArticles(ctx, db, filter, req)
+```
+
+**Wire format.** `{Entity}ListResponse` loses its fifth field:
+
+```jsonc
+// before                              // after
+{                                      {
+  "data": [ /* … */ ],                   "data": [ /* … */ ],
+  "total": 42,                           "total": 42,
+  "page": 1,                             "page": 1,
+  "size": 20,                            "size": 20
+  "pageInfo": {                        }
+    "hasNextPage": true,
+    "endCursor": "eyJpZCI6…"
+  }
+}
+```
+
+The field was `json:"pageInfo,omitempty"` and **nothing generated ever set it**,
+so no response this library actually produced carried a `pageInfo` key. The
+break is to the published Go struct, not to any payload that was ever sent:
+code that reads `resp.PageInfo` stops compiling, code that reads the JSON does
+not change. `{Entity}ListResponse` keeps the same four fields as
+`entdomain.Page[{Entity}Response]`, which is what `ent.List{Entities}` returns.
+
+**If you need keyset paging**, write the query — the generated filter, order
+options and converter are all still there to hand to it, as shown under
+[Migrating from `BaseService` and `BaseHandler`](#migrating-from-baseservice-and-basehandler).
+Do not revive the deleted codec: it never had a caller to be compatible with,
+and adding a cursor back later is an additive change, which is exactly the
+asymmetry that made removing it the cheap direction.
+
 ### Error mapping
 
 `ErrorMapper` turns a persistence layer's errors into this package's sentinels.
@@ -992,21 +1049,13 @@ would need reflection to reach the mutation's client; the trade is recorded on
 driver error onto `ErrNotFound` or `ErrAlreadyExists` is `entdomain.ErrorMapper`'s job and
 the wiring does not call it yet ([#13](https://github.com/githonllc/entdomain/issues/13)).
 
-**Pagination is offset-only in generated code.** `ent.List{Entities}` goes through
-`entdomain.ListPage`, which is O(n) deep and costs a `COUNT` per page. The exported cursor
-codec (`Cursor`, `EncodeCursor`, `DecodeCursor`, `PageInfo`) is reachable from the public
-API but no generated code uses it, and it loses precision above 2^53
-([#6](https://github.com/githonllc/entdomain/issues/6)).
-
-**Nothing generated classifies errors.** The wiring returns what ent returned; mapping a
-driver error onto `ErrNotFound` or `ErrAlreadyExists` is `entdomain.ErrorMapper`'s job and
-the wiring does not call it yet ([#13](https://github.com/githonllc/entdomain/issues/13)).
-
-**Pagination is offset-only in generated code.** `ent.List{Entities}` goes through
-`entdomain.ListPage`, which is O(n) deep and costs a `COUNT` per page. The exported cursor
-codec (`Cursor`, `EncodeCursor`, `DecodeCursor`, `PageInfo`) is reachable from the public
-API but no generated code uses it, and it loses precision above 2^53
-([#6](https://github.com/githonllc/entdomain/issues/6)).
+**Pagination is offset-only, everywhere.** `ent.List{Entities}` goes through
+`entdomain.ListPage`, which is O(n) deep, costs a `COUNT` per page, and can skip or repeat
+rows under concurrent writes. There is no keyset alternative in the package: the exported
+cursor codec (`Cursor`, `EncodeCursor`, `DecodeCursor`, `PageInfo`) and the
+`ListRequest.Cursor` field were removed once nothing generated referred to them
+([#6](https://github.com/githonllc/entdomain/issues/6)) — see
+[Migrating from the cursor codec and `PageInfo`](#migrating-from-the-cursor-codec-and-pageinfo).
 
 **Package import panics on Windows.** Template lookup joins paths with the OS separator
 while the embedded filesystem always uses forward slashes, so loading fails at package

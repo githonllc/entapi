@@ -226,6 +226,45 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 			t.Errorf("GetArticle after delete: err = %v, want a not-found error", err)
 		}
 	})
+
+	// The batch delete is the one Base<X>Service member the wiring did not
+	// already supersede, so it is asserted here rather than assumed: it returns
+	// ent's own affected-row count, and the rows it names are actually gone.
+	t.Run("delete batch removes exactly the rows it names", func(t *testing.T) {
+		keep := createArticle(t, ctx, c, "delta", ptr(4), author.ID)
+		a := createArticle(t, ctx, c, "epsilon", ptr(5), author.ID)
+		b := createArticle(t, ctx, c, "zeta", ptr(6), author.ID)
+
+		n, err := ent.DeleteBatchArticles(ctx, c, []uuid.UUID{a.ID, b.ID})
+		if err != nil {
+			t.Fatalf("DeleteBatchArticles: %v", err)
+		}
+		if n != 2 {
+			t.Errorf("DeleteBatchArticles deleted %d rows, want 2", n)
+		}
+		for _, gone := range []uuid.UUID{a.ID, b.ID} {
+			if _, err := ent.GetArticle(ctx, c, gone); !ent.IsNotFound(err) {
+				t.Errorf("GetArticle(%s) after batch delete: err = %v, want a not-found error", gone, err)
+			}
+		}
+		if _, err := ent.GetArticle(ctx, c, keep.ID); err != nil {
+			t.Errorf("the batch delete took a row it was not given: %v", err)
+		}
+
+		// An empty id list is a no-op, not "delete everything". ent turns an
+		// empty IDIn into a predicate that matches nothing, and this asserts it
+		// rather than trusting it — the failure mode is unrecoverable.
+		n, err = ent.DeleteBatchArticles(ctx, c, nil)
+		if err != nil {
+			t.Fatalf("DeleteBatchArticles(nil): %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("DeleteBatchArticles(nil) deleted %d rows, want 0", n)
+		}
+		if _, err := ent.GetArticle(ctx, c, keep.ID); err != nil {
+			t.Errorf("an empty batch delete removed rows: %v", err)
+		}
+	})
 }
 
 // TestWiringWithoutResponseEdges covers the other branch: Note declares no edge,

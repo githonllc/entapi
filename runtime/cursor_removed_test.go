@@ -11,7 +11,7 @@ import (
 )
 
 // removedCursorSymbols is the exclusion list decided on #6 and recorded in
-// DESIGN-v2.md §9.1: the base64(json) keyset codec and the response metadata
+// docs/DESIGN-v2.md §9.1: the base64(json) keyset codec and the response metadata
 // that only that codec could fill.
 //
 // The names are spelled as strings rather than referenced, because a test that

@@ -7,7 +7,7 @@ import (
 )
 
 // removedCursorSymbols is the exclusion list decided on #6 and recorded in
-// DESIGN-v2.md §9.1.
+// docs/DESIGN-v2.md §9.1.
 //
 // It is restated here rather than shared with runtime/cursor_removed_test.go
 // because the two halves now live in different packages and check different

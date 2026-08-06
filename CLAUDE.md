@@ -350,6 +350,6 @@ such symbol.
 
 ## Docs to keep in sync
 
-`README.md` and `README_zh.md` are parallel translations; changing the public API means editing both, and both carry the migration notes for every symbol this module has removed. There are now **two** `doc.go`s: the root one is the generator's godoc quick start and the runtime migration pointer, `runtime/doc.go` is the runtime's. `ARCHITECTURE.md` carries the module table and the PlantUML diagrams, and `.claude/skills/entdomain/SKILL.md` documents downstream usage patterns (some of it describes a consumer project's interceptors, not this repo).
+`README.md` and `README_zh.md` are parallel translations; changing the public API means editing both, and both carry the migration notes for every symbol this module has removed. There are now **two** `doc.go`s: the root one is the generator's godoc quick start and the runtime migration pointer, `runtime/doc.go` is the runtime's. `docs/ARCHITECTURE.md` carries the module table and the PlantUML diagrams, and `.claude/skills/entdomain/SKILL.md` documents downstream usage patterns (some of it describes a consumer project's interceptors, not this repo).
 
 Moving or removing a published symbol is an established move here, not an exception — #3, #6, #24, #26, #29 and #15 all did it. The convention is a migration note in **both** READMEs plus a `doc.go` pointer, and no compatibility alias: an alias that preserves the coupling a change exists to remove is worse than the break.

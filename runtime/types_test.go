@@ -172,7 +172,7 @@ func TestListRequestValidation(t *testing.T) {
 // The defect it encodes: SetDefaults() was a separate mutating call that
 // nothing forced a caller to make, while Validate() accepted Size == 0. A
 // handler that forgot the call passed a zero size straight through — the
-// documented P0-8 in QUALITY-REVIEW.md. The fix is not a reminder, it is
+// documented P0-8 in docs/QUALITY-REVIEW.md. The fix is not a reminder, it is
 // removing the call that could be forgotten: Limit() defaults and clamps, and
 // it sits on the only path into ListPage.
 func TestZeroValueRequestNeedsNoPreparation(t *testing.T) {

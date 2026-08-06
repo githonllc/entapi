@@ -29,7 +29,8 @@ An [Ent](https://entgo.io) extension that generates HTTP request/response DTOs, 
 ## Features
 
 - **Annotation-driven** — mark field scopes with concise builders (`DefaultField`, `InputOnlyField`, `OutputOnlyField`, etc.)
-- **HTTP DTOs** — generates `CreateRequest`, `UpdateRequest`, `Response`, `ListResponse` per entity
+- **HTTP DTOs** — generates `CreateRequest`, `PatchRequest`, `Response`, `ListResponse` per entity
+- **Explicit presence** — a patch request tells an omitted key from an explicit `null` from a value, and a field omitted on create is never written, so the schema's `Default()` still applies
 - **BaseService** — CRUD operations with Before/After hooks, builder helpers, and entity→response conversion
 - **BaseHandler** — response conversion helpers and partial update support
 - **Soft-delete detection** — automatically generates `UpdateOneID().SetDeletedAt(now)` for entities with a `deleted_at` field
@@ -410,7 +411,7 @@ func (User) Fields() []ent.Field {
 graph TD
     subgraph "HTTP Layer"
         CR["CreateRequest<br/><small>ScopeCreate fields</small>"]
-        UR["UpdateRequest<br/><small>ScopeUpdate fields</small>"]
+        UR["PatchRequest<br/><small>ScopeUpdate fields</small>"]
         RS["Response<br/><small>ScopeResponse fields</small>"]
     end
 
@@ -450,9 +451,59 @@ For each annotated schema, up to three files are generated (all in the `ent/` pa
 
 | File | Contains |
 |------|----------|
-| `{entity}_dto.go` | `CreateRequest`, `UpdateRequest`, `Validate()` methods, and the response half below |
-| `{entity}_base_service.go` | `BaseService` with CRUD, Before/After hooks, `Apply*Request` builders, `EntToResponse` |
+| `{entity}_dto.go` | `CreateRequest`, `PatchRequest`, their `Validate()`/`Apply` pair, and the response half below |
+| `{entity}_base_service.go` | `BaseService` with CRUD, Before/After hooks, `EntToResponse` |
 | `{entity}_base_handler.go` | `BaseHandler` with `ToResponse`, `ToResponseList`, `PartialUpdate` |
+
+### Create and patch requests
+
+The request half of `{entity}_dto.go` is two request types, each paired with a
+validated form that is the only thing the builder writer accepts:
+
+| Declaration | Purpose |
+|---|---|
+| `{Entity}CreateRequest` | create-scoped fields; a value type when ent requires the field and cannot default it, `*T` otherwise |
+| `{Entity}PatchRequest` | update-scoped fields that ent's update builders can set, every one a `*T` |
+| `(r) UnmarshalJSON(b) error` | records which keys the payload carried, next to the ordinary decode |
+| `(r) Has<Field>() bool` | whether the payload carried that key |
+| `(r) Validate() (*Valid{Entity}…Request, error)` | the only way to obtain the validated form |
+| `(v) Apply(b) b` | writes the request onto `{Entity}Create` / `{Entity}UpdateOne` |
+
+Four properties follow, and each is asserted in `internal/fixtures/presence`
+against real ent builders:
+
+- **A field omitted on create is not written at all**, so the schema's
+  `Default()` applies. This is the whole reason presence is recorded rather
+  than inferred from the zero value.
+- **A patch separates absent, explicit `null` and value.** Absent leaves the
+  field alone, `null` emits `Clear<Field>()`, a value emits `Set<Field>()`.
+  Only a field the schema declares `Optional()` can be cleared, because ent
+  generates `Clear<Field>()` for those and no others; a `null` on anything else
+  is rejected with the field named.
+- **Reaching `Apply` without validating is a compile error.** `Apply` is defined
+  on `Valid{Entity}CreateRequest` / `Valid{Entity}PatchRequest`, which only
+  `Validate` can construct. The v1 free functions
+  `Apply{Entity}CreateRequest` / `Apply{Entity}UpdateRequest` are gone: they took
+  a raw request, which is exactly the path that let validation be skipped.
+- **The wire format is unchanged.** Presence lives in an unexported map with no
+  marshaller of its own, so requests still marshal and unmarshal as ordinary
+  JSON and every reflection-based consumer — validators, form binders, spec
+  generators — sees the struct it saw before. A generic `Optional[T]` wrapper
+  was considered and rejected for losing exactly this.
+
+A request built in Go rather than decoded recorded no presence, and the two
+types default in opposite directions on purpose: a create request reads every
+field as supplied, because its struct is the only source of truth there; a patch
+request reads every field as absent, so its nil pointers are never mistaken for
+an instruction to clear the row. `UnmarshalJSON` always allocates the map, so
+neither fallback can fire on a decoded request.
+
+An `Immutable()` field is absent from the patch request, because ent's update
+builders iterate `MutableFields` and generate no setter for one. A caller who
+names it in a PATCH body gets silence: `encoding/json` discards the key before
+any validator can see it. Rejecting that needs `DisallowUnknownFields`, which
+lives in the consumer's handler — it is the one case here that cannot be closed
+from the generator.
 
 ### Responses, summaries and eager-load plans
 
@@ -540,7 +591,7 @@ Scopes control which HTTP-layer DTOs include a field. They do **not** restrict s
 | Scope | Description |
 |-------|-------------|
 | `ScopeCreate` | Field appears in `CreateRequest` |
-| `ScopeUpdate` | Field appears in `UpdateRequest` |
+| `ScopeUpdate` | Field appears in `PatchRequest` |
 | `ScopeResponse` | Field appears in `Response` |
 | `ScopeQuery` | **Nothing yet.** Reserved for the generated query parameters of [#27](https://github.com/githonllc/entdomain/issues/27). Most preset builders grant it; today it changes no generated byte |
 
@@ -560,7 +611,7 @@ table exists to prevent.
 | Setting | Effect |
 |---|---|
 | `DomainField.Scopes` | Selects which request/response struct the field lands in |
-| `DomainField.Required` | Emits `validate:"required"` and the `Validate()` check for that scope |
+| `DomainField.Required` | `WithRequired(ScopeCreate)` makes the create request demand a value ent would have defaulted or allowed to be absent; `WithRequired(ScopeUpdate)` withdraws the field from the set an explicit `null` may clear |
 | `DomainEdge.Scopes`, set by `Edge().InResponse()` | Puts the nested object in the response type |
 | `DomainEdge.JSONKey`, set by `.As("key")` | Overrides the edge's JSON key |
 
@@ -600,8 +651,10 @@ names the entity, the field and both conflicting facts.**
 
 | Schema shape | What is generated |
 |---|---|
-| `Optional()` | `*T` in create/update requests and in the response |
-| `Optional().Nillable()` | `*T` everywhere, including in a create request where the field is `WithRequired(ScopeCreate)` — the create setter ent emits is `SetNillable<X>(*T)`, so "required" is enforced by the generated `Validate()`, which rejects a nil pointer, not by the absence of a pointer |
+| `Optional()` | `*T` in create and patch requests and in the response. Clearable in a patch: an explicit `null` emits `Clear<X>()` |
+| `Optional().Nillable()` | `*T` everywhere, including in a create request where the field is `WithRequired(ScopeCreate)` — "required" is then enforced by the generated `Validate()`, which rejects a nil pointer, not by the absence of a pointer |
+| A field with a schema `Default()` | `*T` in the create request. Omitting it writes nothing, so ent's default applies; writing the zero value unconditionally is what used to defeat it |
+| A field ent requires and cannot default | `T` in the create request, always written, and `Validate()` refuses a request that carries no value for it — by presence, not by comparing against the zero value, so `0` and `false` are values rather than omissions |
 | `Immutable()` **+ `ScopeUpdate`** | **Generation fails.** ent's update builders iterate `MutableFields`, which excludes immutable fields, so `Set<X>` does not exist on `<Entity>UpdateOne` and no template can emit a call that compiles. Use `CreateOnlyField()` / `OutputOnlyField()`, or drop `Immutable()` |
 | `Immutable()` without `ScopeUpdate` | Generated normally; the field is settable on create and readable in responses |
 | `field.Enum(...)`, optional or required | Generated normally; the Go type is the enum type in the entity's own package |

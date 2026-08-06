@@ -18,7 +18,7 @@ import (
 type BaseUserServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *UserCreateRequest) error
 	AfterCreate(ctx context.Context, entity *User) (*User, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *UserUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *UserPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *User) (*User, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseUserService) AfterCreate(_ context.Context, entity *User) (*User, e
 	return entity, nil
 }
 
-func (s *BaseUserService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *UserUpdateRequest) error {
+func (s *BaseUserService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *UserPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseUserService) GetByID(ctx context.Context, id uuid.UUID) (*User, err
 }
 
 // Create creates a new User from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseUserService) Create(ctx context.Context, req *UserCreateRequest) (*User, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.User.Create()
-	ApplyUserCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.User.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseUserService) Create(ctx context.Context, req *UserCreateRequest) (*
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of User, only setting non-nil fields from the request.
-func (s *BaseUserService) Update(ctx context.Context, id uuid.UUID, req *UserUpdateRequest) (*User, error) {
+// Update performs a partial update of User: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseUserService) Update(ctx context.Context, id uuid.UUID, req *UserPatchRequest) (*User, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.User.UpdateOneID(id)
-	ApplyUserUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.User.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,21 +222,14 @@ func (s *BaseUserService) ListWithCursor(ctx context.Context, limit int, cursor,
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyUserCreateRequest and
+// ApplyUserUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidUserCreateRequest and
+// ValidUserPatchRequest (see user_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyUserCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyUserCreateRequest(builder *UserCreate, req *UserCreateRequest) {
-	builder.SetName(req.Name)
-}
-
-// ApplyUserUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyUserUpdateRequest(builder *UserUpdateOne, req *UserUpdateRequest) {
-	if req.Name != nil {
-		builder.SetName(*req.Name)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

@@ -60,8 +60,9 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 
 | File | Contains |
 |---|---|
-| `funcs_fields.go` | field selection: `domainFields`, `createFields`, `updateFields`, `responseFields`, `responseEdges` |
+| `funcs_fields.go` | field selection: `domainFields`, `createFields`, `patchFields`, `responseFields`, `responseEdges` |
 | `funcs_scope.go` | `hasDomainScope`, `isDomainRequired`, and `getDomainFieldAnnotation` |
+| `funcs_presence.go` | request field shape: `isCreatePointer`, `isCreateRequired`, `isPatchClearable` |
 | `funcs_typechecks.go` | `isTimeField`, `hasSoftDelete`, `isComplexFieldType` |
 | `funcs_imports.go` | `dtoImports`: the import specs the DTO must declare for its field types |
 | `funcs_codegen.go` | string-emitting helpers (`setFieldCallReq`, `fieldValueExpr`) |
@@ -73,6 +74,48 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 ### Annotation access
 
 Never read `field.Annotations["DomainField"]` directly. Always go through `getDomainFieldAnnotation` (`funcs_scope.go`): the annotation arrives as `*DomainField` during codegen but as `map[string]interface{}` when loaded from a serialized schema, and that function normalizes both via a JSON round-trip.
+
+### Create and patch requests (#26)
+
+`dto.tmpl` emits, per entity: `{Entity}CreateRequest`, `{Entity}PatchRequest`,
+a `Valid…` wrapper for each, an `UnmarshalJSON`, one `Has<Field>()` per field,
+and `Apply` on the validated types only. Five rules are load-bearing:
+
+- **Field shape comes from ent, never from a second opinion.** `funcs_presence.go`
+  is the whole rule set: a create field is `*T` when `Optional || Default ||
+  Nillable` — exactly when ent can fill it without the caller — and required when
+  ent requires it and cannot default it, or when the annotation says so. ent
+  decides which setters exist, so any independently derived shape shows up as a
+  call to a method that was never generated.
+- **`Apply` uses `if r.X != nil { b.Set<X>(*r.X) }`, never `SetNillable<X>`.**
+  ent skips the nillable setter for a field whose type is already nillable, so
+  `SetNillableTags` does not exist for an optional `field.JSON`. The spike's
+  hand-written target uses `SetNillable` because its schema has no JSON field;
+  one uniform branch is correct for every shape and is what ent's own
+  `SetNillable` expands to anyway.
+- **Presence means different things in the two requests, on purpose.** A create
+  request cannot express "clear", so a JSON `null` is recorded as absent and the
+  field goes unwritten — which is also what makes an explicit null on a required
+  field a "required" error. A patch records `null` as present, because that is
+  how clearing is expressed.
+- **A request that never went through `UnmarshalJSON` defaults in opposite
+  directions.** `has()` on a create request returns true for everything (the
+  struct is the only source of truth there); on a patch request it returns false
+  for everything (nil pointers must never read as "clear the row"). The
+  unmarshaller always allocates the map, so neither fallback fires on a decoded
+  request.
+- **Requiredness is checked by presence, not by the zero value**, except for
+  strings, where `== ""` says the same thing and matches the spike. `0` and
+  `false` are values; #14 exists because the v1 template only checked strings.
+- **`patchFields` intersects ScopeUpdate with ent's `MutableFields`.** That is
+  the list ent's setter template iterates, so a field that survives provably has
+  a `Set<Field>`. `checkGraphConflicts` refuses Immutable+ScopeUpdate first, so
+  the intersection currently drops nothing — the refusal is what the author
+  sees, the filter is what keeps the output correct.
+
+The one case that cannot be closed here: an `Immutable()` field named in a PATCH
+body is discarded by `encoding/json` before any validator runs. Rejecting it
+needs `DisallowUnknownFields` in the consumer's handler.
 
 ### Response, summary and edge generation (#25)
 
@@ -135,6 +178,11 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
 ## Conventions baked into generated code
 
 - `base_service.tmpl` hardcodes `uuid.UUID` as the entity ID type in hook signatures and CRUD methods. Non-UUID primary keys are not supported by the current BaseService.
+- `Base{Entity}Service.Create`/`Update` call `req.Validate()` and then `Apply` on
+  the result. They have no choice: `Apply` exists only on the validated type. The
+  exported `Apply{Entity}CreateRequest`/`Apply{Entity}UpdateRequest` free
+  functions are gone, because taking a raw request is exactly the escape hatch
+  that made validation optional (#26).
 - Soft delete is **convention-based**: `hasSoftDelete` matches a `Nillable` `time.Time` field literally named `deleted_at`, and switches Delete to `UpdateOneID().SetDeletedAt(now)`.
 - Hook dispatch works via `SetSelf` + an embedded interface; without `SetSelf` the no-op defaults on `Base{Entity}Service` are used.
 - `Base{Entity}Handler` exists so consumer handler packages never import `ent` transitively for conversion — keep it dependency-free.

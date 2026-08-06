@@ -26,7 +26,8 @@
 ## 特性
 
 - **注解驱动** — 使用简洁的构建器标记字段作用域（`DefaultField`、`InputOnlyField`、`OutputOnlyField` 等）
-- **HTTP DTO** — 为每个实体生成 `CreateRequest`、`UpdateRequest`、`Response`、`ListResponse`
+- **HTTP DTO** — 为每个实体生成 `CreateRequest`、`PatchRequest`、`Response`、`ListResponse`
+- **显式的存在性（presence）** — patch 请求能区分「键缺席」「显式 null」「有值」三种状态；create 时省略的字段根本不会被写入，schema 的 `Default()` 因此依然生效
 - **BaseService** — 带 Before/After 钩子的 CRUD 操作、构建器辅助和实体→响应转换
 - **BaseHandler** — 响应转换辅助和部分更新支持
 - **软删除检测** — 自动为包含 `deleted_at` 字段的实体生成 `UpdateOneID().SetDeletedAt(now)`
@@ -384,7 +385,7 @@ func (User) Fields() []ent.Field {
 graph TD
     subgraph "HTTP 层"
         CR["CreateRequest<br/><small>ScopeCreate 字段</small>"]
-        UR["UpdateRequest<br/><small>ScopeUpdate 字段</small>"]
+        UR["PatchRequest<br/><small>ScopeUpdate 字段</small>"]
         RS["Response<br/><small>ScopeResponse 字段</small>"]
     end
 
@@ -424,9 +425,54 @@ graph TD
 
 | 文件 | 内容 |
 |------|------|
-| `{entity}_dto.go` | `CreateRequest`、`UpdateRequest`、`Validate()` 方法，以及下述响应部分 |
-| `{entity}_base_service.go` | 带 CRUD、Before/After 钩子、`Apply*Request` 构建器、`EntToResponse` 的 `BaseService` |
+| `{entity}_dto.go` | `CreateRequest`、`PatchRequest`、它们的 `Validate()`/`Apply` 组合，以及下述响应部分 |
+| `{entity}_base_service.go` | 带 CRUD、Before/After 钩子、`EntToResponse` 的 `BaseService` |
 | `{entity}_base_handler.go` | 带 `ToResponse`、`ToResponseList`、`PartialUpdate` 的 `BaseHandler` |
+
+### 创建请求与 patch 请求
+
+`{entity}_dto.go` 的请求部分是两个请求类型，各自配一个「已校验」形态——那是写
+builder 的唯一入口：
+
+| 声明 | 用途 |
+|---|---|
+| `{Entity}CreateRequest` | create 作用域字段；ent 要求且无法默认的字段是值类型，其余是 `*T` |
+| `{Entity}PatchRequest` | update 作用域中 ent 的 update builder 真能设置的字段，全部是 `*T` |
+| `(r) UnmarshalJSON(b) error` | 在常规解码之外，记录 payload 携带了哪些键 |
+| `(r) Has<Field>() bool` | payload 是否携带了该键 |
+| `(r) Validate() (*Valid{Entity}…Request, error)` | 获得已校验形态的唯一途径 |
+| `(v) Apply(b) b` | 把请求写到 `{Entity}Create` / `{Entity}UpdateOne` 上 |
+
+由此得到四条性质，每条都在 `internal/fixtures/presence` 中针对真实 ent builder
+断言：
+
+- **create 时省略的字段根本不会被写入**，schema 的 `Default()` 因此生效。这正是
+  存在性必须被记录、而不能从零值推断的全部理由。
+- **patch 区分缺席、显式 `null` 与有值。** 缺席表示不动该字段，`null` 生成
+  `Clear<Field>()`，有值生成 `Set<Field>()`。只有 schema 声明为 `Optional()` 的
+  字段可以被清空——ent 只为这类字段生成 `Clear<Field>()`；对其它字段的 `null`
+  会被拒绝，并在错误信息里点名该字段。
+- **不校验就拿不到 `Apply`，那是编译错误。** `Apply` 定义在
+  `Valid{Entity}CreateRequest` / `Valid{Entity}PatchRequest` 上，而只有
+  `Validate` 能构造它们。v1 的自由函数 `Apply{Entity}CreateRequest` /
+  `Apply{Entity}UpdateRequest` 已删除：它们接收未校验的请求，正是校验被跳过的
+  那条路径。
+- **线格式没有变化。** 存在性存在一个不导出、且没有自己 marshaller 的 map 里，
+  所以请求仍然按普通 JSON 序列化与反序列化，所有基于反射的消费者——校验库、表单
+  绑定、spec 生成器——看到的还是原来那个结构体。泛型 `Optional[T]` 包装器正是因为
+  丢掉这一点而被否决。
+
+在 Go 里手工构造、而非解码得到的请求没有记录任何存在性，两个类型在这里的默认
+方向是刻意相反的：创建请求把所有字段读作「已提供」，因为此时结构体是唯一的事实
+来源；patch 请求把所有字段读作「缺席」，这样它的空指针永远不会被误读成清空整行的
+指令。`UnmarshalJSON` 总会分配那个 map，所以这两个回退都不可能在解码得到的请求上
+触发。
+
+`Immutable()` 字段不会出现在 patch 请求里，因为 ent 的 update builder 遍历
+`MutableFields`，不会为它生成 setter。调用方在 PATCH 正文里写上它只会得到沉默：
+`encoding/json` 在任何校验器看到之前就丢弃了该键。要拒绝它需要
+`DisallowUnknownFields`，那属于使用方的 handler——这是本切片里唯一无法在生成器
+内部闭合的情况。
 
 ### 响应类型、摘要类型与预加载计划
 
@@ -509,7 +555,7 @@ var (
 | 作用域 | 说明 |
 |--------|------|
 | `ScopeCreate` | 字段出现在 `CreateRequest` 中 |
-| `ScopeUpdate` | 字段出现在 `UpdateRequest` 中 |
+| `ScopeUpdate` | 字段出现在 `PatchRequest` 中 |
 | `ScopeResponse` | 字段出现在 `Response` 中 |
 | `ScopeQuery` | **目前什么都不做。** 预留给 [#27](https://github.com/githonllc/entdomain/issues/27) 生成的查询参数。大多数预设构建器都会授予它，但它今天不改变任何生成的字节 |
 
@@ -526,7 +572,7 @@ var (
 | 设置 | 效果 |
 |---|---|
 | `DomainField.Scopes` | 决定字段进入哪个请求/响应结构体 |
-| `DomainField.Required` | 为对应作用域生成 `validate:"required"` 与 `Validate()` 检查 |
+| `DomainField.Required` | `WithRequired(ScopeCreate)` 让创建请求强制要求一个 ent 本可以默认或允许缺席的字段；`WithRequired(ScopeUpdate)` 则把该字段从「显式 null 可清空」的集合里拿掉 |
 | `DomainEdge.Scopes`，由 `Edge().InResponse()` 设置 | 把嵌套对象放进响应类型 |
 | `DomainEdge.JSONKey`，由 `.As("key")` 设置 | 覆盖该边的 JSON 键 |
 
@@ -560,8 +606,10 @@ var (
 
 | Schema 形态 | 生成结果 |
 |---|---|
-| `Optional()` | 创建/更新请求与响应中均为 `*T` |
-| `Optional().Nillable()` | 处处都是 `*T`，包括标了 `WithRequired(ScopeCreate)` 的创建请求——ent 为此类字段生成的 setter 是 `SetNillable<X>(*T)`，所以「必填」由生成的 `Validate()` 拒绝空指针来保证，而不是靠去掉指针 |
+| `Optional()` | 创建/patch 请求与响应中均为 `*T`。在 patch 中可清空：显式 `null` 会生成 `Clear<X>()` |
+| `Optional().Nillable()` | 处处都是 `*T`，包括标了 `WithRequired(ScopeCreate)` 的创建请求——此时「必填」由生成的 `Validate()` 拒绝空指针来保证，而不是靠去掉指针 |
+| 带 schema `Default()` 的字段 | 创建请求中为 `*T`。省略它就什么都不写，ent 的默认值因此生效；无条件写入零值正是过去默认值失效的原因 |
+| ent 要求且无法默认的字段 | 创建请求中为值类型 `T`，总是写入；`Validate()` 会拒绝没有携带该字段的请求——依据是存在性而不是与零值比较，所以 `0` 和 `false` 是值而不是省略 |
 | `Immutable()` **+ `ScopeUpdate`** | **生成失败。** ent 的 update builder 遍历 `MutableFields`，其中不含 immutable 字段，因此 `<Entity>UpdateOne` 上根本没有 `Set<X>`，任何模板都写不出能编译的调用。改用 `CreateOnlyField()` / `OutputOnlyField()`，或去掉 `Immutable()` |
 | `Immutable()` 但无 `ScopeUpdate` | 正常生成：可在创建时设置，可在响应中读取 |
 | `field.Enum(...)`，可选或必填 | 正常生成；Go 类型是实体自身包内的枚举类型 |

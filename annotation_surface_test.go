@@ -113,15 +113,26 @@ type annotationKnob struct {
 }
 
 // surfaceProbe is the graph the registered functions are run against: one
-// entity, one annotated field, one annotated edge. Everything a knob can
-// influence is reachable from it.
+// entity, one annotated field in TWO ent shapes, and one annotated edge.
+// Everything a knob can influence is reachable from it.
+//
+// The two shapes are not redundancy. A knob's effect can be conditional on the
+// ent schema the annotation sits on: DomainField.Required changes nothing on a
+// field ent already requires — isCreateRequired says yes either way — and shows
+// up only on an Optional one, where the annotation is the only reason a value
+// has to be supplied. A single mandatory field therefore reported a live knob as
+// dead. The same argument as meaningfulValues, one level up: probe every shape
+// the knob can be observed through, not one that happens to be the wrong one.
 //
 // The same probe is reused for the control and the toggled observation, so the
 // knob under test is provably the only difference between the two runs.
 type surfaceProbe struct {
-	node  *gen.Type
+	node *gen.Type
+	// field is ent-mandatory: not Optional, no Default.
 	field *gen.Field
-	edge  *gen.Edge
+	// optional is the same annotation on an ent-Optional field.
+	optional *gen.Field
+	edge     *gen.Edge
 
 	df     DomainField
 	de     DomainEdge
@@ -132,7 +143,9 @@ func newSurfaceProbe() *surfaceProbe {
 	p := &surfaceProbe{}
 
 	p.field = newStringField("label", &p.df)
-	p.node = newTestType("Probe", p.field)
+	p.optional = newStringField("note", &p.df)
+	p.optional.Optional = true
+	p.node = newTestType("Probe", p.field, p.optional)
 	p.node.ID = newUUIDField("id", nil)
 	p.edge = &gen.Edge{
 		Name:        "owner",
@@ -211,7 +224,11 @@ func (p *surfaceProbe) argSets(t *testing.T, name string, ft reflect.Type) [][]r
 		case pt == typeGenType:
 			candidates = []reflect.Value{reflect.ValueOf(p.node)}
 		case pt == typeGenField:
-			candidates = []reflect.Value{reflect.ValueOf(p.field), reflect.ValueOf(p.node.ID)}
+			candidates = []reflect.Value{
+				reflect.ValueOf(p.field),
+				reflect.ValueOf(p.optional),
+				reflect.ValueOf(p.node.ID),
+			}
 		case pt == typeGenEdge:
 			candidates = []reflect.Value{reflect.ValueOf(p.edge)}
 		case pt == typeFieldScope:

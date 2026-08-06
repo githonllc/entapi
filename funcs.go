@@ -26,6 +26,7 @@ import (
 //   - funcs_strings.go:    string manipulation utilities
 //   - funcs_fields.go:     field filtering and selection
 //   - funcs_scope.go:      scope and requirement checking
+//   - funcs_presence.go:   create/patch field shape and presence rules
 //   - funcs_typechecks.go: field type checking
 //   - funcs_codegen.go:    code generation helpers
 //   - funcs_imports.go:    import specs the emitted files must declare
@@ -40,20 +41,21 @@ func templateFuncs() template.FuncMap {
 		// Field selection (used in template range loops)
 		"domainFields":   domainFields,
 		"createFields":   createFields,
-		"updateFields":   updateFields,
+		"patchFields":    patchFields,
 		"responseFields": responseFields,
 		"responseEdges":  responseEdges,
 		"edgeJSONKey":    edgeJSONKey,
 
-		// Scope and requirement checking
-		"isDomainRequired": isDomainRequired,
+		// Request presence model
+		"isCreatePointer":  isCreatePointer,
+		"isCreateRequired": isCreateRequired,
+		"isPatchClearable": isPatchClearable,
 
 		// Field type checking
 		"isComplexFieldType": isComplexFieldType,
 		"hasSoftDelete":      hasSoftDelete,
 
 		// Code generation helpers
-		"setFieldCallReq": setFieldCallReq,
-		"fieldValueExpr":  fieldValueExpr,
+		"fieldValueExpr": fieldValueExpr,
 	}
 }

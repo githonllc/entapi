@@ -18,7 +18,7 @@ import (
 type BaseNodeServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *NodeCreateRequest) error
 	AfterCreate(ctx context.Context, entity *Node) (*Node, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *NodeUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *NodePatchRequest) error
 	AfterUpdate(ctx context.Context, entity *Node) (*Node, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseNodeService) AfterCreate(_ context.Context, entity *Node) (*Node, e
 	return entity, nil
 }
 
-func (s *BaseNodeService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *NodeUpdateRequest) error {
+func (s *BaseNodeService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *NodePatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseNodeService) GetByID(ctx context.Context, id uuid.UUID) (*Node, err
 }
 
 // Create creates a new Node from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseNodeService) Create(ctx context.Context, req *NodeCreateRequest) (*Node, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Node.Create()
-	ApplyNodeCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Node.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseNodeService) Create(ctx context.Context, req *NodeCreateRequest) (*
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of Node, only setting non-nil fields from the request.
-func (s *BaseNodeService) Update(ctx context.Context, id uuid.UUID, req *NodeUpdateRequest) (*Node, error) {
+// Update performs a partial update of Node: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseNodeService) Update(ctx context.Context, id uuid.UUID, req *NodePatchRequest) (*Node, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Node.UpdateOneID(id)
-	ApplyNodeUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Node.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,27 +222,14 @@ func (s *BaseNodeService) ListWithCursor(ctx context.Context, limit int, cursor,
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyNodeCreateRequest and
+// ApplyNodeUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidNodeCreateRequest and
+// ValidNodePatchRequest (see node_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyNodeCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyNodeCreateRequest(builder *NodeCreate, req *NodeCreateRequest) {
-	builder.SetLabel(req.Label)
-	if req.ParentID != nil {
-		builder.SetParentID(*req.ParentID)
-	}
-}
-
-// ApplyNodeUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyNodeUpdateRequest(builder *NodeUpdateOne, req *NodeUpdateRequest) {
-	if req.Label != nil {
-		builder.SetLabel(*req.Label)
-	}
-	if req.ParentID != nil {
-		builder.SetParentID(*req.ParentID)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

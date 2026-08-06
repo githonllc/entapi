@@ -23,7 +23,7 @@ Handler (user extends)      │          Service (user extends)      │
      │                      │               │ or full methods      │
 ```
 
-**Key principle**: All generated code lives in the `ent/` package. Service operates on `*ent.Entity` directly. DTOs (`CreateRequest`, `UpdateRequest`, `Response`) are in the same `ent` package — no cross-package imports needed.
+**Key principle**: All generated code lives in the `ent/` package. Service operates on `*ent.Entity` directly. DTOs (`CreateRequest`, `PatchRequest`, `Response`) are in the same `ent` package — no cross-package imports needed.
 
 ## ORM-Level Interceptors (IMPORTANT)
 
@@ -43,7 +43,7 @@ Scopes control which **handler-layer DTOs** include a field. They do NOT restric
 | Scope | Constant | Affects |
 |-------|----------|---------|
 | Create | `ScopeCreate` | `{Entity}CreateRequest` struct |
-| Update | `ScopeUpdate` | `{Entity}UpdateRequest` struct |
+| Update | `ScopeUpdate` | `{Entity}PatchRequest` struct |
 | Response | `ScopeResponse` | `{Entity}Response` struct |
 
 ## Annotation Builders
@@ -80,16 +80,24 @@ For entity `Courier`, three files are generated in `ent/`:
 
 | File | Contains |
 |------|----------|
-| `ent/courier_dto.go` | `CourierCreateRequest`, `CourierUpdateRequest`, `CourierResponse`, `CourierListResponse`, `Validate()` methods |
-| `ent/courier_base_service.go` | `BaseCourierService` with CRUD + Before/After hooks, `ApplyCourierCreateRequest`, `ApplyCourierUpdateRequest`, `CourierEntToResponse` |
+| `ent/courier_dto.go` | `CourierCreateRequest`, `CourierPatchRequest`, their `Validate()`/`Apply` pair, `CourierResponse`, `CourierListResponse` |
+| `ent/courier_base_service.go` | `BaseCourierService` with CRUD + Before/After hooks, `CourierEntToResponse` |
 | `ent/courier_base_handler.go` | `BaseCourierHandler` with `ToResponse`, `ToResponseList`, `PartialUpdate` |
 
 ### `ent/courier_dto.go`
 
 - `CourierCreateRequest` — fields with `ScopeCreate`
-  - `Validate()` — required field validation
-- `CourierUpdateRequest` — fields with `ScopeUpdate` as pointer types (partial update)
-  - `Validate()` — required field validation
+  - `Validate() (*ValidCourierCreateRequest, error)` — required-field validation. It
+    returns the only type `Apply` is defined on, so the builder cannot be written
+    without validating.
+  - `Has<Field>() bool` — whether the JSON payload carried that key. A field the
+    caller omitted is never written, so the schema's `Default()` applies.
+- `CourierPatchRequest` — fields with `ScopeUpdate` that ent can actually set, as
+  pointer types (partial update)
+  - `Validate() (*ValidCourierPatchRequest, error)` — rejects an explicit `null` on
+    a field the schema does not declare `Optional()`
+  - `Has<Field>() bool` — absent, explicit `null` and value are three states:
+    absent leaves the field alone, `null` clears it, a value sets it
 - `CourierResponse` — fields with `ScopeResponse`, plus nested edge responses
 - `CourierListResponse` — paginated response wrapper with `PageInfo`
 
@@ -99,7 +107,7 @@ For entity `Courier`, three files are generated in `ent/`:
 type BaseCourierServiceHooks interface {
     BeforeCreate(ctx context.Context, req *CourierCreateRequest) error
     AfterCreate(ctx context.Context, entity *Courier) (*Courier, error)
-    BeforeUpdate(ctx context.Context, id uuid.UUID, req *CourierUpdateRequest) error
+    BeforeUpdate(ctx context.Context, id uuid.UUID, req *CourierPatchRequest) error
     AfterUpdate(ctx context.Context, entity *Courier) (*Courier, error)
     BeforeDelete(ctx context.Context, id uuid.UUID) error
     AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -118,9 +126,9 @@ func (s *BaseCourierService) Delete(ctx, id) error
 func (s *BaseCourierService) DeleteBatch(ctx, ids) error
 func (s *BaseCourierService) ListWithCursor(ctx, limit, cursor, order) ([]*Courier, nextCursor, error)
 
-// Builder helpers (exported for custom service methods)
-func ApplyCourierCreateRequest(builder *CourierCreate, req *CourierCreateRequest)
-func ApplyCourierUpdateRequest(builder *CourierUpdateOne, req *CourierUpdateRequest)
+// Builder helpers live on the VALIDATED request (courier_dto.go), not here:
+//   valid, err := req.Validate()
+//   builder := valid.Apply(db.Courier.Create())
 
 // Entity → Response conversion
 func CourierEntToResponse(entity *Courier) *CourierResponse
@@ -189,16 +197,15 @@ type Handler struct {
 func (h *Handler) Create(c *gin.Context) {
     var req ent.CourierCreateRequest
     c.ShouldBindJSON(&req)
-    req.Validate()
+    // Create validates internally; Apply exists only on the validated request.
     entity, err := h.courierService.Create(c.Request.Context(), &req)
     response.Created(c, h.ToResponse(entity))
 }
 
 func (h *Handler) Update(c *gin.Context) {
     id, _ := uuid.Parse(c.Param("id"))
-    var req ent.CourierUpdateRequest
+    var req ent.CourierPatchRequest
     c.ShouldBindJSON(&req)
-    req.Validate()
 
     // One-liner: Update → ToResponse
     result, err := h.PartialUpdate(c.Request.Context(), h.courierService, id, &req)
@@ -272,6 +279,6 @@ ext := entdomain.NewExtensionWithOptions(
 | `funcs.go` | Template function registry |
 | `funcs_fields.go` | Field filtering (createFields, updateFields, etc.) |
 | `funcs_codegen.go` | Code generation helpers |
-| `templates/dto.tmpl` | Template for DTOs (CreateRequest, UpdateRequest, Response) |
+| `templates/dto.tmpl` | Template for DTOs (CreateRequest, PatchRequest, Response) |
 | `templates/base_service.tmpl` | Template for BaseService with hooks |
 | `templates/base_handler.tmpl` | Template for BaseHandler with PartialUpdate |

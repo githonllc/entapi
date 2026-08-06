@@ -18,7 +18,7 @@ import (
 type BaseEnumWidgetServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *EnumWidgetCreateRequest) error
 	AfterCreate(ctx context.Context, entity *EnumWidget) (*EnumWidget, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *EnumWidgetUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *EnumWidgetPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *EnumWidget) (*EnumWidget, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseEnumWidgetService) AfterCreate(_ context.Context, entity *EnumWidge
 	return entity, nil
 }
 
-func (s *BaseEnumWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *EnumWidgetUpdateRequest) error {
+func (s *BaseEnumWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *EnumWidgetPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseEnumWidgetService) GetByID(ctx context.Context, id uuid.UUID) (*Enu
 }
 
 // Create creates a new EnumWidget from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseEnumWidgetService) Create(ctx context.Context, req *EnumWidgetCreateRequest) (*EnumWidget, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.EnumWidget.Create()
-	ApplyEnumWidgetCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.EnumWidget.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseEnumWidgetService) Create(ctx context.Context, req *EnumWidgetCreat
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of EnumWidget, only setting non-nil fields from the request.
-func (s *BaseEnumWidgetService) Update(ctx context.Context, id uuid.UUID, req *EnumWidgetUpdateRequest) (*EnumWidget, error) {
+// Update performs a partial update of EnumWidget: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseEnumWidgetService) Update(ctx context.Context, id uuid.UUID, req *EnumWidgetPatchRequest) (*EnumWidget, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.EnumWidget.UpdateOneID(id)
-	ApplyEnumWidgetUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.EnumWidget.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,27 +222,14 @@ func (s *BaseEnumWidgetService) ListWithCursor(ctx context.Context, limit int, c
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyEnumWidgetCreateRequest and
+// ApplyEnumWidgetUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidEnumWidgetCreateRequest and
+// ValidEnumWidgetPatchRequest (see enumwidget_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyEnumWidgetCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyEnumWidgetCreateRequest(builder *EnumWidgetCreate, req *EnumWidgetCreateRequest) {
-	builder.SetStatus(req.Status)
-	if req.Tier != nil {
-		builder.SetTier(*req.Tier)
-	}
-}
-
-// ApplyEnumWidgetUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyEnumWidgetUpdateRequest(builder *EnumWidgetUpdateOne, req *EnumWidgetUpdateRequest) {
-	if req.Status != nil {
-		builder.SetStatus(*req.Status)
-	}
-	if req.Tier != nil {
-		builder.SetTier(*req.Tier)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

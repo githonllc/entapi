@@ -5,6 +5,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -15,10 +16,14 @@ import (
 // ============================================================================================
 // Layered Architecture Overview:
 //
-// 1. CreateRequest/UpdateRequest - HTTP-layer request models, restricted by scope.
+// 1. CreateRequest/PatchRequest - HTTP-layer request models, restricted by scope.
 //    - Only includes fields for the corresponding scope (ScopeCreate/ScopeUpdate).
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
+//    - Presence is recorded per request, so an omitted key, an explicit null and
+//      a value are three different things rather than two.
+//    - Apply is defined on the VALIDATED request only, so a builder cannot be
+//      written without validating first.
 //
 // 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
@@ -35,35 +40,192 @@ import (
 // - The Service layer operates directly on ent entities with full ORM capabilities.
 // ============================================================================================
 
-// WidgetCreateRequest represents the create request for Widget
+// WidgetCreateRequest is the create request for Widget.
+//
+// Field shape follows ent's schema rather than a parallel set of booleans. A
+// field ent can fill by itself — Optional, or carrying a Default() — is a
+// pointer here and is written to the builder only when the caller supplied a
+// value, so an omitted key leaves the schema's default in effect. A field ent
+// requires and cannot default is a value type and is always written.
 type WidgetCreateRequest struct {
-	Name        string  `json:"name" validate:"required"`
+	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
+
+	// present records which keys the payload actually carried. It is what makes
+	// "omitted" distinguishable from "sent as the zero value" for a field whose
+	// Go type has no nil — a required int or bool got no check at all while
+	// requiredness was inferred from the zero value.
+	//
+	// A create request cannot express "clear", so an explicit null counts as
+	// absent: it leaves the field unwritten, exactly like omitting the key.
+	present map[string]bool
 }
 
-// Validate validates the create request
-func (r *WidgetCreateRequest) Validate() error {
+// UnmarshalJSON records presence, then decodes normally.
+//
+// The wire format is unchanged: every exported field keeps its ordinary type
+// and tag, so marshalling, form binders, validators and spec generators all see
+// the struct they saw before. That is the property a generic Optional[T]
+// wrapper could not keep.
+func (r *WidgetCreateRequest) UnmarshalJSON(b []byte) error {
+	type alias WidgetCreateRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k, v := range raw {
+		if string(v) != "null" {
+			r.present[k] = true
+		}
+	}
+	return nil
+}
+
+// has reports whether the decoded payload carried a value for a key.
+//
+// A request built in Go rather than decoded from JSON recorded no presence at
+// all, and there the struct is the only source of truth: every field reads as
+// supplied, which is what the caller assigning to it meant. UnmarshalJSON always
+// allocates the map, even for {}, so this fallback cannot fire on a decoded
+// request. Reporting such a request as entirely absent instead would reject
+// "seats is required" for a request that plainly sets Seats.
+//
+// The patch request deliberately does NOT do this: there, "unknown" has to mean
+// absent, or a hand-built request would read as an instruction to clear
+// everything.
+func (r *WidgetCreateRequest) has(field string) bool {
+	if r.present == nil {
+		return true
+	}
+	return r.present[field]
+}
+
+// HasName reports whether the payload carried "name".
+func (r *WidgetCreateRequest) HasName() bool { return r.has("name") }
+
+// HasDescription reports whether the payload carried "description".
+func (r *WidgetCreateRequest) HasDescription() bool { return r.has("description") }
+
+// ValidWidgetCreateRequest wraps a WidgetCreateRequest that has
+// passed Validate. Apply is defined on this type and nowhere else, so a caller
+// who skips validation has no method to call — a compile error rather than a
+// validator that runs only when someone remembers it.
+type ValidWidgetCreateRequest struct{ r *WidgetCreateRequest }
+
+// Validate checks the request and returns the only type Apply accepts.
+func (r *WidgetCreateRequest) Validate() (*ValidWidgetCreateRequest, error) {
 	if r == nil {
-		return fmt.Errorf("create request cannot be nil")
+		return nil, fmt.Errorf("%w: create request is nil", entdomain.ErrValidation)
 	}
 	if r.Name == "" {
-		return fmt.Errorf("name is required")
+		return nil, fmt.Errorf("%w: name is required", entdomain.ErrValidation)
 	}
-	return nil
+	return &ValidWidgetCreateRequest{r: r}, nil
 }
 
-// WidgetUpdateRequest represents the update request for Widget
-type WidgetUpdateRequest struct {
+// Apply writes the request onto a create builder.
+//
+// A field the caller omitted is not written at all, so the schema's Default()
+// still applies. Writing the zero value unconditionally is what silently
+// defeated every schema default.
+func (v *ValidWidgetCreateRequest) Apply(b *WidgetCreate) *WidgetCreate {
+	r := v.r
+	b.SetName(r.Name)
+	if r.Description != nil {
+		b.SetDescription(*r.Description)
+	}
+	return b
+}
+
+// WidgetPatchRequest is the partial-update request for Widget.
+//
+// Every field is a pointer and presence is recorded separately, which is what
+// separates the three states a PATCH has to express: absent means "leave it
+// alone", an explicit null means "clear it", and a value means "set it". With
+// bare pointers the first two are the same value, and clearing a field cannot
+// be expressed at all.
+//
+// A field the ent schema marks Immutable() is absent from this struct, because
+// ent's update builders iterate MutableFields and generate no setter for one.
+// encoding/json discards the key before any validator can see it, so a caller
+// who sends it gets silence — rejecting that needs DisallowUnknownFields, which
+// belongs to the consumer's handler.
+type WidgetPatchRequest struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
+
+	present map[string]bool
 }
 
-// Validate validates the update request
-func (r *WidgetUpdateRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("update request cannot be nil")
+// UnmarshalJSON records which keys the payload carried, including the ones
+// whose value was null — that is the whole point here, and the difference from
+// the create request, where a null has nothing to clear.
+func (r *WidgetPatchRequest) UnmarshalJSON(b []byte) error {
+	type alias WidgetPatchRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k := range raw {
+		r.present[k] = true
 	}
 	return nil
+}
+
+// has reports whether the decoded payload carried the key at all. A request
+// built in Go rather than decoded from JSON has no presence, and Apply writes
+// nothing for it.
+func (r *WidgetPatchRequest) has(field string) bool { return r.present[field] }
+
+// HasName reports whether the payload carried "name".
+func (r *WidgetPatchRequest) HasName() bool { return r.has("name") }
+
+// HasDescription reports whether the payload carried "description".
+func (r *WidgetPatchRequest) HasDescription() bool { return r.has("description") }
+
+// ValidWidgetPatchRequest wraps a WidgetPatchRequest that has passed
+// Validate. It is the only type Apply is defined on.
+type ValidWidgetPatchRequest struct{ r *WidgetPatchRequest }
+
+// Validate rejects an explicit null on a field that cannot be cleared.
+//
+// ent emits Clear<Field>() for Optional fields and for no others, so a null on
+// anything else has no correct translation: the column is NOT NULL and there is
+// no method to call. The field is named in the error, because "invalid request"
+// tells the caller nothing about which key to fix.
+func (r *WidgetPatchRequest) Validate() (*ValidWidgetPatchRequest, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: patch request is nil", entdomain.ErrValidation)
+	}
+	if r.HasName() && r.Name == nil {
+		return nil, fmt.Errorf("%w: name cannot be null", entdomain.ErrValidation)
+	}
+	return &ValidWidgetPatchRequest{r: r}, nil
+}
+
+// Apply writes the request onto an update builder. Absent fields are not
+// touched; the rest are set, or cleared when the caller sent an explicit null.
+func (v *ValidWidgetPatchRequest) Apply(b *WidgetUpdateOne) *WidgetUpdateOne {
+	r := v.r
+	if r.HasName() {
+		b.SetName(*r.Name)
+	}
+	if r.HasDescription() {
+		if r.Description == nil {
+			b.ClearDescription()
+		} else {
+			b.SetDescription(*r.Description)
+		}
+	}
+	return b
 }
 
 // WidgetSummary is the shape Widget takes on another entity's response.

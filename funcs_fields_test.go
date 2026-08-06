@@ -50,7 +50,7 @@ func TestCreateFields(t *testing.T) {
 	}
 }
 
-func TestUpdateFields(t *testing.T) {
+func TestPatchFields(t *testing.T) {
 	withUpdate := ptr(DomainFieldWithScopes(ScopeUpdate))
 	withCreate := ptr(DomainFieldWithScopes(ScopeCreate))
 
@@ -59,13 +59,51 @@ func TestUpdateFields(t *testing.T) {
 		newStringField("created_by", withCreate),
 	)
 
-	got := updateFields(node)
+	got := patchFields(node)
 	if len(got) != 1 {
-		t.Fatalf("expected 1 update field, got %d", len(got))
+		t.Fatalf("expected 1 patch field, got %d", len(got))
 	}
 	if got[0].Name != "name" {
 		t.Errorf("expected 'name', got %q", got[0].Name)
 	}
+}
+
+// TestPatchFieldsExcludesImmutableFields pins the half of the rule that comes
+// from ent rather than from the annotation. An Immutable() field is absent from
+// gen.Type.MutableFields, which is the list ent's own setter template iterates,
+// so no Set<Field> exists on the update builder — a patch request carrying one
+// would emit a call to a method that was never generated.
+//
+// checkGraphConflicts refuses this schema before generation, so this asserts on
+// a filter that is currently unreachable through the extension. It is here
+// because the filter is what makes the emitted code correct, and the refusal is
+// what makes the mistake visible; losing either one silently breaks the other.
+func TestPatchFieldsExcludesImmutableFields(t *testing.T) {
+	withUpdate := ptr(DomainFieldWithScopes(ScopeUpdate))
+
+	frozen := newStringField("origin", withUpdate)
+	frozen.Immutable = true
+
+	node := newTestType("User",
+		newStringField("name", withUpdate),
+		frozen,
+	)
+
+	got := patchFields(node)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 patch field, got %d: %v", len(got), fieldNames(got))
+	}
+	if got[0].Name != "name" {
+		t.Errorf("expected 'name', got %q", got[0].Name)
+	}
+}
+
+func fieldNames(fields []*gen.Field) []string {
+	out := make([]string, len(fields))
+	for i, f := range fields {
+		out[i] = f.Name
+	}
+	return out
 }
 
 func TestResponseFields(t *testing.T) {

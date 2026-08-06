@@ -18,7 +18,7 @@ import (
 type BaseNamedTypeWidgetServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *NamedTypeWidgetCreateRequest) error
 	AfterCreate(ctx context.Context, entity *NamedTypeWidget) (*NamedTypeWidget, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *NamedTypeWidgetUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *NamedTypeWidgetPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *NamedTypeWidget) (*NamedTypeWidget, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseNamedTypeWidgetService) AfterCreate(_ context.Context, entity *Name
 	return entity, nil
 }
 
-func (s *BaseNamedTypeWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *NamedTypeWidgetUpdateRequest) error {
+func (s *BaseNamedTypeWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *NamedTypeWidgetPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseNamedTypeWidgetService) GetByID(ctx context.Context, id uuid.UUID) 
 }
 
 // Create creates a new NamedTypeWidget from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseNamedTypeWidgetService) Create(ctx context.Context, req *NamedTypeWidgetCreateRequest) (*NamedTypeWidget, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.NamedTypeWidget.Create()
-	ApplyNamedTypeWidgetCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.NamedTypeWidget.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseNamedTypeWidgetService) Create(ctx context.Context, req *NamedTypeW
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of NamedTypeWidget, only setting non-nil fields from the request.
-func (s *BaseNamedTypeWidgetService) Update(ctx context.Context, id uuid.UUID, req *NamedTypeWidgetUpdateRequest) (*NamedTypeWidget, error) {
+// Update performs a partial update of NamedTypeWidget: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseNamedTypeWidgetService) Update(ctx context.Context, id uuid.UUID, req *NamedTypeWidgetPatchRequest) (*NamedTypeWidget, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.NamedTypeWidget.UpdateOneID(id)
-	ApplyNamedTypeWidgetUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.NamedTypeWidget.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,37 +222,14 @@ func (s *BaseNamedTypeWidgetService) ListWithCursor(ctx context.Context, limit i
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyNamedTypeWidgetCreateRequest and
+// ApplyNamedTypeWidgetUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidNamedTypeWidgetCreateRequest and
+// ValidNamedTypeWidgetPatchRequest (see namedtypewidget_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyNamedTypeWidgetCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyNamedTypeWidgetCreateRequest(builder *NamedTypeWidgetCreate, req *NamedTypeWidgetCreateRequest) {
-	if req.Labels != nil {
-		builder.SetLabels(*req.Labels)
-	}
-	if req.Attrs != nil {
-		builder.SetAttrs(*req.Attrs)
-	}
-	builder.SetRequiredLabels(req.RequiredLabels)
-	builder.SetRequiredAttrs(req.RequiredAttrs)
-}
-
-// ApplyNamedTypeWidgetUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyNamedTypeWidgetUpdateRequest(builder *NamedTypeWidgetUpdateOne, req *NamedTypeWidgetUpdateRequest) {
-	if req.Labels != nil {
-		builder.SetLabels(*req.Labels)
-	}
-	if req.Attrs != nil {
-		builder.SetAttrs(*req.Attrs)
-	}
-	if req.RequiredLabels != nil {
-		builder.SetRequiredLabels(*req.RequiredLabels)
-	}
-	if req.RequiredAttrs != nil {
-		builder.SetRequiredAttrs(*req.RequiredAttrs)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

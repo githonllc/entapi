@@ -30,13 +30,13 @@ func (h *BaseAccountHandler) ToResponseList(entities []*Account) []*AccountRespo
 
 // accountUpdater is the interface required by PartialUpdate.
 type accountUpdater interface {
-	Update(context.Context, uuid.UUID, *AccountUpdateRequest) (*Account, error)
+	Update(context.Context, uuid.UUID, *AccountPatchRequest) (*Account, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseAccountHandler) PartialUpdate(
 	ctx context.Context, svc accountUpdater,
-	id uuid.UUID, req *AccountUpdateRequest,
+	id uuid.UUID, req *AccountPatchRequest,
 ) (*AccountResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

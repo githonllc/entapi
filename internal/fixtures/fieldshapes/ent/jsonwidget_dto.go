@@ -5,6 +5,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 
 	entdomain "github.com/githonllc/entdomain"
@@ -14,10 +15,14 @@ import (
 // ============================================================================================
 // Layered Architecture Overview:
 //
-// 1. CreateRequest/UpdateRequest - HTTP-layer request models, restricted by scope.
+// 1. CreateRequest/PatchRequest - HTTP-layer request models, restricted by scope.
 //    - Only includes fields for the corresponding scope (ScopeCreate/ScopeUpdate).
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
+//    - Presence is recorded per request, so an omitted key, an explicit null and
+//      a value are three different things rather than two.
+//    - Apply is defined on the VALIDATED request only, so a builder cannot be
+//      written without validating first.
 //
 // 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
@@ -34,36 +39,228 @@ import (
 // - The Service layer operates directly on ent entities with full ORM capabilities.
 // ============================================================================================
 
-// JSONWidgetCreateRequest represents the create request for JSONWidget
+// JSONWidgetCreateRequest is the create request for JSONWidget.
+//
+// Field shape follows ent's schema rather than a parallel set of booleans. A
+// field ent can fill by itself — Optional, or carrying a Default() — is a
+// pointer here and is written to the builder only when the caller supplied a
+// value, so an omitted key leaves the schema's default in effect. A field ent
+// requires and cannot default is a value type and is always written.
 type JSONWidgetCreateRequest struct {
 	Tags         *[]string          `json:"tags,omitempty"`
 	Meta         *map[string]string `json:"meta,omitempty"`
-	RequiredTags []string           `json:"required_tags" validate:"required"`
-	RequiredMeta map[string]string  `json:"required_meta" validate:"required"`
+	RequiredTags []string           `json:"required_tags"`
+	RequiredMeta map[string]string  `json:"required_meta"`
+
+	// present records which keys the payload actually carried. It is what makes
+	// "omitted" distinguishable from "sent as the zero value" for a field whose
+	// Go type has no nil — a required int or bool got no check at all while
+	// requiredness was inferred from the zero value.
+	//
+	// A create request cannot express "clear", so an explicit null counts as
+	// absent: it leaves the field unwritten, exactly like omitting the key.
+	present map[string]bool
 }
 
-// Validate validates the create request
-func (r *JSONWidgetCreateRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("create request cannot be nil")
+// UnmarshalJSON records presence, then decodes normally.
+//
+// The wire format is unchanged: every exported field keeps its ordinary type
+// and tag, so marshalling, form binders, validators and spec generators all see
+// the struct they saw before. That is the property a generic Optional[T]
+// wrapper could not keep.
+func (r *JSONWidgetCreateRequest) UnmarshalJSON(b []byte) error {
+	type alias JSONWidgetCreateRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k, v := range raw {
+		if string(v) != "null" {
+			r.present[k] = true
+		}
 	}
 	return nil
 }
 
-// JSONWidgetUpdateRequest represents the update request for JSONWidget
-type JSONWidgetUpdateRequest struct {
+// has reports whether the decoded payload carried a value for a key.
+//
+// A request built in Go rather than decoded from JSON recorded no presence at
+// all, and there the struct is the only source of truth: every field reads as
+// supplied, which is what the caller assigning to it meant. UnmarshalJSON always
+// allocates the map, even for {}, so this fallback cannot fire on a decoded
+// request. Reporting such a request as entirely absent instead would reject
+// "seats is required" for a request that plainly sets Seats.
+//
+// The patch request deliberately does NOT do this: there, "unknown" has to mean
+// absent, or a hand-built request would read as an instruction to clear
+// everything.
+func (r *JSONWidgetCreateRequest) has(field string) bool {
+	if r.present == nil {
+		return true
+	}
+	return r.present[field]
+}
+
+// HasTags reports whether the payload carried "tags".
+func (r *JSONWidgetCreateRequest) HasTags() bool { return r.has("tags") }
+
+// HasMeta reports whether the payload carried "meta".
+func (r *JSONWidgetCreateRequest) HasMeta() bool { return r.has("meta") }
+
+// HasRequiredTags reports whether the payload carried "required_tags".
+func (r *JSONWidgetCreateRequest) HasRequiredTags() bool { return r.has("required_tags") }
+
+// HasRequiredMeta reports whether the payload carried "required_meta".
+func (r *JSONWidgetCreateRequest) HasRequiredMeta() bool { return r.has("required_meta") }
+
+// ValidJSONWidgetCreateRequest wraps a JSONWidgetCreateRequest that has
+// passed Validate. Apply is defined on this type and nowhere else, so a caller
+// who skips validation has no method to call — a compile error rather than a
+// validator that runs only when someone remembers it.
+type ValidJSONWidgetCreateRequest struct{ r *JSONWidgetCreateRequest }
+
+// Validate checks the request and returns the only type Apply accepts.
+func (r *JSONWidgetCreateRequest) Validate() (*ValidJSONWidgetCreateRequest, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: create request is nil", entdomain.ErrValidation)
+	}
+	if !r.HasRequiredTags() {
+		return nil, fmt.Errorf("%w: required_tags is required", entdomain.ErrValidation)
+	}
+	if !r.HasRequiredMeta() {
+		return nil, fmt.Errorf("%w: required_meta is required", entdomain.ErrValidation)
+	}
+	return &ValidJSONWidgetCreateRequest{r: r}, nil
+}
+
+// Apply writes the request onto a create builder.
+//
+// A field the caller omitted is not written at all, so the schema's Default()
+// still applies. Writing the zero value unconditionally is what silently
+// defeated every schema default.
+func (v *ValidJSONWidgetCreateRequest) Apply(b *JSONWidgetCreate) *JSONWidgetCreate {
+	r := v.r
+	if r.Tags != nil {
+		b.SetTags(*r.Tags)
+	}
+	if r.Meta != nil {
+		b.SetMeta(*r.Meta)
+	}
+	b.SetRequiredTags(r.RequiredTags)
+	b.SetRequiredMeta(r.RequiredMeta)
+	return b
+}
+
+// JSONWidgetPatchRequest is the partial-update request for JSONWidget.
+//
+// Every field is a pointer and presence is recorded separately, which is what
+// separates the three states a PATCH has to express: absent means "leave it
+// alone", an explicit null means "clear it", and a value means "set it". With
+// bare pointers the first two are the same value, and clearing a field cannot
+// be expressed at all.
+//
+// A field the ent schema marks Immutable() is absent from this struct, because
+// ent's update builders iterate MutableFields and generate no setter for one.
+// encoding/json discards the key before any validator can see it, so a caller
+// who sends it gets silence — rejecting that needs DisallowUnknownFields, which
+// belongs to the consumer's handler.
+type JSONWidgetPatchRequest struct {
 	Tags         *[]string          `json:"tags,omitempty"`
 	Meta         *map[string]string `json:"meta,omitempty"`
 	RequiredTags *[]string          `json:"required_tags,omitempty"`
 	RequiredMeta *map[string]string `json:"required_meta,omitempty"`
+
+	present map[string]bool
 }
 
-// Validate validates the update request
-func (r *JSONWidgetUpdateRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("update request cannot be nil")
+// UnmarshalJSON records which keys the payload carried, including the ones
+// whose value was null — that is the whole point here, and the difference from
+// the create request, where a null has nothing to clear.
+func (r *JSONWidgetPatchRequest) UnmarshalJSON(b []byte) error {
+	type alias JSONWidgetPatchRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k := range raw {
+		r.present[k] = true
 	}
 	return nil
+}
+
+// has reports whether the decoded payload carried the key at all. A request
+// built in Go rather than decoded from JSON has no presence, and Apply writes
+// nothing for it.
+func (r *JSONWidgetPatchRequest) has(field string) bool { return r.present[field] }
+
+// HasTags reports whether the payload carried "tags".
+func (r *JSONWidgetPatchRequest) HasTags() bool { return r.has("tags") }
+
+// HasMeta reports whether the payload carried "meta".
+func (r *JSONWidgetPatchRequest) HasMeta() bool { return r.has("meta") }
+
+// HasRequiredTags reports whether the payload carried "required_tags".
+func (r *JSONWidgetPatchRequest) HasRequiredTags() bool { return r.has("required_tags") }
+
+// HasRequiredMeta reports whether the payload carried "required_meta".
+func (r *JSONWidgetPatchRequest) HasRequiredMeta() bool { return r.has("required_meta") }
+
+// ValidJSONWidgetPatchRequest wraps a JSONWidgetPatchRequest that has passed
+// Validate. It is the only type Apply is defined on.
+type ValidJSONWidgetPatchRequest struct{ r *JSONWidgetPatchRequest }
+
+// Validate rejects an explicit null on a field that cannot be cleared.
+//
+// ent emits Clear<Field>() for Optional fields and for no others, so a null on
+// anything else has no correct translation: the column is NOT NULL and there is
+// no method to call. The field is named in the error, because "invalid request"
+// tells the caller nothing about which key to fix.
+func (r *JSONWidgetPatchRequest) Validate() (*ValidJSONWidgetPatchRequest, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: patch request is nil", entdomain.ErrValidation)
+	}
+	if r.HasRequiredTags() && r.RequiredTags == nil {
+		return nil, fmt.Errorf("%w: required_tags cannot be null", entdomain.ErrValidation)
+	}
+	if r.HasRequiredMeta() && r.RequiredMeta == nil {
+		return nil, fmt.Errorf("%w: required_meta cannot be null", entdomain.ErrValidation)
+	}
+	return &ValidJSONWidgetPatchRequest{r: r}, nil
+}
+
+// Apply writes the request onto an update builder. Absent fields are not
+// touched; the rest are set, or cleared when the caller sent an explicit null.
+func (v *ValidJSONWidgetPatchRequest) Apply(b *JSONWidgetUpdateOne) *JSONWidgetUpdateOne {
+	r := v.r
+	if r.HasTags() {
+		if r.Tags == nil {
+			b.ClearTags()
+		} else {
+			b.SetTags(*r.Tags)
+		}
+	}
+	if r.HasMeta() {
+		if r.Meta == nil {
+			b.ClearMeta()
+		} else {
+			b.SetMeta(*r.Meta)
+		}
+	}
+	if r.HasRequiredTags() {
+		b.SetRequiredTags(*r.RequiredTags)
+	}
+	if r.HasRequiredMeta() {
+		b.SetRequiredMeta(*r.RequiredMeta)
+	}
+	return b
 }
 
 // JSONWidgetSummary is the shape JSONWidget takes on another entity's response.

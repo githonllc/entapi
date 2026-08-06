@@ -18,7 +18,7 @@ import (
 type BasePostServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *PostCreateRequest) error
 	AfterCreate(ctx context.Context, entity *Post) (*Post, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *PostUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *PostPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *Post) (*Post, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BasePostService) AfterCreate(_ context.Context, entity *Post) (*Post, e
 	return entity, nil
 }
 
-func (s *BasePostService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *PostUpdateRequest) error {
+func (s *BasePostService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *PostPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BasePostService) GetByID(ctx context.Context, id uuid.UUID) (*Post, err
 }
 
 // Create creates a new Post from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BasePostService) Create(ctx context.Context, req *PostCreateRequest) (*Post, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Post.Create()
-	ApplyPostCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Post.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BasePostService) Create(ctx context.Context, req *PostCreateRequest) (*
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of Post, only setting non-nil fields from the request.
-func (s *BasePostService) Update(ctx context.Context, id uuid.UUID, req *PostUpdateRequest) (*Post, error) {
+// Update performs a partial update of Post: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BasePostService) Update(ctx context.Context, id uuid.UUID, req *PostPatchRequest) (*Post, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Post.UpdateOneID(id)
-	ApplyPostUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Post.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,31 +222,14 @@ func (s *BasePostService) ListWithCursor(ctx context.Context, limit int, cursor,
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyPostCreateRequest and
+// ApplyPostUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidPostCreateRequest and
+// ValidPostPatchRequest (see post_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyPostCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyPostCreateRequest(builder *PostCreate, req *PostCreateRequest) {
-	builder.SetTitle(req.Title)
-	builder.SetAuthorID(req.AuthorID)
-	if req.ReviewerID != nil {
-		builder.SetReviewerID(*req.ReviewerID)
-	}
-}
-
-// ApplyPostUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyPostUpdateRequest(builder *PostUpdateOne, req *PostUpdateRequest) {
-	if req.Title != nil {
-		builder.SetTitle(*req.Title)
-	}
-	if req.AuthorID != nil {
-		builder.SetAuthorID(*req.AuthorID)
-	}
-	if req.ReviewerID != nil {
-		builder.SetReviewerID(*req.ReviewerID)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

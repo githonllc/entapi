@@ -18,7 +18,7 @@ import (
 type BaseSecretServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *SecretCreateRequest) error
 	AfterCreate(ctx context.Context, entity *Secret) (*Secret, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *SecretUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *SecretPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *Secret) (*Secret, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseSecretService) AfterCreate(_ context.Context, entity *Secret) (*Sec
 	return entity, nil
 }
 
-func (s *BaseSecretService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *SecretUpdateRequest) error {
+func (s *BaseSecretService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *SecretPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseSecretService) GetByID(ctx context.Context, id uuid.UUID) (*Secret,
 }
 
 // Create creates a new Secret from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseSecretService) Create(ctx context.Context, req *SecretCreateRequest) (*Secret, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Secret.Create()
-	ApplySecretCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Secret.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseSecretService) Create(ctx context.Context, req *SecretCreateRequest
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of Secret, only setting non-nil fields from the request.
-func (s *BaseSecretService) Update(ctx context.Context, id uuid.UUID, req *SecretUpdateRequest) (*Secret, error) {
+// Update performs a partial update of Secret: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseSecretService) Update(ctx context.Context, id uuid.UUID, req *SecretPatchRequest) (*Secret, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Secret.UpdateOneID(id)
-	ApplySecretUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Secret.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,21 +222,14 @@ func (s *BaseSecretService) ListWithCursor(ctx context.Context, limit int, curso
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplySecretCreateRequest and
+// ApplySecretUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidSecretCreateRequest and
+// ValidSecretPatchRequest (see secret_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplySecretCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplySecretCreateRequest(builder *SecretCreate, req *SecretCreateRequest) {
-	builder.SetToken(req.Token)
-}
-
-// ApplySecretUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplySecretUpdateRequest(builder *SecretUpdateOne, req *SecretUpdateRequest) {
-	if req.Token != nil {
-		builder.SetToken(*req.Token)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

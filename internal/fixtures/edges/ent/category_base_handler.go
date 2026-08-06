@@ -30,13 +30,13 @@ func (h *BaseCategoryHandler) ToResponseList(entities []*Category) []*CategoryRe
 
 // categoryUpdater is the interface required by PartialUpdate.
 type categoryUpdater interface {
-	Update(context.Context, uuid.UUID, *CategoryUpdateRequest) (*Category, error)
+	Update(context.Context, uuid.UUID, *CategoryPatchRequest) (*Category, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseCategoryHandler) PartialUpdate(
 	ctx context.Context, svc categoryUpdater,
-	id uuid.UUID, req *CategoryUpdateRequest,
+	id uuid.UUID, req *CategoryPatchRequest,
 ) (*CategoryResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

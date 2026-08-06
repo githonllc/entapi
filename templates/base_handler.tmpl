@@ -6,7 +6,7 @@
 
 package {{ base $.Config.Package }}
 
-{{- if updateFields $ }}
+{{- if patchFields $ }}
 import (
 	"context"
 
@@ -35,18 +35,18 @@ func (h *Base{{ $.Name }}Handler) ToResponseList(entities []*{{ $.Name }}) []*{{
 	return responses
 }
 
-{{- $updateFields := updateFields $ }}
-{{- if $updateFields }}
+{{- $patchFields := patchFields $ }}
+{{- if $patchFields }}
 
 // {{ camelCase $.Name }}Updater is the interface required by PartialUpdate.
 type {{ camelCase $.Name }}Updater interface {
-	Update(context.Context, uuid.UUID, *{{ $.Name }}UpdateRequest) (*{{ $.Name }}, error)
+	Update(context.Context, uuid.UUID, *{{ $.Name }}PatchRequest) (*{{ $.Name }}, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *Base{{ $.Name }}Handler) PartialUpdate(
 	ctx context.Context, svc {{ camelCase $.Name }}Updater,
-	id uuid.UUID, req *{{ $.Name }}UpdateRequest,
+	id uuid.UUID, req *{{ $.Name }}PatchRequest,
 ) (*{{ $.Name }}Response, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

@@ -18,7 +18,7 @@ import (
 type BaseJSONWidgetServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *JSONWidgetCreateRequest) error
 	AfterCreate(ctx context.Context, entity *JSONWidget) (*JSONWidget, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *JSONWidgetUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *JSONWidgetPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *JSONWidget) (*JSONWidget, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseJSONWidgetService) AfterCreate(_ context.Context, entity *JSONWidge
 	return entity, nil
 }
 
-func (s *BaseJSONWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *JSONWidgetUpdateRequest) error {
+func (s *BaseJSONWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *JSONWidgetPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseJSONWidgetService) GetByID(ctx context.Context, id uuid.UUID) (*JSO
 }
 
 // Create creates a new JSONWidget from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseJSONWidgetService) Create(ctx context.Context, req *JSONWidgetCreateRequest) (*JSONWidget, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.JSONWidget.Create()
-	ApplyJSONWidgetCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.JSONWidget.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseJSONWidgetService) Create(ctx context.Context, req *JSONWidgetCreat
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of JSONWidget, only setting non-nil fields from the request.
-func (s *BaseJSONWidgetService) Update(ctx context.Context, id uuid.UUID, req *JSONWidgetUpdateRequest) (*JSONWidget, error) {
+// Update performs a partial update of JSONWidget: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseJSONWidgetService) Update(ctx context.Context, id uuid.UUID, req *JSONWidgetPatchRequest) (*JSONWidget, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.JSONWidget.UpdateOneID(id)
-	ApplyJSONWidgetUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.JSONWidget.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,37 +222,14 @@ func (s *BaseJSONWidgetService) ListWithCursor(ctx context.Context, limit int, c
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyJSONWidgetCreateRequest and
+// ApplyJSONWidgetUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidJSONWidgetCreateRequest and
+// ValidJSONWidgetPatchRequest (see jsonwidget_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyJSONWidgetCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyJSONWidgetCreateRequest(builder *JSONWidgetCreate, req *JSONWidgetCreateRequest) {
-	if req.Tags != nil {
-		builder.SetTags(*req.Tags)
-	}
-	if req.Meta != nil {
-		builder.SetMeta(*req.Meta)
-	}
-	builder.SetRequiredTags(req.RequiredTags)
-	builder.SetRequiredMeta(req.RequiredMeta)
-}
-
-// ApplyJSONWidgetUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyJSONWidgetUpdateRequest(builder *JSONWidgetUpdateOne, req *JSONWidgetUpdateRequest) {
-	if req.Tags != nil {
-		builder.SetTags(*req.Tags)
-	}
-	if req.Meta != nil {
-		builder.SetMeta(*req.Meta)
-	}
-	if req.RequiredTags != nil {
-		builder.SetRequiredTags(*req.RequiredTags)
-	}
-	if req.RequiredMeta != nil {
-		builder.SetRequiredMeta(*req.RequiredMeta)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

@@ -5,6 +5,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 
 	entdomain "github.com/githonllc/entdomain"
@@ -14,10 +15,14 @@ import (
 // ============================================================================================
 // Layered Architecture Overview:
 //
-// 1. CreateRequest/UpdateRequest - HTTP-layer request models, restricted by scope.
+// 1. CreateRequest/PatchRequest - HTTP-layer request models, restricted by scope.
 //    - Only includes fields for the corresponding scope (ScopeCreate/ScopeUpdate).
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
+//    - Presence is recorded per request, so an omitted key, an explicit null and
+//      a value are three different things rather than two.
+//    - Apply is defined on the VALIDATED request only, so a builder cannot be
+//      written without validating first.
 //
 // 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
@@ -34,34 +39,210 @@ import (
 // - The Service layer operates directly on ent entities with full ORM capabilities.
 // ============================================================================================
 
-// PostCreateRequest represents the create request for Post
+// PostCreateRequest is the create request for Post.
+//
+// Field shape follows ent's schema rather than a parallel set of booleans. A
+// field ent can fill by itself — Optional, or carrying a Default() — is a
+// pointer here and is written to the builder only when the caller supplied a
+// value, so an omitted key leaves the schema's default in effect. A field ent
+// requires and cannot default is a value type and is always written.
 type PostCreateRequest struct {
-	Title      string     `json:"title,omitempty"`
-	AuthorID   uuid.UUID  `json:"author_id,omitempty"`
+	Title      string     `json:"title"`
+	AuthorID   uuid.UUID  `json:"author_id"`
 	ReviewerID *uuid.UUID `json:"reviewer_id,omitempty"`
+
+	// present records which keys the payload actually carried. It is what makes
+	// "omitted" distinguishable from "sent as the zero value" for a field whose
+	// Go type has no nil — a required int or bool got no check at all while
+	// requiredness was inferred from the zero value.
+	//
+	// A create request cannot express "clear", so an explicit null counts as
+	// absent: it leaves the field unwritten, exactly like omitting the key.
+	present map[string]bool
 }
 
-// Validate validates the create request
-func (r *PostCreateRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("create request cannot be nil")
+// UnmarshalJSON records presence, then decodes normally.
+//
+// The wire format is unchanged: every exported field keeps its ordinary type
+// and tag, so marshalling, form binders, validators and spec generators all see
+// the struct they saw before. That is the property a generic Optional[T]
+// wrapper could not keep.
+func (r *PostCreateRequest) UnmarshalJSON(b []byte) error {
+	type alias PostCreateRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k, v := range raw {
+		if string(v) != "null" {
+			r.present[k] = true
+		}
 	}
 	return nil
 }
 
-// PostUpdateRequest represents the update request for Post
-type PostUpdateRequest struct {
+// has reports whether the decoded payload carried a value for a key.
+//
+// A request built in Go rather than decoded from JSON recorded no presence at
+// all, and there the struct is the only source of truth: every field reads as
+// supplied, which is what the caller assigning to it meant. UnmarshalJSON always
+// allocates the map, even for {}, so this fallback cannot fire on a decoded
+// request. Reporting such a request as entirely absent instead would reject
+// "seats is required" for a request that plainly sets Seats.
+//
+// The patch request deliberately does NOT do this: there, "unknown" has to mean
+// absent, or a hand-built request would read as an instruction to clear
+// everything.
+func (r *PostCreateRequest) has(field string) bool {
+	if r.present == nil {
+		return true
+	}
+	return r.present[field]
+}
+
+// HasTitle reports whether the payload carried "title".
+func (r *PostCreateRequest) HasTitle() bool { return r.has("title") }
+
+// HasAuthorID reports whether the payload carried "author_id".
+func (r *PostCreateRequest) HasAuthorID() bool { return r.has("author_id") }
+
+// HasReviewerID reports whether the payload carried "reviewer_id".
+func (r *PostCreateRequest) HasReviewerID() bool { return r.has("reviewer_id") }
+
+// ValidPostCreateRequest wraps a PostCreateRequest that has
+// passed Validate. Apply is defined on this type and nowhere else, so a caller
+// who skips validation has no method to call — a compile error rather than a
+// validator that runs only when someone remembers it.
+type ValidPostCreateRequest struct{ r *PostCreateRequest }
+
+// Validate checks the request and returns the only type Apply accepts.
+func (r *PostCreateRequest) Validate() (*ValidPostCreateRequest, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: create request is nil", entdomain.ErrValidation)
+	}
+	if r.Title == "" {
+		return nil, fmt.Errorf("%w: title is required", entdomain.ErrValidation)
+	}
+	if !r.HasAuthorID() {
+		return nil, fmt.Errorf("%w: author_id is required", entdomain.ErrValidation)
+	}
+	return &ValidPostCreateRequest{r: r}, nil
+}
+
+// Apply writes the request onto a create builder.
+//
+// A field the caller omitted is not written at all, so the schema's Default()
+// still applies. Writing the zero value unconditionally is what silently
+// defeated every schema default.
+func (v *ValidPostCreateRequest) Apply(b *PostCreate) *PostCreate {
+	r := v.r
+	b.SetTitle(r.Title)
+	b.SetAuthorID(r.AuthorID)
+	if r.ReviewerID != nil {
+		b.SetReviewerID(*r.ReviewerID)
+	}
+	return b
+}
+
+// PostPatchRequest is the partial-update request for Post.
+//
+// Every field is a pointer and presence is recorded separately, which is what
+// separates the three states a PATCH has to express: absent means "leave it
+// alone", an explicit null means "clear it", and a value means "set it". With
+// bare pointers the first two are the same value, and clearing a field cannot
+// be expressed at all.
+//
+// A field the ent schema marks Immutable() is absent from this struct, because
+// ent's update builders iterate MutableFields and generate no setter for one.
+// encoding/json discards the key before any validator can see it, so a caller
+// who sends it gets silence — rejecting that needs DisallowUnknownFields, which
+// belongs to the consumer's handler.
+type PostPatchRequest struct {
 	Title      *string    `json:"title,omitempty"`
 	AuthorID   *uuid.UUID `json:"author_id,omitempty"`
 	ReviewerID *uuid.UUID `json:"reviewer_id,omitempty"`
+
+	present map[string]bool
 }
 
-// Validate validates the update request
-func (r *PostUpdateRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("update request cannot be nil")
+// UnmarshalJSON records which keys the payload carried, including the ones
+// whose value was null — that is the whole point here, and the difference from
+// the create request, where a null has nothing to clear.
+func (r *PostPatchRequest) UnmarshalJSON(b []byte) error {
+	type alias PostPatchRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k := range raw {
+		r.present[k] = true
 	}
 	return nil
+}
+
+// has reports whether the decoded payload carried the key at all. A request
+// built in Go rather than decoded from JSON has no presence, and Apply writes
+// nothing for it.
+func (r *PostPatchRequest) has(field string) bool { return r.present[field] }
+
+// HasTitle reports whether the payload carried "title".
+func (r *PostPatchRequest) HasTitle() bool { return r.has("title") }
+
+// HasAuthorID reports whether the payload carried "author_id".
+func (r *PostPatchRequest) HasAuthorID() bool { return r.has("author_id") }
+
+// HasReviewerID reports whether the payload carried "reviewer_id".
+func (r *PostPatchRequest) HasReviewerID() bool { return r.has("reviewer_id") }
+
+// ValidPostPatchRequest wraps a PostPatchRequest that has passed
+// Validate. It is the only type Apply is defined on.
+type ValidPostPatchRequest struct{ r *PostPatchRequest }
+
+// Validate rejects an explicit null on a field that cannot be cleared.
+//
+// ent emits Clear<Field>() for Optional fields and for no others, so a null on
+// anything else has no correct translation: the column is NOT NULL and there is
+// no method to call. The field is named in the error, because "invalid request"
+// tells the caller nothing about which key to fix.
+func (r *PostPatchRequest) Validate() (*ValidPostPatchRequest, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: patch request is nil", entdomain.ErrValidation)
+	}
+	if r.HasTitle() && r.Title == nil {
+		return nil, fmt.Errorf("%w: title cannot be null", entdomain.ErrValidation)
+	}
+	if r.HasAuthorID() && r.AuthorID == nil {
+		return nil, fmt.Errorf("%w: author_id cannot be null", entdomain.ErrValidation)
+	}
+	return &ValidPostPatchRequest{r: r}, nil
+}
+
+// Apply writes the request onto an update builder. Absent fields are not
+// touched; the rest are set, or cleared when the caller sent an explicit null.
+func (v *ValidPostPatchRequest) Apply(b *PostUpdateOne) *PostUpdateOne {
+	r := v.r
+	if r.HasTitle() {
+		b.SetTitle(*r.Title)
+	}
+	if r.HasAuthorID() {
+		b.SetAuthorID(*r.AuthorID)
+	}
+	if r.HasReviewerID() {
+		if r.ReviewerID == nil {
+			b.ClearReviewerID()
+		} else {
+			b.SetReviewerID(*r.ReviewerID)
+		}
+	}
+	return b
 }
 
 // PostSummary is the shape Post takes on another entity's response.

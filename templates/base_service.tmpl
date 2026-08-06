@@ -23,7 +23,7 @@ import (
 {{- if $domainFields }}
 
 {{- $createFields := createFields $ }}
-{{- $updateFields := updateFields $ }}
+{{- $patchFields := patchFields $ }}
 
 // Base{{ $.Name }}ServiceHooks defines hook extension points for {{ $.Name }} CRUD operations.
 // Implement this interface in your service struct and call SetSelf to enable hooks.
@@ -32,8 +32,8 @@ type Base{{ $.Name }}ServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *{{ $.Name }}CreateRequest) error
 	AfterCreate(ctx context.Context, entity *{{ $.Name }}) (*{{ $.Name }}, error)
 {{- end }}
-{{- if $updateFields }}
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *{{ $.Name }}UpdateRequest) error
+{{- if $patchFields }}
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *{{ $.Name }}PatchRequest) error
 	AfterUpdate(ctx context.Context, entity *{{ $.Name }}) (*{{ $.Name }}, error)
 {{- end }}
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
@@ -97,9 +97,9 @@ func (s *Base{{ $.Name }}Service) AfterCreate(_ context.Context, entity *{{ $.Na
 }
 {{- end }}
 
-{{- if $updateFields }}
+{{- if $patchFields }}
 
-func (s *Base{{ $.Name }}Service) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *{{ $.Name }}UpdateRequest) error {
+func (s *Base{{ $.Name }}Service) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *{{ $.Name }}PatchRequest) error {
 	return nil
 }
 
@@ -128,13 +128,20 @@ func (s *Base{{ $.Name }}Service) GetByID(ctx context.Context, id uuid.UUID) (*{
 {{- if $createFields }}
 
 // Create creates a new {{ $.Name }} from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *Base{{ $.Name }}Service) Create(ctx context.Context, req *{{ $.Name }}CreateRequest) (*{{ $.Name }}, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.{{ $.Name }}.Create()
-	Apply{{ $.Name }}CreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.{{ $.Name }}.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -148,16 +155,20 @@ func (s *Base{{ $.Name }}Service) Create(ctx context.Context, req *{{ $.Name }}C
 }
 {{- end }}
 
-{{- if $updateFields }}
+{{- if $patchFields }}
 
-// Update performs a partial update of {{ $.Name }}, only setting non-nil fields from the request.
-func (s *Base{{ $.Name }}Service) Update(ctx context.Context, id uuid.UUID, req *{{ $.Name }}UpdateRequest) (*{{ $.Name }}, error) {
+// Update performs a partial update of {{ $.Name }}: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *Base{{ $.Name }}Service) Update(ctx context.Context, id uuid.UUID, req *{{ $.Name }}PatchRequest) (*{{ $.Name }}, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.{{ $.Name }}.UpdateOneID(id)
-	Apply{{ $.Name }}UpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.{{ $.Name }}.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -262,47 +273,14 @@ func (s *Base{{ $.Name }}Service) ListWithCursor(ctx context.Context, limit int,
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. Apply{{ $.Name }}CreateRequest and
+// Apply{{ $.Name }}UpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on Valid{{ $.Name }}CreateRequest and
+// Valid{{ $.Name }}PatchRequest (see {{ lower $.Name }}_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-{{- if $createFields }}
-
-// Apply{{ $.Name }}CreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func Apply{{ $.Name }}CreateRequest(builder *{{ $.Name }}Create, req *{{ $.Name }}CreateRequest) {
-{{- range $field := $createFields }}
-{{- if isDomainRequired $field "create" }}
-	builder.{{ setFieldCallReq $field }}
-{{- else if $field.Optional }}
-	if req.{{ $field.StructField }} != nil {
-		builder.Set{{ $field.StructField }}(*req.{{ $field.StructField }})
-	}
-{{- else if $field.IsEnum }}
-	if req.{{ $field.StructField }} != "" {
-		builder.{{ setFieldCallReq $field }}
-	}
-{{- else }}
-	builder.{{ setFieldCallReq $field }}
-{{- end }}
-{{- end }}
-}
-{{- end }}
-
-{{- if $updateFields }}
-
-// Apply{{ $.Name }}UpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func Apply{{ $.Name }}UpdateRequest(builder *{{ $.Name }}UpdateOne, req *{{ $.Name }}UpdateRequest) {
-{{- range $field := $updateFields }}
-	if req.{{ $field.StructField }} != nil {
-{{- if $field.Nillable }}
-		builder.SetNillable{{ $field.StructField }}(req.{{ $field.StructField }})
-{{- else }}
-		builder.Set{{ $field.StructField }}(*req.{{ $field.StructField }})
-{{- end }}
-	}
-{{- end }}
-}
-{{- end }}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

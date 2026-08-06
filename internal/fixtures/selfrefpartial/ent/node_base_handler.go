@@ -30,13 +30,13 @@ func (h *BaseNodeHandler) ToResponseList(entities []*Node) []*NodeResponse {
 
 // nodeUpdater is the interface required by PartialUpdate.
 type nodeUpdater interface {
-	Update(context.Context, uuid.UUID, *NodeUpdateRequest) (*Node, error)
+	Update(context.Context, uuid.UUID, *NodePatchRequest) (*Node, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseNodeHandler) PartialUpdate(
 	ctx context.Context, svc nodeUpdater,
-	id uuid.UUID, req *NodeUpdateRequest,
+	id uuid.UUID, req *NodePatchRequest,
 ) (*NodeResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

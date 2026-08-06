@@ -18,7 +18,7 @@ import (
 type BaseCategoryServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *CategoryCreateRequest) error
 	AfterCreate(ctx context.Context, entity *Category) (*Category, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *CategoryUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *CategoryPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *Category) (*Category, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseCategoryService) AfterCreate(_ context.Context, entity *Category) (
 	return entity, nil
 }
 
-func (s *BaseCategoryService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *CategoryUpdateRequest) error {
+func (s *BaseCategoryService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *CategoryPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseCategoryService) GetByID(ctx context.Context, id uuid.UUID) (*Categ
 }
 
 // Create creates a new Category from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseCategoryService) Create(ctx context.Context, req *CategoryCreateRequest) (*Category, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Category.Create()
-	ApplyCategoryCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Category.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseCategoryService) Create(ctx context.Context, req *CategoryCreateReq
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of Category, only setting non-nil fields from the request.
-func (s *BaseCategoryService) Update(ctx context.Context, id uuid.UUID, req *CategoryUpdateRequest) (*Category, error) {
+// Update performs a partial update of Category: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseCategoryService) Update(ctx context.Context, id uuid.UUID, req *CategoryPatchRequest) (*Category, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Category.UpdateOneID(id)
-	ApplyCategoryUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Category.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,27 +222,14 @@ func (s *BaseCategoryService) ListWithCursor(ctx context.Context, limit int, cur
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyCategoryCreateRequest and
+// ApplyCategoryUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidCategoryCreateRequest and
+// ValidCategoryPatchRequest (see category_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyCategoryCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyCategoryCreateRequest(builder *CategoryCreate, req *CategoryCreateRequest) {
-	builder.SetName(req.Name)
-	if req.ParentID != nil {
-		builder.SetParentID(*req.ParentID)
-	}
-}
-
-// ApplyCategoryUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyCategoryUpdateRequest(builder *CategoryUpdateOne, req *CategoryUpdateRequest) {
-	if req.Name != nil {
-		builder.SetName(*req.Name)
-	}
-	if req.ParentID != nil {
-		builder.SetParentID(*req.ParentID)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

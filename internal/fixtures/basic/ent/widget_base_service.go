@@ -18,7 +18,7 @@ import (
 type BaseWidgetServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *WidgetCreateRequest) error
 	AfterCreate(ctx context.Context, entity *Widget) (*Widget, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *WidgetUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *WidgetPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *Widget) (*Widget, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseWidgetService) AfterCreate(_ context.Context, entity *Widget) (*Wid
 	return entity, nil
 }
 
-func (s *BaseWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *WidgetUpdateRequest) error {
+func (s *BaseWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *WidgetPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseWidgetService) GetByID(ctx context.Context, id uuid.UUID) (*Widget,
 }
 
 // Create creates a new Widget from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseWidgetService) Create(ctx context.Context, req *WidgetCreateRequest) (*Widget, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Widget.Create()
-	ApplyWidgetCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Widget.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseWidgetService) Create(ctx context.Context, req *WidgetCreateRequest
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of Widget, only setting non-nil fields from the request.
-func (s *BaseWidgetService) Update(ctx context.Context, id uuid.UUID, req *WidgetUpdateRequest) (*Widget, error) {
+// Update performs a partial update of Widget: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseWidgetService) Update(ctx context.Context, id uuid.UUID, req *WidgetPatchRequest) (*Widget, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Widget.UpdateOneID(id)
-	ApplyWidgetUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Widget.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,27 +222,14 @@ func (s *BaseWidgetService) ListWithCursor(ctx context.Context, limit int, curso
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyWidgetCreateRequest and
+// ApplyWidgetUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidWidgetCreateRequest and
+// ValidWidgetPatchRequest (see widget_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyWidgetCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyWidgetCreateRequest(builder *WidgetCreate, req *WidgetCreateRequest) {
-	builder.SetName(req.Name)
-	if req.Description != nil {
-		builder.SetDescription(*req.Description)
-	}
-}
-
-// ApplyWidgetUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyWidgetUpdateRequest(builder *WidgetUpdateOne, req *WidgetUpdateRequest) {
-	if req.Name != nil {
-		builder.SetName(*req.Name)
-	}
-	if req.Description != nil {
-		builder.SetDescription(*req.Description)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

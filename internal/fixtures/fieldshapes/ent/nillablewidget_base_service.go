@@ -18,7 +18,7 @@ import (
 type BaseNillableWidgetServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *NillableWidgetCreateRequest) error
 	AfterCreate(ctx context.Context, entity *NillableWidget) (*NillableWidget, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *NillableWidgetUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *NillableWidgetPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *NillableWidget) (*NillableWidget, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseNillableWidgetService) AfterCreate(_ context.Context, entity *Nilla
 	return entity, nil
 }
 
-func (s *BaseNillableWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *NillableWidgetUpdateRequest) error {
+func (s *BaseNillableWidgetService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *NillableWidgetPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseNillableWidgetService) GetByID(ctx context.Context, id uuid.UUID) (
 }
 
 // Create creates a new NillableWidget from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseNillableWidgetService) Create(ctx context.Context, req *NillableWidgetCreateRequest) (*NillableWidget, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.NillableWidget.Create()
-	ApplyNillableWidgetCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.NillableWidget.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseNillableWidgetService) Create(ctx context.Context, req *NillableWid
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of NillableWidget, only setting non-nil fields from the request.
-func (s *BaseNillableWidgetService) Update(ctx context.Context, id uuid.UUID, req *NillableWidgetUpdateRequest) (*NillableWidget, error) {
+// Update performs a partial update of NillableWidget: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseNillableWidgetService) Update(ctx context.Context, id uuid.UUID, req *NillableWidgetPatchRequest) (*NillableWidget, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.NillableWidget.UpdateOneID(id)
-	ApplyNillableWidgetUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.NillableWidget.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,31 +222,14 @@ func (s *BaseNillableWidgetService) ListWithCursor(ctx context.Context, limit in
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyNillableWidgetCreateRequest and
+// ApplyNillableWidgetUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidNillableWidgetCreateRequest and
+// ValidNillableWidgetPatchRequest (see nillablewidget_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyNillableWidgetCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyNillableWidgetCreateRequest(builder *NillableWidgetCreate, req *NillableWidgetCreateRequest) {
-	if req.Nickname != nil {
-		builder.SetNickname(*req.Nickname)
-	}
-	builder.SetNillableHandle(req.Handle)
-	builder.SetNillableQuota(req.Quota)
-}
-
-// ApplyNillableWidgetUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyNillableWidgetUpdateRequest(builder *NillableWidgetUpdateOne, req *NillableWidgetUpdateRequest) {
-	if req.Nickname != nil {
-		builder.SetNillableNickname(req.Nickname)
-	}
-	if req.Handle != nil {
-		builder.SetNillableHandle(req.Handle)
-	}
-	if req.Quota != nil {
-		builder.SetNillableQuota(req.Quota)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

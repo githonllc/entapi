@@ -36,8 +36,17 @@ func dtoImports(node *gen.Type) []string {
 	for _, f := range createFields(node) {
 		add(f)
 	}
-	for _, f := range updateFields(node) {
+	for _, f := range patchFields(node) {
 		add(f)
+	}
+
+	// The generated validators call ent's <Field>Validator for every enum a
+	// request carries, and those live in the entity's own subpackage — which is
+	// not necessarily where the enum's Go type lives. An enum declared with a
+	// GoType renders as somepkg.Status, so the type's import says nothing about
+	// where the validator is. Ask for it explicitly, exactly when one is emitted.
+	if spec := enumValidatorImport(node); spec != "" {
+		specs[spec] = true
 	}
 
 	// The Response and Summary structs are emitted for EVERY entity the
@@ -62,6 +71,25 @@ func dtoImports(node *gen.Type) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// enumValidatorImport returns the import spec for the entity's own subpackage
+// when a create or patch request carries an enum, and "" otherwise.
+//
+// The condition has to match the template's emission exactly in both
+// directions: an import declared without a use is as fatal as a use without an
+// import, because writeFile aborts on a formatting failure and
+// TestTemplatesDeclareTheirImports fails on either.
+func enumValidatorImport(node *gen.Type) string {
+	if node.Config == nil {
+		return ""
+	}
+	for _, f := range append(createFields(node), patchFields(node)...) {
+		if f.IsEnum() {
+			return quoteImport("", node.Config.Package+"/"+node.Package())
+		}
+	}
+	return ""
 }
 
 // fieldImportSpec returns the import spec a field's rendered Go type needs, or

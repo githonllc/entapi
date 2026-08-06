@@ -30,13 +30,13 @@ func (h *BaseSecretHandler) ToResponseList(entities []*Secret) []*SecretResponse
 
 // secretUpdater is the interface required by PartialUpdate.
 type secretUpdater interface {
-	Update(context.Context, uuid.UUID, *SecretUpdateRequest) (*Secret, error)
+	Update(context.Context, uuid.UUID, *SecretPatchRequest) (*Secret, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseSecretHandler) PartialUpdate(
 	ctx context.Context, svc secretUpdater,
-	id uuid.UUID, req *SecretUpdateRequest,
+	id uuid.UUID, req *SecretPatchRequest,
 ) (*SecretResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

@@ -30,13 +30,13 @@ func (h *BaseJSONWidgetHandler) ToResponseList(entities []*JSONWidget) []*JSONWi
 
 // jSONWidgetUpdater is the interface required by PartialUpdate.
 type jSONWidgetUpdater interface {
-	Update(context.Context, uuid.UUID, *JSONWidgetUpdateRequest) (*JSONWidget, error)
+	Update(context.Context, uuid.UUID, *JSONWidgetPatchRequest) (*JSONWidget, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseJSONWidgetHandler) PartialUpdate(
 	ctx context.Context, svc jSONWidgetUpdater,
-	id uuid.UUID, req *JSONWidgetUpdateRequest,
+	id uuid.UUID, req *JSONWidgetPatchRequest,
 ) (*JSONWidgetResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

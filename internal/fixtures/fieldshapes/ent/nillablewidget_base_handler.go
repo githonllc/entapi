@@ -30,13 +30,13 @@ func (h *BaseNillableWidgetHandler) ToResponseList(entities []*NillableWidget) [
 
 // nillableWidgetUpdater is the interface required by PartialUpdate.
 type nillableWidgetUpdater interface {
-	Update(context.Context, uuid.UUID, *NillableWidgetUpdateRequest) (*NillableWidget, error)
+	Update(context.Context, uuid.UUID, *NillableWidgetPatchRequest) (*NillableWidget, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseNillableWidgetHandler) PartialUpdate(
 	ctx context.Context, svc nillableWidgetUpdater,
-	id uuid.UUID, req *NillableWidgetUpdateRequest,
+	id uuid.UUID, req *NillableWidgetPatchRequest,
 ) (*NillableWidgetResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

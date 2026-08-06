@@ -30,13 +30,13 @@ func (h *BaseWidgetHandler) ToResponseList(entities []*Widget) []*WidgetResponse
 
 // widgetUpdater is the interface required by PartialUpdate.
 type widgetUpdater interface {
-	Update(context.Context, uuid.UUID, *WidgetUpdateRequest) (*Widget, error)
+	Update(context.Context, uuid.UUID, *WidgetPatchRequest) (*Widget, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseWidgetHandler) PartialUpdate(
 	ctx context.Context, svc widgetUpdater,
-	id uuid.UUID, req *WidgetUpdateRequest,
+	id uuid.UUID, req *WidgetPatchRequest,
 ) (*WidgetResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

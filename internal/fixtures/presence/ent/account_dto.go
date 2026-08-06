@@ -5,6 +5,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 
 	entdomain "github.com/githonllc/entdomain"
@@ -15,10 +16,14 @@ import (
 // ============================================================================================
 // Layered Architecture Overview:
 //
-// 1. CreateRequest/UpdateRequest - HTTP-layer request models, restricted by scope.
+// 1. CreateRequest/PatchRequest - HTTP-layer request models, restricted by scope.
 //    - Only includes fields for the corresponding scope (ScopeCreate/ScopeUpdate).
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
+//    - Presence is recorded per request, so an omitted key, an explicit null and
+//      a value are three different things rather than two.
+//    - Apply is defined on the VALIDATED request only, so a builder cannot be
+//      written without validating first.
 //
 // 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
@@ -35,41 +40,281 @@ import (
 // - The Service layer operates directly on ent entities with full ORM capabilities.
 // ============================================================================================
 
-// AccountCreateRequest represents the create request for Account
+// AccountCreateRequest is the create request for Account.
+//
+// Field shape follows ent's schema rather than a parallel set of booleans. A
+// field ent can fill by itself — Optional, or carrying a Default() — is a
+// pointer here and is written to the builder only when the caller supplied a
+// value, so an omitted key leaves the schema's default in effect. A field ent
+// requires and cannot default is a value type and is always written.
 type AccountCreateRequest struct {
-	Email         string       `json:"email,omitempty"`
-	Seats         int          `json:"seats,omitempty"`
-	AcceptedTerms bool         `json:"accepted_terms,omitempty"`
-	Plan          account.Plan `json:"plan,omitempty"`
-	Nickname      *string      `json:"nickname,omitempty"`
-	Quota         *int         `json:"quota,omitempty"`
-	Origin        string       `json:"origin,omitempty"`
+	Email         string        `json:"email"`
+	Seats         int           `json:"seats"`
+	AcceptedTerms bool          `json:"accepted_terms"`
+	Plan          *account.Plan `json:"plan,omitempty"`
+	Nickname      *string       `json:"nickname,omitempty"`
+	Quota         *int          `json:"quota,omitempty"`
+	Origin        string        `json:"origin"`
+
+	// present records which keys the payload actually carried. It is what makes
+	// "omitted" distinguishable from "sent as the zero value" for a field whose
+	// Go type has no nil — a required int or bool got no check at all while
+	// requiredness was inferred from the zero value.
+	//
+	// A create request cannot express "clear", so an explicit null counts as
+	// absent: it leaves the field unwritten, exactly like omitting the key.
+	present map[string]bool
 }
 
-// Validate validates the create request
-func (r *AccountCreateRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("create request cannot be nil")
+// UnmarshalJSON records presence, then decodes normally.
+//
+// The wire format is unchanged: every exported field keeps its ordinary type
+// and tag, so marshalling, form binders, validators and spec generators all see
+// the struct they saw before. That is the property a generic Optional[T]
+// wrapper could not keep.
+func (r *AccountCreateRequest) UnmarshalJSON(b []byte) error {
+	type alias AccountCreateRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k, v := range raw {
+		if string(v) != "null" {
+			r.present[k] = true
+		}
 	}
 	return nil
 }
 
-// AccountUpdateRequest represents the update request for Account
-type AccountUpdateRequest struct {
+// has reports whether the decoded payload carried a value for a key.
+//
+// A request built in Go rather than decoded from JSON recorded no presence at
+// all, and there the struct is the only source of truth: every field reads as
+// supplied, which is what the caller assigning to it meant. UnmarshalJSON always
+// allocates the map, even for {}, so this fallback cannot fire on a decoded
+// request. Reporting such a request as entirely absent instead would reject
+// "seats is required" for a request that plainly sets Seats.
+//
+// The patch request deliberately does NOT do this: there, "unknown" has to mean
+// absent, or a hand-built request would read as an instruction to clear
+// everything.
+func (r *AccountCreateRequest) has(field string) bool {
+	if r.present == nil {
+		return true
+	}
+	return r.present[field]
+}
+
+// HasEmail reports whether the payload carried "email".
+func (r *AccountCreateRequest) HasEmail() bool { return r.has("email") }
+
+// HasSeats reports whether the payload carried "seats".
+func (r *AccountCreateRequest) HasSeats() bool { return r.has("seats") }
+
+// HasAcceptedTerms reports whether the payload carried "accepted_terms".
+func (r *AccountCreateRequest) HasAcceptedTerms() bool { return r.has("accepted_terms") }
+
+// HasPlan reports whether the payload carried "plan".
+func (r *AccountCreateRequest) HasPlan() bool { return r.has("plan") }
+
+// HasNickname reports whether the payload carried "nickname".
+func (r *AccountCreateRequest) HasNickname() bool { return r.has("nickname") }
+
+// HasQuota reports whether the payload carried "quota".
+func (r *AccountCreateRequest) HasQuota() bool { return r.has("quota") }
+
+// HasOrigin reports whether the payload carried "origin".
+func (r *AccountCreateRequest) HasOrigin() bool { return r.has("origin") }
+
+// ValidAccountCreateRequest wraps a AccountCreateRequest that has
+// passed Validate. Apply is defined on this type and nowhere else, so a caller
+// who skips validation has no method to call — a compile error rather than a
+// validator that runs only when someone remembers it.
+type ValidAccountCreateRequest struct{ r *AccountCreateRequest }
+
+// Validate checks the request and returns the only type Apply accepts.
+func (r *AccountCreateRequest) Validate() (*ValidAccountCreateRequest, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: create request is nil", entdomain.ErrValidation)
+	}
+	if r.Email == "" {
+		return nil, fmt.Errorf("%w: email is required", entdomain.ErrValidation)
+	}
+	if !r.HasSeats() {
+		return nil, fmt.Errorf("%w: seats is required", entdomain.ErrValidation)
+	}
+	if !r.HasAcceptedTerms() {
+		return nil, fmt.Errorf("%w: accepted_terms is required", entdomain.ErrValidation)
+	}
+	if r.Origin == "" {
+		return nil, fmt.Errorf("%w: origin is required", entdomain.ErrValidation)
+	}
+	if r.Plan != nil {
+		if err := account.PlanValidator(*r.Plan); err != nil {
+			return nil, fmt.Errorf("%w: %v", entdomain.ErrValidation, err)
+		}
+	}
+	return &ValidAccountCreateRequest{r: r}, nil
+}
+
+// Apply writes the request onto a create builder.
+//
+// A field the caller omitted is not written at all, so the schema's Default()
+// still applies. Writing the zero value unconditionally is what silently
+// defeated every schema default.
+func (v *ValidAccountCreateRequest) Apply(b *AccountCreate) *AccountCreate {
+	r := v.r
+	b.SetEmail(r.Email)
+	b.SetSeats(r.Seats)
+	b.SetAcceptedTerms(r.AcceptedTerms)
+	if r.Plan != nil {
+		b.SetPlan(*r.Plan)
+	}
+	if r.Nickname != nil {
+		b.SetNickname(*r.Nickname)
+	}
+	if r.Quota != nil {
+		b.SetQuota(*r.Quota)
+	}
+	b.SetOrigin(r.Origin)
+	return b
+}
+
+// AccountPatchRequest is the partial-update request for Account.
+//
+// Every field is a pointer and presence is recorded separately, which is what
+// separates the three states a PATCH has to express: absent means "leave it
+// alone", an explicit null means "clear it", and a value means "set it". With
+// bare pointers the first two are the same value, and clearing a field cannot
+// be expressed at all.
+//
+// A field the ent schema marks Immutable() is absent from this struct, because
+// ent's update builders iterate MutableFields and generate no setter for one.
+// encoding/json discards the key before any validator can see it, so a caller
+// who sends it gets silence — rejecting that needs DisallowUnknownFields, which
+// belongs to the consumer's handler.
+type AccountPatchRequest struct {
 	Email         *string       `json:"email,omitempty"`
 	Seats         *int          `json:"seats,omitempty"`
 	AcceptedTerms *bool         `json:"accepted_terms,omitempty"`
 	Plan          *account.Plan `json:"plan,omitempty"`
 	Nickname      *string       `json:"nickname,omitempty"`
 	Quota         *int          `json:"quota,omitempty"`
+
+	present map[string]bool
 }
 
-// Validate validates the update request
-func (r *AccountUpdateRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("update request cannot be nil")
+// UnmarshalJSON records which keys the payload carried, including the ones
+// whose value was null — that is the whole point here, and the difference from
+// the create request, where a null has nothing to clear.
+func (r *AccountPatchRequest) UnmarshalJSON(b []byte) error {
+	type alias AccountPatchRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k := range raw {
+		r.present[k] = true
 	}
 	return nil
+}
+
+// has reports whether the decoded payload carried the key at all. A request
+// built in Go rather than decoded from JSON has no presence, and Apply writes
+// nothing for it.
+func (r *AccountPatchRequest) has(field string) bool { return r.present[field] }
+
+// HasEmail reports whether the payload carried "email".
+func (r *AccountPatchRequest) HasEmail() bool { return r.has("email") }
+
+// HasSeats reports whether the payload carried "seats".
+func (r *AccountPatchRequest) HasSeats() bool { return r.has("seats") }
+
+// HasAcceptedTerms reports whether the payload carried "accepted_terms".
+func (r *AccountPatchRequest) HasAcceptedTerms() bool { return r.has("accepted_terms") }
+
+// HasPlan reports whether the payload carried "plan".
+func (r *AccountPatchRequest) HasPlan() bool { return r.has("plan") }
+
+// HasNickname reports whether the payload carried "nickname".
+func (r *AccountPatchRequest) HasNickname() bool { return r.has("nickname") }
+
+// HasQuota reports whether the payload carried "quota".
+func (r *AccountPatchRequest) HasQuota() bool { return r.has("quota") }
+
+// ValidAccountPatchRequest wraps a AccountPatchRequest that has passed
+// Validate. It is the only type Apply is defined on.
+type ValidAccountPatchRequest struct{ r *AccountPatchRequest }
+
+// Validate rejects an explicit null on a field that cannot be cleared.
+//
+// ent emits Clear<Field>() for Optional fields and for no others, so a null on
+// anything else has no correct translation: the column is NOT NULL and there is
+// no method to call. The field is named in the error, because "invalid request"
+// tells the caller nothing about which key to fix.
+func (r *AccountPatchRequest) Validate() (*ValidAccountPatchRequest, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: patch request is nil", entdomain.ErrValidation)
+	}
+	if r.HasEmail() && r.Email == nil {
+		return nil, fmt.Errorf("%w: email cannot be null", entdomain.ErrValidation)
+	}
+	if r.HasSeats() && r.Seats == nil {
+		return nil, fmt.Errorf("%w: seats cannot be null", entdomain.ErrValidation)
+	}
+	if r.HasAcceptedTerms() && r.AcceptedTerms == nil {
+		return nil, fmt.Errorf("%w: accepted_terms cannot be null", entdomain.ErrValidation)
+	}
+	if r.HasPlan() && r.Plan == nil {
+		return nil, fmt.Errorf("%w: plan cannot be null", entdomain.ErrValidation)
+	}
+	if r.Plan != nil {
+		if err := account.PlanValidator(*r.Plan); err != nil {
+			return nil, fmt.Errorf("%w: %v", entdomain.ErrValidation, err)
+		}
+	}
+	return &ValidAccountPatchRequest{r: r}, nil
+}
+
+// Apply writes the request onto an update builder. Absent fields are not
+// touched; the rest are set, or cleared when the caller sent an explicit null.
+func (v *ValidAccountPatchRequest) Apply(b *AccountUpdateOne) *AccountUpdateOne {
+	r := v.r
+	if r.HasEmail() {
+		b.SetEmail(*r.Email)
+	}
+	if r.HasSeats() {
+		b.SetSeats(*r.Seats)
+	}
+	if r.HasAcceptedTerms() {
+		b.SetAcceptedTerms(*r.AcceptedTerms)
+	}
+	if r.HasPlan() {
+		b.SetPlan(*r.Plan)
+	}
+	if r.HasNickname() {
+		if r.Nickname == nil {
+			b.ClearNickname()
+		} else {
+			b.SetNickname(*r.Nickname)
+		}
+	}
+	if r.HasQuota() {
+		if r.Quota == nil {
+			b.ClearQuota()
+		} else {
+			b.SetQuota(*r.Quota)
+		}
+	}
+	return b
 }
 
 // AccountSummary is the shape Account takes on another entity's response.

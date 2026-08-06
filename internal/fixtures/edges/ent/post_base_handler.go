@@ -30,13 +30,13 @@ func (h *BasePostHandler) ToResponseList(entities []*Post) []*PostResponse {
 
 // postUpdater is the interface required by PartialUpdate.
 type postUpdater interface {
-	Update(context.Context, uuid.UUID, *PostUpdateRequest) (*Post, error)
+	Update(context.Context, uuid.UUID, *PostPatchRequest) (*Post, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BasePostHandler) PartialUpdate(
 	ctx context.Context, svc postUpdater,
-	id uuid.UUID, req *PostUpdateRequest,
+	id uuid.UUID, req *PostPatchRequest,
 ) (*PostResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

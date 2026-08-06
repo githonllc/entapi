@@ -7,7 +7,8 @@
 package {{ base $.Config.Package }}
 
 import (
-{{- if or (createFields $) (updateFields $) }}
+{{- if or (createFields $) (patchFields $) }}
+	"encoding/json"
 	"fmt"
 {{- end }}
 {{- range dtoImports $ }}
@@ -19,10 +20,14 @@ import (
 // ============================================================================================
 // Layered Architecture Overview:
 //
-// 1. CreateRequest/UpdateRequest - HTTP-layer request models, restricted by scope.
+// 1. CreateRequest/PatchRequest - HTTP-layer request models, restricted by scope.
 //    - Only includes fields for the corresponding scope (ScopeCreate/ScopeUpdate).
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
+//    - Presence is recorded per request, so an omitted key, an explicit null and
+//      a value are three different things rather than two.
+//    - Apply is defined on the VALIDATED request only, so a builder cannot be
+//      written without validating first.
 //
 // 2. Response/Summary - HTTP-layer response models, restricted by scope.
 //    - Only includes fields in ScopeResponse.
@@ -45,77 +50,253 @@ import (
 {{- $createFields := createFields $ }}
 {{- if $createFields }}
 
-// {{ $.Name }}CreateRequest represents the create request for {{ $.Name }}
+// {{ $.Name }}CreateRequest is the create request for {{ $.Name }}.
+//
+// Field shape follows ent's schema rather than a parallel set of booleans. A
+// field ent can fill by itself — Optional, or carrying a Default() — is a
+// pointer here and is written to the builder only when the caller supplied a
+// value, so an omitted key leaves the schema's default in effect. A field ent
+// requires and cannot default is a value type and is always written.
 type {{ $.Name }}CreateRequest struct {
 {{- range $f := $createFields }}
-	{{- if isDomainRequired $f "create" }}
-	{{- /* A Nillable field is *T on the entity and its create setter is
-	       SetNillable<X>(*T), so the request carries *T even when the field is
-	       required: "required" is enforced by Validate below, not by the
-	       absence of a pointer. */}}
-	{{ $f.StructField }} {{ if $f.Nillable }}*{{ end }}{{ $f.Type }} `json:"{{ $f.StorageKey }}" validate:"required"`
-	{{- else }}
-	{{ $f.StructField }} {{ if $f.Optional }}*{{ end }}{{ $f.Type }} `json:"{{ $f.StorageKey }},omitempty"`
-	{{- end }}
+	{{ $f.StructField }} {{ if isCreatePointer $f }}*{{ end }}{{ $f.Type }} `json:"{{ $f.StorageKey }}{{ if isCreatePointer $f }},omitempty{{ end }}"`
 {{- end }}
+
+	// present records which keys the payload actually carried. It is what makes
+	// "omitted" distinguishable from "sent as the zero value" for a field whose
+	// Go type has no nil — a required int or bool got no check at all while
+	// requiredness was inferred from the zero value.
+	//
+	// A create request cannot express "clear", so an explicit null counts as
+	// absent: it leaves the field unwritten, exactly like omitting the key.
+	present map[string]bool
 }
 
-// Validate validates the create request
-func (r *{{ $.Name }}CreateRequest) Validate() error {
+// UnmarshalJSON records presence, then decodes normally.
+//
+// The wire format is unchanged: every exported field keeps its ordinary type
+// and tag, so marshalling, form binders, validators and spec generators all see
+// the struct they saw before. That is the property a generic Optional[T]
+// wrapper could not keep.
+func (r *{{ $.Name }}CreateRequest) UnmarshalJSON(b []byte) error {
+	type alias {{ $.Name }}CreateRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
+	}
+	r.present = make(map[string]bool, len(raw))
+	for k, v := range raw {
+		if string(v) != "null" {
+			r.present[k] = true
+		}
+	}
+	return nil
+}
+
+// has reports whether the decoded payload carried a value for a key.
+//
+// A request built in Go rather than decoded from JSON recorded no presence at
+// all, and there the struct is the only source of truth: every field reads as
+// supplied, which is what the caller assigning to it meant. UnmarshalJSON always
+// allocates the map, even for {}, so this fallback cannot fire on a decoded
+// request. Reporting such a request as entirely absent instead would reject
+// "seats is required" for a request that plainly sets Seats.
+//
+// The patch request deliberately does NOT do this: there, "unknown" has to mean
+// absent, or a hand-built request would read as an instruction to clear
+// everything.
+func (r *{{ $.Name }}CreateRequest) has(field string) bool {
+	if r.present == nil {
+		return true
+	}
+	return r.present[field]
+}
+
+{{ range $f := $createFields }}
+// Has{{ $f.StructField }} reports whether the payload carried "{{ $f.StorageKey }}".
+func (r *{{ $.Name }}CreateRequest) Has{{ $f.StructField }}() bool { return r.has("{{ $f.StorageKey }}") }
+{{ end }}
+
+// Valid{{ $.Name }}CreateRequest wraps a {{ $.Name }}CreateRequest that has
+// passed Validate. Apply is defined on this type and nowhere else, so a caller
+// who skips validation has no method to call — a compile error rather than a
+// validator that runs only when someone remembers it.
+type Valid{{ $.Name }}CreateRequest struct{ r *{{ $.Name }}CreateRequest }
+
+// Validate checks the request and returns the only type Apply accepts.
+func (r *{{ $.Name }}CreateRequest) Validate() (*Valid{{ $.Name }}CreateRequest, error) {
 	if r == nil {
-		return fmt.Errorf("create request cannot be nil")
+		return nil, fmt.Errorf("%w: create request is nil", entdomain.ErrValidation)
 	}
 {{- range $f := $createFields }}
-{{- if isDomainRequired $f "create" }}
-{{- if $f.Nillable }}
+{{- if isCreateRequired $f }}
+{{- if isCreatePointer $f }}
 	if r.{{ $f.StructField }} == nil {
-		return fmt.Errorf("{{ $f.StorageKey }} is required")
+		return nil, fmt.Errorf("%w: {{ $f.StorageKey }} is required", entdomain.ErrValidation)
 	}
-{{- if eq $f.Type.String "string" }}
-	if *r.{{ $f.StructField }} == "" {
-		return fmt.Errorf("{{ $f.StorageKey }} cannot be empty")
-	}
-{{- end }}
 {{- else if eq $f.Type.String "string" }}
 	if r.{{ $f.StructField }} == "" {
-		return fmt.Errorf("{{ $f.StorageKey }} is required")
+		return nil, fmt.Errorf("%w: {{ $f.StorageKey }} is required", entdomain.ErrValidation)
+	}
+{{- else }}
+	{{- /* No zero value can stand in for "absent" here: 0 is a legal count and
+	       false is exactly as meaningful as true. Presence is the only correct
+	       question, and the only one that works for every Go type. */}}
+	if !r.Has{{ $f.StructField }}() {
+		return nil, fmt.Errorf("%w: {{ $f.StorageKey }} is required", entdomain.ErrValidation)
 	}
 {{- end }}
 {{- end }}
 {{- end }}
-	return nil
+{{- range $f := $createFields }}
+{{- if $f.IsEnum }}
+{{- if isCreatePointer $f }}
+	if r.{{ $f.StructField }} != nil {
+		if err := {{ $.Package }}.{{ $f.StructField }}Validator(*r.{{ $f.StructField }}); err != nil {
+			return nil, fmt.Errorf("%w: %v", entdomain.ErrValidation, err)
+		}
+	}
+{{- else }}
+	if err := {{ $.Package }}.{{ $f.StructField }}Validator(r.{{ $f.StructField }}); err != nil {
+		return nil, fmt.Errorf("%w: %v", entdomain.ErrValidation, err)
+	}
+{{- end }}
+{{- end }}
+{{- end }}
+	return &Valid{{ $.Name }}CreateRequest{r: r}, nil
+}
+
+// Apply writes the request onto a create builder.
+//
+// A field the caller omitted is not written at all, so the schema's Default()
+// still applies. Writing the zero value unconditionally is what silently
+// defeated every schema default.
+func (v *Valid{{ $.Name }}CreateRequest) Apply(b *{{ $.Name }}Create) *{{ $.Name }}Create {
+	r := v.r
+{{- range $f := $createFields }}
+{{- if isCreatePointer $f }}
+	if r.{{ $f.StructField }} != nil {
+		b.Set{{ $f.StructField }}(*r.{{ $f.StructField }})
+	}
+{{- else }}
+	b.Set{{ $f.StructField }}(r.{{ $f.StructField }})
+{{- end }}
+{{- end }}
+	return b
 }
 
 {{- end }}
 
-{{- $updateFields := updateFields $ }}
-{{- if $updateFields }}
+{{- $patchFields := patchFields $ }}
+{{- if $patchFields }}
 
-// {{ $.Name }}UpdateRequest represents the update request for {{ $.Name }}
-type {{ $.Name }}UpdateRequest struct {
-{{- range $f := $updateFields }}
+// {{ $.Name }}PatchRequest is the partial-update request for {{ $.Name }}.
+//
+// Every field is a pointer and presence is recorded separately, which is what
+// separates the three states a PATCH has to express: absent means "leave it
+// alone", an explicit null means "clear it", and a value means "set it". With
+// bare pointers the first two are the same value, and clearing a field cannot
+// be expressed at all.
+//
+// A field the ent schema marks Immutable() is absent from this struct, because
+// ent's update builders iterate MutableFields and generate no setter for one.
+// encoding/json discards the key before any validator can see it, so a caller
+// who sends it gets silence — rejecting that needs DisallowUnknownFields, which
+// belongs to the consumer's handler.
+type {{ $.Name }}PatchRequest struct {
+{{- range $f := $patchFields }}
 	{{ $f.StructField }} *{{ $f.Type }} `json:"{{ $f.StorageKey }},omitempty"`
 {{- end }}
+
+	present map[string]bool
 }
 
-// Validate validates the update request
-func (r *{{ $.Name }}UpdateRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("update request cannot be nil")
+// UnmarshalJSON records which keys the payload carried, including the ones
+// whose value was null — that is the whole point here, and the difference from
+// the create request, where a null has nothing to clear.
+func (r *{{ $.Name }}PatchRequest) UnmarshalJSON(b []byte) error {
+	type alias {{ $.Name }}PatchRequest // breaks the UnmarshalJSON recursion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
 	}
-{{- range $f := $updateFields }}
-{{- if isDomainRequired $f "update" }}
-	if r.{{ $f.StructField }} == nil {
-		return fmt.Errorf("{{ $f.StorageKey }} is required")
+	if err := json.Unmarshal(b, (*alias)(r)); err != nil {
+		return err
 	}
-{{- if eq $f.Type.String "string" }}
-	if *r.{{ $f.StructField }} == "" {
-		return fmt.Errorf("{{ $f.StorageKey }} cannot be empty")
+	r.present = make(map[string]bool, len(raw))
+	for k := range raw {
+		r.present[k] = true
 	}
-{{- end }}
-{{- end }}
-{{- end }}
 	return nil
+}
+
+// has reports whether the decoded payload carried the key at all. A request
+// built in Go rather than decoded from JSON has no presence, and Apply writes
+// nothing for it.
+func (r *{{ $.Name }}PatchRequest) has(field string) bool { return r.present[field] }
+
+{{ range $f := $patchFields }}
+// Has{{ $f.StructField }} reports whether the payload carried "{{ $f.StorageKey }}".
+func (r *{{ $.Name }}PatchRequest) Has{{ $f.StructField }}() bool { return r.has("{{ $f.StorageKey }}") }
+{{ end }}
+
+// Valid{{ $.Name }}PatchRequest wraps a {{ $.Name }}PatchRequest that has passed
+// Validate. It is the only type Apply is defined on.
+type Valid{{ $.Name }}PatchRequest struct{ r *{{ $.Name }}PatchRequest }
+
+// Validate rejects an explicit null on a field that cannot be cleared.
+//
+// ent emits Clear<Field>() for Optional fields and for no others, so a null on
+// anything else has no correct translation: the column is NOT NULL and there is
+// no method to call. The field is named in the error, because "invalid request"
+// tells the caller nothing about which key to fix.
+func (r *{{ $.Name }}PatchRequest) Validate() (*Valid{{ $.Name }}PatchRequest, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: patch request is nil", entdomain.ErrValidation)
+	}
+{{- range $f := $patchFields }}
+{{- if not (isPatchClearable $f) }}
+	if r.Has{{ $f.StructField }}() && r.{{ $f.StructField }} == nil {
+		return nil, fmt.Errorf("%w: {{ $f.StorageKey }} cannot be null", entdomain.ErrValidation)
+	}
+{{- end }}
+{{- end }}
+{{- range $f := $patchFields }}
+{{- if $f.IsEnum }}
+	if r.{{ $f.StructField }} != nil {
+		if err := {{ $.Package }}.{{ $f.StructField }}Validator(*r.{{ $f.StructField }}); err != nil {
+			return nil, fmt.Errorf("%w: %v", entdomain.ErrValidation, err)
+		}
+	}
+{{- end }}
+{{- end }}
+	return &Valid{{ $.Name }}PatchRequest{r: r}, nil
+}
+
+// Apply writes the request onto an update builder. Absent fields are not
+// touched; the rest are set, or cleared when the caller sent an explicit null.
+func (v *Valid{{ $.Name }}PatchRequest) Apply(b *{{ $.Name }}UpdateOne) *{{ $.Name }}UpdateOne {
+	r := v.r
+{{- range $f := $patchFields }}
+	if r.Has{{ $f.StructField }}() {
+{{- if isPatchClearable $f }}
+		if r.{{ $f.StructField }} == nil {
+			b.Clear{{ $f.StructField }}()
+		} else {
+			b.Set{{ $f.StructField }}(*r.{{ $f.StructField }})
+		}
+{{- else }}
+		{{- /* Validate has already refused a null here, so the dereference is
+		       safe by construction: this method exists only on the validated
+		       type. */}}
+		b.Set{{ $f.StructField }}(*r.{{ $f.StructField }})
+{{- end }}
+	}
+{{- end }}
+	return b
 }
 
 {{- end }}

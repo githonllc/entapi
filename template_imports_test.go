@@ -54,6 +54,15 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			schemaDir: filepath.Join(root, "internal", "fixtures", "edges", "ent", "schema"),
 			pkgPath:   modulePath + "/internal/fixtures/edges/ent",
 		},
+		{
+			// An enum in a create AND a patch request, which is what makes the
+			// generated validators call ent's <Field>Validator. Those live in
+			// the entity's own subpackage, so this is the one path where the
+			// DTO names a package no field TYPE required it to import.
+			name:      "presence",
+			schemaDir: filepath.Join(root, "internal", "fixtures", "presence", "ent", "schema"),
+			pkgPath:   modulePath + "/internal/fixtures/presence/ent",
+		},
 		// The refused fixtures ("immutable", "intid", "selfref") are
 		// deliberately absent: the generator stops before rendering anything for
 		// them. Asserting on the imports of output that is never emitted would

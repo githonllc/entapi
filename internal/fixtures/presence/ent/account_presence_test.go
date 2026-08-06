@@ -263,6 +263,40 @@ func TestRequestsMarshalAsOrdinaryJSON(t *testing.T) {
 	}
 }
 
+// TestAHandBuiltRequestFallsBackToItsStruct pins the two asymmetric defaults for
+// a request that never went through UnmarshalJSON, which is what a consumer's
+// own service code and every table-driven test produces.
+//
+// A create request has no other source of truth than its fields, so they all
+// count as supplied — rejecting "seats is required" for a struct that plainly
+// sets Seats would be a lie. A patch request must default the other way: absent,
+// so nothing is written. Reading a hand-built patch as "every field present"
+// would turn its nil pointers into an instruction to clear the row.
+func TestAHandBuiltRequestFallsBackToItsStruct(t *testing.T) {
+	create := &AccountCreateRequest{Email: "a@example.com", Seats: 3, AcceptedTerms: true, Origin: "cli"}
+	valid, err := create.Validate()
+	if err != nil {
+		t.Fatalf("a hand-built create request that sets every required field was rejected: %v", err)
+	}
+	b := valid.Apply(NewClient().Account.Create())
+	if _, ok := b.Mutation().Plan(); ok {
+		t.Error(`"plan" is nil on the request but was written to the mutation`)
+	}
+
+	patch := &AccountPatchRequest{Nickname: nil, Email: nil}
+	validPatch, err := patch.Validate()
+	if err != nil {
+		t.Fatalf("validating a hand-built patch request: %v", err)
+	}
+	ub := validPatch.Apply(NewClient().Account.UpdateOneID(uuid.New()))
+	if got := ub.Mutation().Fields(); len(got) != 0 {
+		t.Errorf("a hand-built patch wrote %v; nil pointers there are not an instruction to clear", got)
+	}
+	if ub.Mutation().NicknameCleared() {
+		t.Error("a hand-built patch cleared nickname")
+	}
+}
+
 func mustValidatePatch(t *testing.T, body string) *ValidAccountPatchRequest {
 	t.Helper()
 	v, err := decodePatch(t, body).Validate()

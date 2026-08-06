@@ -9,9 +9,9 @@ func TestTemplateFuncs(t *testing.T) {
 
 	// Test that all expected functions are present
 	expectedFuncs := []string{
-		"domainFields", "createFields", "updateFields", "responseFields",
-		"isDomainRequired",
-		"setFieldCallReq", "responseEdges", "hasSoftDelete",
+		"domainFields", "createFields", "patchFields", "responseFields",
+		"isCreatePointer", "isCreateRequired", "isPatchClearable",
+		"responseEdges", "hasSoftDelete",
 		"camelCase",
 	}
 

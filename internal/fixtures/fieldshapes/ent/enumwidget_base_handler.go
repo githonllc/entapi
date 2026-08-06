@@ -30,13 +30,13 @@ func (h *BaseEnumWidgetHandler) ToResponseList(entities []*EnumWidget) []*EnumWi
 
 // enumWidgetUpdater is the interface required by PartialUpdate.
 type enumWidgetUpdater interface {
-	Update(context.Context, uuid.UUID, *EnumWidgetUpdateRequest) (*EnumWidget, error)
+	Update(context.Context, uuid.UUID, *EnumWidgetPatchRequest) (*EnumWidget, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseEnumWidgetHandler) PartialUpdate(
 	ctx context.Context, svc enumWidgetUpdater,
-	id uuid.UUID, req *EnumWidgetUpdateRequest,
+	id uuid.UUID, req *EnumWidgetPatchRequest,
 ) (*EnumWidgetResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

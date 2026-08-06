@@ -30,10 +30,23 @@ func createFields(node *gen.Type) []*gen.Field {
 	return fields
 }
 
-// updateFields returns fields that can be used in update requests
-func updateFields(node *gen.Type) []*gen.Field {
+// patchFields returns the fields a patch request carries, in schema order.
+//
+// The set is the intersection of two authorities, and ent's is the binding one:
+// a field must carry ScopeUpdate, AND it must be one ent's update builders can
+// actually set. That second half is taken from gen.Type.MutableFields rather
+// than re-derived here, because it is the very list ent's own setter template
+// iterates — immutable fields and immutable-edge foreign keys are absent from
+// it, so a field that survives this filter provably has a Set<Field> method.
+//
+// checkGraphConflicts (schema_conflicts.go) refuses an Immutable() field
+// carrying ScopeUpdate before generation starts, so today the intersection
+// never actually drops anything. That is the point: the refusal is what a
+// schema author sees, and this filter is what makes the emitted code correct
+// even if a future ent adds another way for a field to be unsettable.
+func patchFields(node *gen.Type) []*gen.Field {
 	var fields []*gen.Field
-	for _, field := range node.Fields {
+	for _, field := range node.MutableFields() {
 		if annotation := getDomainFieldAnnotation(field); annotation != nil {
 			if hasDomainScope(field, ScopeUpdate) {
 				fields = append(fields, field)

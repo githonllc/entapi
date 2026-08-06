@@ -18,7 +18,7 @@ import (
 type BaseAccountServiceHooks interface {
 	BeforeCreate(ctx context.Context, req *AccountCreateRequest) error
 	AfterCreate(ctx context.Context, entity *Account) (*Account, error)
-	BeforeUpdate(ctx context.Context, id uuid.UUID, req *AccountUpdateRequest) error
+	BeforeUpdate(ctx context.Context, id uuid.UUID, req *AccountPatchRequest) error
 	AfterUpdate(ctx context.Context, entity *Account) (*Account, error)
 	BeforeDelete(ctx context.Context, id uuid.UUID) error
 	AfterDelete(ctx context.Context, id uuid.UUID) error
@@ -76,7 +76,7 @@ func (s *BaseAccountService) AfterCreate(_ context.Context, entity *Account) (*A
 	return entity, nil
 }
 
-func (s *BaseAccountService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *AccountUpdateRequest) error {
+func (s *BaseAccountService) BeforeUpdate(_ context.Context, _ uuid.UUID, _ *AccountPatchRequest) error {
 	return nil
 }
 
@@ -102,13 +102,20 @@ func (s *BaseAccountService) GetByID(ctx context.Context, id uuid.UUID) (*Accoun
 }
 
 // Create creates a new Account from a CreateRequest.
+//
+// Validation is not optional here, and not because this method remembers to
+// call it: Apply is defined on the validated request only, so there is no
+// version of this method that skips it and still compiles.
 func (s *BaseAccountService) Create(ctx context.Context, req *AccountCreateRequest) (*Account, error) {
 	if err := s.hooks().BeforeCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Account.Create()
-	ApplyAccountCreateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Account.Create())
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -121,14 +128,18 @@ func (s *BaseAccountService) Create(ctx context.Context, req *AccountCreateReque
 	return s.hooks().AfterCreate(ctx, entity)
 }
 
-// Update performs a partial update of Account, only setting non-nil fields from the request.
-func (s *BaseAccountService) Update(ctx context.Context, id uuid.UUID, req *AccountUpdateRequest) (*Account, error) {
+// Update performs a partial update of Account: a field the caller omitted
+// is left alone, an explicit null clears a clearable field, and a value sets it.
+func (s *BaseAccountService) Update(ctx context.Context, id uuid.UUID, req *AccountPatchRequest) (*Account, error) {
 	if err := s.hooks().BeforeUpdate(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	builder := s.DB.Account.UpdateOneID(id)
-	ApplyAccountUpdateRequest(builder, req)
+	valid, err := req.Validate()
+	if err != nil {
+		return nil, err
+	}
+	builder := valid.Apply(s.DB.Account.UpdateOneID(id))
 
 	entity, err := builder.Save(ctx)
 	if err != nil {
@@ -211,48 +222,14 @@ func (s *BaseAccountService) ListWithCursor(ctx context.Context, limit int, curs
 
 // ---------------------------------------------------------------------------
 // Builder helpers: Apply requests to ent builders
+//
+// There are none any more, deliberately. ApplyAccountCreateRequest and
+// ApplyAccountUpdateRequest used to be exported free functions taking a raw
+// request, which is exactly the path that let a caller reach a builder without
+// validating. Apply now lives on ValidAccountCreateRequest and
+// ValidAccountPatchRequest (see account_dto.go), so custom
+// service methods call req.Validate() first and get the same builder control.
 // ---------------------------------------------------------------------------
-
-// ApplyAccountCreateRequest applies all fields from a CreateRequest to an ent Create builder.
-// Exported for use in custom service methods that need manual builder control.
-func ApplyAccountCreateRequest(builder *AccountCreate, req *AccountCreateRequest) {
-	builder.SetEmail(req.Email)
-	builder.SetSeats(req.Seats)
-	builder.SetAcceptedTerms(req.AcceptedTerms)
-	if req.Plan != "" {
-		builder.SetPlan(req.Plan)
-	}
-	if req.Nickname != nil {
-		builder.SetNickname(*req.Nickname)
-	}
-	if req.Quota != nil {
-		builder.SetQuota(*req.Quota)
-	}
-	builder.SetOrigin(req.Origin)
-}
-
-// ApplyAccountUpdateRequest applies non-nil fields from an UpdateRequest to an ent UpdateOne builder.
-// Only fields that are explicitly set (non-nil) in the request are applied — true partial update.
-func ApplyAccountUpdateRequest(builder *AccountUpdateOne, req *AccountUpdateRequest) {
-	if req.Email != nil {
-		builder.SetEmail(*req.Email)
-	}
-	if req.Seats != nil {
-		builder.SetSeats(*req.Seats)
-	}
-	if req.AcceptedTerms != nil {
-		builder.SetAcceptedTerms(*req.AcceptedTerms)
-	}
-	if req.Plan != nil {
-		builder.SetPlan(*req.Plan)
-	}
-	if req.Nickname != nil {
-		builder.SetNillableNickname(req.Nickname)
-	}
-	if req.Quota != nil {
-		builder.SetQuota(*req.Quota)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Entity → Response conversion

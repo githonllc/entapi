@@ -30,13 +30,13 @@ func (h *BaseNamedTypeWidgetHandler) ToResponseList(entities []*NamedTypeWidget)
 
 // namedTypeWidgetUpdater is the interface required by PartialUpdate.
 type namedTypeWidgetUpdater interface {
-	Update(context.Context, uuid.UUID, *NamedTypeWidgetUpdateRequest) (*NamedTypeWidget, error)
+	Update(context.Context, uuid.UUID, *NamedTypeWidgetPatchRequest) (*NamedTypeWidget, error)
 }
 
 // PartialUpdate applies the partial update request, saves the result, and returns the response DTO.
 func (h *BaseNamedTypeWidgetHandler) PartialUpdate(
 	ctx context.Context, svc namedTypeWidgetUpdater,
-	id uuid.UUID, req *NamedTypeWidgetUpdateRequest,
+	id uuid.UUID, req *NamedTypeWidgetPatchRequest,
 ) (*NamedTypeWidgetResponse, error) {
 	entity, err := svc.Update(ctx, id, req)
 	if err != nil {

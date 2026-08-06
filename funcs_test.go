@@ -30,12 +30,14 @@ func TestTemplateFuncs(t *testing.T) {
 func TestGetDomainFieldAnnotationFromMap(t *testing.T) {
 	// Test with map[string]interface{} annotation (runtime format)
 	mapAnnotation := map[string]interface{}{
-		"scopes":      []interface{}{"create", "update", "response"},
-		"required":    map[string]interface{}{"create": true},
-		"searchable":  true,
-		"filterable":  true,
-		"sortable":    true,
-		"description": "Test field description",
+		"scopes":     []interface{}{"create", "update", "response"},
+		"required":   map[string]interface{}{"create": true},
+		"searchable": true,
+		"filterable": true,
+		"sortable":   true,
+		"metadata": map[string]interface{}{
+			"description": "Test field description",
+		},
 	}
 
 	fld := newStringField("test_field", nil)
@@ -47,8 +49,14 @@ func TestGetDomainFieldAnnotationFromMap(t *testing.T) {
 		t.Fatal("Expected annotation to be converted")
 	}
 
-	if annotation.Description != "Test field description" {
-		t.Errorf("Expected description 'Test field description', got '%s'", annotation.Description)
+	// Description moved onto the metadata block on #17, so this also pins that
+	// the JSON round-trip in getDomainFieldAnnotation still reaches a nested
+	// object and not only the top level.
+	if annotation.Metadata == nil {
+		t.Fatal("Expected the metadata block to be converted")
+	}
+	if annotation.Metadata.Description != "Test field description" {
+		t.Errorf("Expected description 'Test field description', got '%s'", annotation.Metadata.Description)
 	}
 
 	if !annotation.Searchable {

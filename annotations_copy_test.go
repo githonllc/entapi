@@ -72,29 +72,12 @@ func TestDomainFieldWithScopesCopiesItsArgument(t *testing.T) {
 	}
 }
 
-func TestWithValidationCopiesItsArgument(t *testing.T) {
-	rules := map[string]interface{}{"min": 1}
-	f := DefaultField().WithValidation(rules)
-
-	// The caller still holds the map it passed in. Writing to it must not
-	// reach into the annotation that was already built from it.
-	rules["min"] = 999
-	rules["max"] = 5
-
-	if got := f.Validation["min"]; got != 1 {
-		t.Errorf("caller's later write reached the annotation: f.Validation[\"min\"] = %v, want 1", got)
-	}
-	if _, ok := f.Validation["max"]; ok {
-		t.Errorf("caller's later insert reached the annotation: f.Validation = %v", f.Validation)
-	}
-}
-
-func TestWithValidationKeepsNilNil(t *testing.T) {
-	f := DefaultField().WithValidation(nil)
-	if f.Validation != nil {
-		t.Errorf("WithValidation(nil) produced a non-nil map %v, which would change the omitempty encoding", f.Validation)
-	}
-}
+// WithValidation had two tests here — one for copying its argument map, one for
+// keeping nil nil. Both went with the builder on #17: Validate() on the
+// generated request types is its successor, so there is no map to copy.
+// TestDescriptionAndExampleForkedChainsAreIndependent in
+// annotation_placement_test.go carries this file's contract for the two
+// builders that moved onto the metadata block rather than being deleted.
 
 func TestMetadataForkedChainsAreIndependent(t *testing.T) {
 	base := DefaultField().WithTitle("base")

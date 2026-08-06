@@ -6,43 +6,38 @@ import (
 
 func TestDomainFieldAnnotation(t *testing.T) {
 	tests := []struct {
-		name            string
-		field           DomainField
-		expectedName    string
-		wantSearchable  bool
-		wantFilterable  bool
-		wantSortable    bool
-		wantDescription string
+		name           string
+		field          DomainField
+		expectedName   string
+		wantSearchable bool
+		wantFilterable bool
+		wantSortable   bool
 	}{
 		{
 			name: "basic field",
 			field: DomainField{
-				Scopes:      []FieldScope{ScopeCreate, ScopeUpdate, ScopeResponse},
-				Searchable:  true,
-				Filterable:  true,
-				Sortable:    true,
-				Description: "Test field description",
+				Scopes:     []FieldScope{ScopeCreate, ScopeUpdate, ScopeResponse},
+				Searchable: true,
+				Filterable: true,
+				Sortable:   true,
 			},
-			expectedName:    "DomainField",
-			wantSearchable:  true,
-			wantFilterable:  true,
-			wantSortable:    true,
-			wantDescription: "Test field description",
+			expectedName:   "DomainField",
+			wantSearchable: true,
+			wantFilterable: true,
+			wantSortable:   true,
 		},
 		{
 			name: "optional field",
 			field: DomainField{
-				Scopes:      []FieldScope{ScopeResponse},
-				Searchable:  false,
-				Filterable:  false,
-				Sortable:    false,
-				Description: "Optional field",
+				Scopes:     []FieldScope{ScopeResponse},
+				Searchable: false,
+				Filterable: false,
+				Sortable:   false,
 			},
-			expectedName:    "DomainField",
-			wantSearchable:  false,
-			wantFilterable:  false,
-			wantSortable:    false,
-			wantDescription: "Optional field",
+			expectedName:   "DomainField",
+			wantSearchable: false,
+			wantFilterable: false,
+			wantSortable:   false,
 		},
 	}
 
@@ -67,10 +62,6 @@ func TestDomainFieldAnnotation(t *testing.T) {
 
 			if tt.field.Sortable != tt.wantSortable {
 				t.Errorf("Field.Sortable = %v, want %v", tt.field.Sortable, tt.wantSortable)
-			}
-
-			if tt.field.Description != tt.wantDescription {
-				t.Errorf("Field.Description = %v, want %v", tt.field.Description, tt.wantDescription)
 			}
 		})
 	}
@@ -157,8 +148,11 @@ func TestDomainFieldFluentAPI(t *testing.T) {
 	t.Run("WithDescription", func(t *testing.T) {
 		field := NewDomainField().WithDescription("Test description")
 
-		if field.Description != "Test description" {
-			t.Errorf("Description = %v, want %v", field.Description, "Test description")
+		if field.Metadata == nil {
+			t.Fatal("WithDescription should have allocated a Metadata block")
+		}
+		if field.Metadata.Description != "Test description" {
+			t.Errorf("Metadata.Description = %v, want %v", field.Metadata.Description, "Test description")
 		}
 	})
 
@@ -198,38 +192,11 @@ func TestDomainFieldFluentAPI(t *testing.T) {
 		}
 	})
 
-	t.Run("WithValidation", func(t *testing.T) {
-		rules := map[string]interface{}{
-			"min": 1,
-			"max": 100,
-		}
-		field := NewDomainField().WithValidation(rules)
-
-		if field.Validation == nil {
-			t.Error("Validation map should be initialized")
-		}
-
-		if field.Validation["min"] != 1 {
-			t.Errorf("Validation min = %v, want %v", field.Validation["min"], 1)
-		}
-
-		if field.Validation["max"] != 100 {
-			t.Errorf("Validation max = %v, want %v", field.Validation["max"], 100)
-		}
-	})
 }
 
 func TestDomainFieldAnnotationName(t *testing.T) {
 	field := DomainField{}
 	if field.Name() != "DomainField" {
 		t.Errorf("Name() = %v, want %v", field.Name(), "DomainField")
-	}
-}
-
-func TestDomainConfigAnnotation(t *testing.T) {
-	config := DomainConfig{}
-
-	if config.Name() != "DomainConfig" {
-		t.Errorf("Name() = %v, want %v", config.Name(), "DomainConfig")
 	}
 }

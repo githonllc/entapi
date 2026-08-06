@@ -56,6 +56,7 @@ var fixtures = []fixtureCase{
 	{dir: "query", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
 	{dir: "queryconflict", opts: []Option{WithBaseService(true), WithBaseHandler(true)}, wantGenErr: []string{"Bad.tags", "Sortable", "Bad.count", "Searchable", "Bad.meta", "Filterable", "Bad.token", `scope "query"`}},
 	{dir: "wiring", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
+	{dir: "softdelete", opts: []Option{WithBaseService(true), WithBaseHandler(true)}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the

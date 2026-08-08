@@ -8,7 +8,7 @@ import (
 )
 
 func TestDtoImports_BuiltinTypesNeedNothing(t *testing.T) {
-	node := newTestType("Widget", newStringField("name", ptr(DefaultField())))
+	node := newTestType("Widget", newStringField("name", nil))
 
 	if got := dtoImports(node); len(got) != 0 {
 		t.Errorf("dtoImports() = %v, want none: string needs no import", got)
@@ -18,7 +18,7 @@ func TestDtoImports_BuiltinTypesNeedNothing(t *testing.T) {
 func TestDtoImports_UsesFieldPkgPath(t *testing.T) {
 	timeField := newField("created_at",
 		&field.TypeInfo{Type: field.TypeTime, Ident: "time.Time", PkgPath: "time"},
-		ptr(OutputOnlyField()))
+		nil)
 	node := newTestType("Widget", timeField)
 
 	assertImports(t, dtoImports(node), `"time"`)
@@ -27,7 +27,7 @@ func TestDtoImports_UsesFieldPkgPath(t *testing.T) {
 // TestDtoImports_IncludesTheIDField covers the one import that comes from a
 // field the template renders without ranging over it.
 func TestDtoImports_IncludesTheIDField(t *testing.T) {
-	node := newTestType("Widget", newStringField("name", ptr(DefaultField())))
+	node := newTestType("Widget", newStringField("name", nil))
 	node.ID = newField("id",
 		&field.TypeInfo{Type: field.TypeUUID, Ident: "uuid.UUID", PkgPath: "github.com/google/uuid"},
 		nil)
@@ -40,7 +40,7 @@ func TestDtoImports_IncludesTheIDField(t *testing.T) {
 func TestDtoImports_EnumUsesTheEntitySubpackage(t *testing.T) {
 	enum := newField("status",
 		&field.TypeInfo{Type: field.TypeEnum, Ident: "widget.Status"},
-		ptr(DefaultField()))
+		nil)
 	node := newTestType("Widget", enum)
 	node.Config = &gen.Config{Package: "example.com/app/ent"}
 
@@ -53,7 +53,7 @@ func TestDtoImports_EnumUsesTheEntitySubpackage(t *testing.T) {
 func TestDtoImports_EnumWithoutConfigIsSkipped(t *testing.T) {
 	enum := newField("status",
 		&field.TypeInfo{Type: field.TypeEnum, Ident: "widget.Status"},
-		ptr(DefaultField()))
+		nil)
 
 	if got := dtoImports(newTestType("Widget", enum)); len(got) != 0 {
 		t.Errorf("dtoImports() = %v, want none when the node has no Config", got)
@@ -72,11 +72,11 @@ func TestDtoImports_DeduplicatesAndSorts(t *testing.T) {
 	mk := func(name string) *gen.Field {
 		return newField(name,
 			&field.TypeInfo{Type: field.TypeTime, Ident: "time.Time", PkgPath: "time"},
-			ptr(DefaultField()))
+			nil)
 	}
 	uuidField := newField("owner",
 		&field.TypeInfo{Type: field.TypeUUID, Ident: "uuid.UUID", PkgPath: "github.com/google/uuid"},
-		ptr(DefaultField()))
+		nil)
 
 	node := newTestType("Widget", mk("created_at"), mk("updated_at"), uuidField)
 

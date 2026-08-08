@@ -11,10 +11,11 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Bad carries one instance of each contradiction, because the refusal reports
@@ -26,29 +27,42 @@ type Bad struct {
 // Fields of the Bad.
 func (Bad) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
 		// Sortable, but a JSON column is not comparable, so ent's order-builder
 		// template skips it and there is no ByTags to put in the allow-list.
 		field.JSON("tags", []string{}).
 			Optional().
-			Annotations(entapi.DefaultField().AsSortable()),
+			Annotations(api.Sortable()),
 
 		// Searchable, but free-text search is a substring match and ent emits
 		// no Contains predicate for an int.
-		field.Int("count").
-			Annotations(entapi.DefaultField().AsSearchable()),
+		field.Int("count").Annotations(api.Searchable()),
 
 		// Filterable, but a required JSON column has no predicates at all —
 		// not even the null pair — so the filter group would be empty.
-		field.JSON("meta", map[string]string{}).
-			Annotations(entapi.DefaultField().AsFilterable()),
+		field.JSON("meta", map[string]string{}).Annotations(api.Filterable()),
 
-		// Filterable, but the annotation withholds the query scope, so the
-		// field is not exposed to the query API in the first place.
 		field.String("token").
-			Annotations(entapi.InputOnlyField().AsFilterable()),
+			Sensitive().
+			Annotations(api.Filterable()),
+
+		field.String("managed_secret").
+			Default("server").
+			Sensitive().
+			Annotations(api.ReadOnly()),
+
+		field.String("hidden").
+			Optional().
+			Annotations(api.Hidden(), api.Sortable()),
+
+		field.String("private").
+			Optional().
+			StorageKey("_private").
+			Annotations(api.Filterable()),
 	}
+}
+
+func (Bad) Annotations() []schema.Annotation {
+	return []schema.Annotation{api.Resource().Except(api.OpList)}
 }

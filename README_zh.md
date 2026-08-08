@@ -4,16 +4,20 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/githonllc/entapi)](https://goreportcard.com/report/github.com/githonllc/entapi)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-一个 [Ent](https://entgo.io) 扩展。你在 ent schema 的字段上标注「HTTP 层可以拿它做什么」，
-它就为你生成请求类型、响应类型、查询面，以及每个操作一个接线函数——全部写进你自己的
-`ent` 包，链接的运行时除标准库外不依赖任何东西。
+一个 [Ent](https://entgo.io) 扩展。给实体标上 `api.Resource()`，它就生成请求类型、响应
+类型、查询面，以及每个操作一个接线函数——全部写进你自己的 `ent` 包，链接的运行时除
+标准库外不依赖任何东西。字段形态来自 Ent；注解只表达偏离。
 
 *[English](README.md)*
 
 ```go
 // schema/article.go —— 你写这个
 field.String("title").
-    Annotations(entapi.DefaultField().AsSearchable().AsFilterable().AsSortable()),
+    Annotations(api.Searchable(), api.Filterable(), api.Sortable())
+
+func (Article) Annotations() []schema.Annotation {
+    return []schema.Annotation{api.Resource()}
+}
 ```
 
 ```go
@@ -42,8 +46,8 @@ art,  err := ent.CreateArticle(ctx, client, validReq)     // POST /articles
 
 ## 目录
 
-- [安装](#安装) · [两个 import 路径](#两个-import-路径) · [接入](#接入)
-- [注解模型](#注解模型)——作用域与标记是两个不同的轴
+- [安装](#安装) · [三个 import 路径](#三个-import-路径) · [接入](#接入)
+- [注解模型](#注解模型)——Ent 事实加五个偏离词
 - [生成了什么](#生成了什么)
 - [请求：三态存在性](#请求三态存在性)
 - [响应、摘要与边](#响应摘要与边)
@@ -68,14 +72,14 @@ go get github.com/githonllc/entapi
 
 > **实现：** `go.mod`
 
-## 两个 import 路径
+## 三个 import 路径
 
-一个 module，两个包，按**代码何时运行**切分。两者的包名都是 `entapi`，所以无论从哪条
-路径来，调用点都写作 `entapi.X`；同时需要两者的文件就都 import，并给其中一个起别名。
+一个 module，三个包，按**代码何时运行**切分。
 
 | Import | 被谁 import | 主要符号 |
 |---|---|---|
-| `github.com/githonllc/entapi` | 你的 `entc.go` 和你的 **schema** 文件 | `Extension`、`DomainField` 及其构造器、`Edge()`、`SoftDeleteMixin` |
+| `github.com/githonllc/entapi` | 你的 `entc.go`；嵌软删除的 schema | `Extension`、`SoftDeleteMixin` |
+| `github.com/githonllc/entapi/api` | 你的 **schema** 文件 | `Resource`、`Hidden`、`ReadOnly`、`Searchable`、`Filterable`、`Sortable`、`Expand` |
 | `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`、`ErrorMapper`、`AppendIf`、`Ptr`/`PtrOrNil`/`PtrNilSafe`、`WithSoftDeleted`/`WithHardDelete` |
 
 这个切分是承重的，不是整洁癖：根包用 `//go:embed` 内嵌五个模板，并在**包初始化时**把五份
@@ -132,53 +136,52 @@ func main() {
 
 ## 注解模型
 
-两个轴，把它们搞混是最常见的错误。
+`api.Resource()` 是唯一的实体开关。没有它就不生成 EntAPI 文件。
+`api.Resource().Except(api.OpCreate, ...)` 移除选中的公开操作面；请求 DTO 和接线函数仍留给
+service 层，唯一例外是根本无法工作的 create family。
 
-**作用域（scope）** 回答*哪些 HTTP 结构体可以携带这个字段*。共四个：
+字段归属默认静默，从 Ent 推导：
 
-| 作用域 | 出现在 |
+| Ent/API 事实 | 生成效果 |
 |---|---|
-| `ScopeCreate` | `{E}CreateRequest` |
-| `ScopeUpdate` | `{E}PatchRequest`（且必须同时在 ent 的 `MutableFields` 里） |
-| `ScopeQuery` | `{E}Filter` / `{E}SortKeys` |
-| `ScopeResponse` | `{E}Response` / `{E}Summary` |
+| `Optional`、`Default`、`Nillable` | create 指针与必填性 |
+| `Immutable` | 不出现在 PATCH |
+| `Sensitive` | 不出现在 response/summary，但仍可写 |
+| `api.Hidden()` | 不出现在 create、patch、response、query |
+| `api.ReadOnly()` | 不出现在 create、patch；保留 response |
+| `api.Searchable()` | 全文与子串查询维度 |
+| `api.Filterable()` | 从 Ent 运算符派生结构化谓词 |
+| `api.Sortable()` | 进入排序白名单 |
 
-**标记（marker）** 回答*对一个已经有 `ScopeQuery` 的字段，查询 API 可以做什么*。共三个：
-`AsFilterable()`、`AsSearchable()`、`AsSortable()`。
+五个字段词共享一个可合并注解；`Annotations(api.Searchable(), api.Sortable())` 经过 Ent 的
+序列化 schema loader 后仍保留两个词。所有构造器都是值接收者并返回副本。
 
-```go
-entapi.DefaultField()                    // create + update + query + response
-entapi.InputOnlyField()                  // create + update           （密码）
-entapi.OutputOnlyField()                 // query + response          （时间戳、计算态）
-entapi.CreateOnlyField()                 // create + query + response （创建后不可变）
-entapi.IdField()                         // OutputOnly + 预置描述 + ReadOnly 元数据
-entapi.AuditLogField()                   // OutputOnly + ReadOnly 元数据
-entapi.NewDomainField()                  // 零作用域——ent 追踪它，但它不出现在任何 HTTP 结构体里
-entapi.DomainFieldWithScopes(scopes...)  // 其他任意组合
-```
+### 从 scope 模型迁移
 
-**没有任何预设会授予标记。** 六个预设的函数体只写 `Scopes` 字段，`Searchable` /
-`Sortable` / `Filterable` 三个布尔一律保持零值。在你链上一个之前，`DefaultField()` 给你的
-是一个**空的** `{E}Filter` 结构体和一个**空的**排序白名单：
+没有兼容别名，按效果迁移旧词汇：
 
-```go
-field.String("title").
-    Annotations(entapi.DefaultField().
-        AsFilterable().     // 结构化 URL 参数：title、title_neq、title_in、title_prefix……
-        AsSearchable().     // 加入全文 q 析取，并解锁子串类操作符
-        AsSortable()),      // 进入 {E}SortKeys
-```
+| 旧写法 | 新写法 |
+|---|---|
+| `DefaultField()` | 无字段注解 |
+| `InputOnlyField()` | Ent `Sensitive()` |
+| `OutputOnlyField()` | `api.ReadOnly()` |
+| `CreateOnlyField()` | Ent `Immutable()` |
+| `IdField()` | 无注解；Ent 自动识别 ID |
+| `AuditLogField()` | `api.ReadOnly()` |
+| `NewDomainField()` | `api.Hidden()` |
+| `DomainFieldWithScopes(...)` | 用 Ent 事实和五个词直接写意图 |
+| `ScopeCreate` / `ScopeUpdate` | 从 `Optional`、`Default`、`Nillable`、`Immutable` 推导 |
+| `ScopeResponse` | 默认推导；用 `Hidden` 或 Ent `Sensitive` 移除 |
+| `ScopeQuery` | `Searchable`、`Filterable`、`Sortable` 中的一个或多个 |
+| `WithRequired(ScopeCreate)` | 无后继；必填等于 `!Optional && !Default` |
+| `AsSearchable` / `AsFilterable` / `AsSortable` | `api.Searchable()` / `api.Filterable()` / `api.Sortable()` |
+| `AsReadOnly` | `api.ReadOnly()` |
+| `AsWriteOnly` | Ent `Sensitive()` |
+| metadata 构造器 | 无后继 |
+| `Edge().InResponse().As("key")` | `api.Expand().JSONKey("key")` |
 
-一个**没有** `ScopeQuery` 的标记是生成错误，不是警告——见[生成会失败](#生成会失败而这正是设计)。
-
-每个构造器都是**值接收者且返回副本**：链式调用有效，原地修改无效。切片和 map 字段在拷贝时
-都会重新分配，所以从同一个基注解分叉出的两条链互不影响。
-
-> **实现：** `annotations.go` — `FieldScope`、`ScopeCreate`、`ScopeUpdate`、`ScopeQuery`、
-> `ScopeResponse`、`AllFieldScopes`、`DomainField`、`NewDomainField`、
-> `DomainFieldWithScopes`、`DefaultField`、`InputOnlyField`、`OutputOnlyField`、
-> `CreateOnlyField`、`IdField`、`AuditLogField`、`WithRequired`、`AsSearchable`、
-> `AsSortable`、`AsFilterable`、`copyScopes`、`copyEnum`、`copyTags`
+`InputOnlyField()` 过去只是 HTTP 层承诺；Ent `Sensitive()` 还约束 service 层与日志。这种更宽
+的语义是有意的：保密事实应声明在拥有它的层。
 
 ### 边
 
@@ -188,26 +191,23 @@ field.String("title").
 func (Post) Edges() []ent.Edge {
     return []ent.Edge{
         edge.From("author", User.Type).Ref("posts").Unique().Field("author_id").
-            Annotations(entapi.Edge().InResponse().As("writer")),
+            Annotations(api.Expand().JSONKey("writer")),
     }
 }
 ```
 
-`InResponse()` 把 `Author *UserSummary` 放进 `PostResponse`，把 `WithAuthor()` 放进生成的
-预加载计划；`As("writer")` 覆盖 JSON key。`DomainEdge` 只有 `Scopes` 和 `JSONKey` 两个
-字段，且今天只有 `ScopeResponse` 被读取。
+`Expand()` 把 `Author *UserSummary` 放进 `PostResponse`，把 `WithAuthor()` 放进生成的
+预加载计划；`JSONKey("writer")` 覆盖响应 key。扩展只深入一层，绝不从外键位置推断。
 
-注解到达 codegen 时可能是 `*DomainEdge`，也可能是 `map[string]interface{}`（从序列化 schema
-加载时），读取一律经过一次 JSON 归一化。字段注解同理。
+注解到达 codegen 时可能是 Go 类型，也可能是序列化 schema loader 产生的
+`map[string]interface{}`；读取一律经过一次 JSON 归一化。
 
-> **实现：** `annotations_edge.go` — `DomainEdge`、`Edge`、`InResponse`、`As`、`hasScope`、
-> `getDomainEdgeAnnotation`、`hasEdgeScope`、`responseEdgeSet`、`edgeJSONKey`；
-> `funcs_scope.go` — `getDomainFieldAnnotation`、`hasDomainScope`、`isDomainRequired`
+> **实现：** `api/annotations.go`；`funcs_scope.go` — `getResourceAnnotation`、
+> `getFieldAnnotation`、`getEdgeAnnotation`；`annotations_edge.go` — `responseEdgeSet`、`edgeJSONKey`
 
 ## 生成了什么
 
-**至少携带一个带注解字段**的实体，每个产出三个文件。一个都没有的实体被整体跳过，不产生
-任何文件——生成循环的第一行就是 `if len(domainFields(node)) == 0 { continue }`。
+每个带 **`api.Resource()`** 的实体产出三个文件；没有这个开关的实体不产生 EntAPI 文件。
 
 | 文件 | 声明 |
 |---|---|
@@ -222,7 +222,7 @@ func (Post) Edges() []ent.Edge {
 | `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
 | `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | 未导出的查询 traverser 与删除 hook |
 
-软删除文件的条件独立于注解：一个**没有任何 domain 字段**的实体只要嵌了 mixin，仍然会被写进
+软删除文件的条件独立于 `api.Resource()`：一个不是 HTTP resource 的实体只要嵌了 mixin，仍会被写进
 traverser 的类型开关。扩展还提供一个 `config/init/fields/*` partial，扩展 Ent 自己的
 `client.go`：`newConfig` 会为每个这类实体初始化 hook 与 interceptor slice。这个 partial
 不产生独立文件；图里没有 mixin 时，它一个字节也不渲染。
@@ -234,7 +234,7 @@ traverser 的类型开关。扩展还提供一个 `config/init/fields/*` partial
 > **实现：** `extension.go` — `generatePerTypeFiles`、`perTypeFileName`、`renderDTOFile`、
 > `renderFilterFile`、`renderWiringFile`、`renderErrorMapFile`、`renderSoftDeleteFile`、
 > `pendingFile`；`cleanup.go` — `errorMapFileName`、`softDeleteFileName`；
-> `funcs_fields.go` — `domainFields`；`funcs_softdelete.go` — `softDeleteTypes`；
+> `funcs_scope.go` — `isResource`；`funcs_softdelete.go` — `softDeleteTypes`；
 > 权威符号清单：`schema_conflicts.go` — `derivedEntityDecls`
 
 ## 请求：三态存在性
@@ -318,7 +318,7 @@ art, err := ent.CreateArticle(ctx, client, valid)
 摘要携带**每个响应作用域的标量字段**，减去边——`{E}Summary` 与 `{E}Response` 的标量部分
 一模一样。收窄它需要一个新注解，schema 里没有任何东西说明哪个字段是「简要」的那个。
 
-一条被响应作用域选中、却指向**没有任何 domain 字段**的实体的边，是生成错误：那个实体被
+一条 `api.Expand()` 边若指向**没有 `api.Resource()`** 的实体，就是生成错误：那个实体被
 跳过，没有 `<Target>Summary` 可以引用。
 
 > **实现：** `funcs_fields.go` — `responseFields`、`responseEdges`（返回 error）；
@@ -352,9 +352,9 @@ return c.JSON(200, ent.NewArticleListResponse(page))
 
 ## 查询面
 
-三个互相独立的维度，每个都按字段 opt-in，外层的门是 `ScopeQuery`。
+三个互相独立的维度，每个都按字段 opt-in。
 
-### 结构化过滤——`AsFilterable()`
+### 结构化过滤——`api.Filterable()`
 
 **ent** 为该类型派生的每个操作符对应一个参数；本包从不维护自己的操作符表，只维护一张
 **命名**表（哪个操作符叫什么后缀）。线上名字是字段的**存储 key** 加后缀，`form:` 与
@@ -368,7 +368,7 @@ return c.JSON(200, ent.NewArticleListResponse(page))
 | `_contains` `_icontains` `_suffix` `_ieq` | **子串类，见下** |
 | `_is_null` | 一个 `*bool`，把 `IsNil`/`NotNil` 合并 |
 
-一个只标了 `AsFilterable()` 的 optional `string` 字段得到十个参数：
+一个只标了 `api.Filterable()` 的 optional `string` 字段得到十个参数：
 
 ```
 ref  ref_neq  ref_in  ref_not_in  ref_gt  ref_gte  ref_lt  ref_lte  ref_prefix  ref_is_null
@@ -379,26 +379,26 @@ ref  ref_neq  ref_in  ref_not_in  ref_gt  ref_gte  ref_lt  ref_lte  ref_prefix  
 
 ent 认识而本包没有命名的操作符会被跳过，不会以错误的名字发射——今天不存在这样的操作符。
 
-### 子串类还需要 `AsSearchable()`
+### 子串类还需要 `api.Searchable()`
 
 `_contains`、`_icontains`、`_suffix`、`_ieq` 正是那些让 B-tree 索引失效的 `LIKE '%x%'`
-形态——与全文搜索那道门要挡住的成本画像完全相同。它们只在字段**同时**携带 `AsSearchable()`
+形态——与全文搜索那道门要挡住的成本画像完全相同。它们只在字段**同时**携带 `api.Searchable()`
 时才发射。
 
 `_ieq` 在*语义*上是精确匹配，但因其*成本*被划入昂贵类：没有函数索引时
 `LOWER(x) = LOWER(?)` 会全扫，和子串匹配一模一样。理由见
 [ADR-0005](docs/adr/0005-contains-operators-gated-by-searchable.md)。
 
-### 全文——`AsSearchable()`
+### 全文——`api.Searchable()`
 
 仅当至少有一个字段可搜索时才发射：单个 `q` 参数，作为一个跨全部可搜索字段的 `OR` 析取施加，
-并与其他一切 `AND`。为 nil **或空串**时跳过。一个标了 `AsSearchable()` 但没标
-`AsFilterable()` 的字段只贡献给 `q`，不会得到属于自己的结构化参数。
+并与其他一切 `AND`。为 nil **或空串**时跳过。一个标了 `api.Searchable()` 但没标
+`api.Filterable()` 的字段只贡献给 `q`，不会得到属于自己的结构化参数。
 
 一个什么都没标的实体得到 `type PlainFilter struct{}` 和 `var PlainSortKeys = []string{}`——
 空的，但存在，因为接线签名需要它们。
 
-### 排序——`AsSortable()`
+### 排序——`api.Sortable()`
 
 `{E}SortKeys` 是白名单，`{E}Order` 是把请求翻译成 ent order option 的函数。白名单之外的
 `sort_by` 是 `entapi.ErrValidation`，绝不静默回退。通过校验的 key 随后被**丢弃**——进入
@@ -556,15 +556,22 @@ hook 都在软删除 hook 内层运行。
 > 与 ent schema 相矛盾的注解会让生成失败，并同时报告两个事实和修法。凡是能被正确生成的，
 > 就生成，不拒绝。
 
-今天检测九种情形：
+拒绝矩阵覆盖这些矛盾：
 
 | 被拒绝的 | 原因 |
 |---|---|
-| 带 `ScopeUpdate` 的 `Immutable()` 字段——而 `DefaultField()` 恰好授予它 | ent 的 update builder 遍历 `MutableFields`，因此 `SetX` 不存在，没有任何模板能发射出编译得过的调用 |
-| 没有 `ScopeQuery` 的标记 | 该字段被标记为可过滤/可搜索/可排序，却从查询 API 无从抵达，不会产生任何查询产物 |
-| 在没有 `Contains` 的类型上标 `AsSearchable()` | 没有子串谓词可放进全文析取 |
-| 在没有任何操作符的类型上标 `AsFilterable()` | 过滤器组会是空的，参数会静默地什么都不做 |
-| 在不可比较的类型上标 `AsSortable()` | ent 的排序 builder 会跳过它，因而没有 `ByX` 可放进白名单 |
+| `api.Hidden()` 与任何其他字段词并用 | hidden 没有可供其他偏离生效的表面 |
+| Ent `Sensitive()` 与查询词或 `api.ReadOnly()` 并用 | secret 不能成为查询 oracle；完全不可访问的数据用 `Hidden` |
+| required-no-default 字段被 `Hidden`/`ReadOnly` 挡出 create，且未 `Except(OpCreate)` | Ent 无法从该请求插入行 |
+| PATCH 字段集为空且未 `Except(OpPatch)` | 公开 PATCH 面没有用途 |
+| 字段词挂在 edge，或 `Expand` 挂在 field | 词挂错了 schema 元素 |
+| 主键上出现任何 EntAPI 词 | ID 行为固定，未来查询白名单属于 #72 |
+| `OpList` 被 except，同时字段带查询词 | 查询面已关闭 |
+| 在没有 `Contains` 的类型上标 `api.Searchable()` | 没有子串谓词可发射 |
+| 在没有操作符的类型上标 `api.Filterable()` | 过滤器组会静默无效 |
+| 在不可比较类型上标 `api.Sortable()` | Ent 不生成 `ByX` |
+| 查询 storage key 以 `_` 开头 | 与保留查询控制项相撞 |
+| `api.Expand()` 指向非 resource | 目标 Summary 不存在 |
 | `DomainSoftDelete` 指名了实体没有的字段 | 手工挂这个标记不受支持，正确方式是嵌 `SoftDeleteMixin` |
 | 墓碑字段不是 `Optional` | ent 不生成 `DeletedAtIsNil` 谓词，traverser 编译不过 |
 | 自引用边只在一端带注解 | ent 把链式的 `edge.To(…).From(…).Annotations(…)` 交给了*反向* builder，于是关联端静默丢失了它的注解 |
@@ -577,12 +584,11 @@ hook 都在软删除 hook 内层运行。
 
 保留名检查在图这一层跑，而不是在节点循环里：**相撞的实体不需要带任何注解**——ent 为每个
 实体都生成类型，一个光秃秃的 `type ErrorMap struct{ ent.Schema }` 撞得一样狠，而节点循环
-恰好会跳过它。派生名单取**最大集合**（一个实体今天没有 create 作用域字段，明天加一个就会
-发射 `<Name>CreateRequest`），宁可拒绝一个理论上今天不会相撞的名字，也不因日后加注解而
-突然报错。
+恰好会跳过它。派生名单取 resource 可能产出的**最大集合**，宁可拒绝一个理论上今天不会相撞
+的名字，也不因日后加注解而突然报错。
 
-被拒绝的检查中，除软删除和保留名两类外，其余全部**跳过没有任何 domain 字段的实体**——与
-生成循环用的是同一个条件。
+HTTP 检查全部跳过没有 `api.Resource()` 的实体——与生成循环条件一致；软删除与保留名仍是
+全图检查。
 
 反过来，`Optional().Nillable()` 以及切片/映射上的具名类型*是*会被生成的，因为对它们存在
 正确的产物。见[字段形态](#字段形态)。
@@ -648,13 +654,12 @@ setter 存在，所以任何独立推导出的形态都会表现为「调用一�
 
 - 创建字段是**指针**，恰好当 `Optional || Default || Nillable`——即 ent 能在调用方不给的
   情况下自行填充它时。
-- 创建字段**必填**，当注解显式要求，或 `!Optional && !Default`。`WithRequired(ScopeCreate)`
-  只能*增加*严格性，绝不能减少。
-- patch 字段**可清空**，当 `Optional && !` 注解要求 update 必填。
+- 创建字段**必填**，恰好当 `!Optional && !Default`。
+- patch 字段**可清空**，恰好当 `Optional`。
 
-`patchFields` 遍历的是 `node.MutableFields()` 而不是 `node.Fields`，所以活下来的字段**必然**
-有一个 `Set<Field>`。（`Immutable` + `ScopeUpdate` 会先被生成期检查拒掉，所以这个交集今天
-一个字段都不丢——拒绝是作者看到的东西，过滤是让产物保持正确的东西。）
+`patchFields` 遍历 `node.MutableFields()`，所以活下来的字段必有 `Set<Field>`；随后再去掉
+`Hidden` 与 `ReadOnly`。`createFields` 对全部 Ent 字段应用同样两项偏离。`Sensitive` 在两个
+请求里仍可写，只从响应中移除。
 
 在响应一侧，`Optional` 的可比较字段走 `entapi.PtrOrNil`，`Optional` 的切片与映射
 ——**包括**它们之上的具名类型——走 `entapi.PtrNilSafe`，靠检查 `field.Type.RType.Kind`
@@ -670,29 +675,13 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
 > `runtime/types.go` — `Ptr`、`PtrOrNil`、`PtrNilSafe`；
 > fixture：`internal/fixtures/fieldshapes/`
 
-## 被接受但不被消费的
+## 注解表面
 
-**十五个 metadata knob 被存储下来，且不抵达任何模板**：`DomainField.Metadata` 本身，以及
-`FieldMetadata` 的十四个字段。它们由十三个构造器写入：
+公开 schema API 只有三个可合并注解类型，没有 pending knob。反射测试逐个切换导出字段和
+构造器，并检查它们是否抵达已注册模板函数；新增不可达 knob 会直接弄红 CI。
 
-`WithMetadata` · `WithTitle` · `WithDescription` · `WithExample` · `WithFormat` ·
-`WithPattern` · `WithRange` · `WithLength` · `WithEnum` · `AsReadOnly` · `AsWriteOnly` ·
-`AsDeprecated` · `WithTags`
-
-它们是为 OpenAPI / Swagger spec 生成保留的，是刻意保留而非疏漏——每一个的 godoc 首行都言明
-此事。一个测试用反射列出全部 knob，再逐个开关它们、渲染模板，判定谁真的可达；不可达且不在
-待接线台账里的 knob 会弄红 CI，**已经可达却还留在台账里的也会**。台账是一份带期限的声明，
-不是豁免。
-
-**今天被消费的**：`DomainField.Scopes`、`.Required`、`.Searchable`、`.Sortable`、
-`.Filterable`，以及 `DomainEdge.Scopes`、`.JSONKey`。
-
-一条相关的、更高一层的契约：本仓库把死代码当作**测试失败**。一个没人调用的模板函数、一个
-没人加载的模板、一个既未被消费也未声明待接线的 knob，都会弄红 CI。
-
-> **实现：** `annotations.go` — `FieldMetadata`、`DomainField.Metadata`、`ensureMetadata` 及
-> 十三个构造器；`annotation_surface_test.go` — `pendingKnobs`；
-> `funcs.go` — `templateFuncs`（注册表本身：一个 helper 只有出现在这里才能被模板调用）
+> **实现：** `api/annotations.go`；`annotation_surface_test.go` — `pendingKnobs`；
+> `funcs.go` — `templateFuncs`
 
 ## 陷阱
 
@@ -702,19 +691,18 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
    一个重复键会原样穿过 `MapError`，表现为 500。
 2. **`New{E}Response(nil)` 返回 `(nil, nil)`。** 不是错误。如果你把一次未命中的查询直接喂
    进它，拿到的是一对 nil，而不是 not-found。
-3. **`_contains` 需要 `AsSearchable()`。** 一个只标了 filterable 的字符串字段的四个子串参数
+3. **`_contains` 需要 `api.Searchable()`。** 一个只标了 filterable 的字符串字段的四个子串参数
    不会发射；form 与 JSON 绑定会丢弃未知 key 而不报错，所以 `?name_contains=x` 变成一个
    *未过滤*的查询，而不是一个 400。
-4. **没有任何预设授予查询标记。** 只写 `DefaultField()` 得到的是一个空过滤器结构体和一个空
-   排序白名单。
-5. **在 `Immutable()` 字段上用 `DefaultField()` 一定会让生成失败**——它授予了 `ScopeUpdate`。
-   改用 `CreateOnlyField()` 或 `OutputOnlyField()`。
+4. **查询维度不会推导。** 没有查询词时，过滤器与排序白名单都为空。
+5. **全 Immutable 的 PATCH 会被拒绝**，除非 resource 写 `Except(api.OpPatch)`；请求类型与
+   接线函数仍保留。
 6. **PATCH body 里出现的 `Immutable()` 字段会被 `encoding/json` 在任何验证器运行之前丢弃。**
    拒绝它需要你的 handler 用 `DisallowUnknownFields`；生成器看不见它。（合法 key 的大小写
    *变体*会被拒绝——真正未知的 key 不会。）
 7. **`entapi.IsNotFound` 不是 ent 的 `IsNotFound`。** 生成模板以*不限定*的形式调用后者，
    使其绑定到你包内 ent 生成的谓词。加上限定符照样编译，然后静默地什么都匹配不上。
-8. **每个 metadata 构造器都是 no-op。** `WithFormat("email")` 不验证任何东西。
+8. **required 字段被挡出 create 会阻止生成**，除非 except create、改 optional 或给 default。
 9. **`DeleteBatch` 对匹配不到的 id 返回计数而非错误。** 那个 `int` 是你了解「实际存在多少
     个」的唯一途径；空列表删除零行，这是 ent 对无参 `IDIn` 的读法，不是这里写的守卫。
 10. **`Page.Size` 是钳制后的 size**，而一个超界的请求永远不是错误——`ListRequest.Validate()`
@@ -773,8 +761,8 @@ T3 已经全部落地。三处偏离，都是有意的：
 | `{Entity}EntToResponse` | `New{Entity}Response`，它返回 error 而不是在错误时返回 nil |
 | `Apply{Entity}CreateRequest`、`Apply{Entity}UpdateRequest`（自由函数） | `Valid{Entity}…Request.Apply` |
 | `Cursor`、`PageInfo`、`EncodeCursor`、`DecodeCursor`、`ListRequest.Cursor` | 无——分页只有 offset |
-| `DomainField.Sensitive`、`AsSensitive` | 在 ent schema 里给字段标 `Sensitive()`——它会被从两层响应结构体中一律剔除，与 scope 无关；或者不给它 `ScopeResponse` |
-| `DomainField.UniqueLookup`、`.RangeLookup`、`.Validation` | `AsFilterable()`（运算符从 ent 的 `$field.Ops` 导出）；`Validate()` |
+| `DomainField.Sensitive`、`AsSensitive` | 在 Ent schema 给字段标 `Sensitive()`；它仍可写，但从两层响应中移除 |
+| `DomainField.UniqueLookup`、`.RangeLookup`、`.Validation` | `api.Filterable()`（运算符从 Ent 的 `$field.Ops` 导出）；生成请求的 `Validate()` |
 | `DomainConfig.EntityName` | 无——没有读者 |
 | 运行时符号住在根包 | 全部搬到 `github.com/githonllc/entapi/runtime` |
 

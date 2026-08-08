@@ -2,10 +2,12 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entapi"
 	"github.com/google/uuid"
+
+	"github.com/githonllc/entapi/api"
 )
 
 // Category is self-referential on purpose: it is the case where any fixed
@@ -18,26 +20,28 @@ type Category struct {
 func (Category) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+			Default(uuid.New),
 
 		field.String("name").
-			Annotations(entapi.DefaultField().AsSortable().AsFilterable()),
+			Annotations(api.Sortable(), api.Filterable()),
 
 		field.UUID("parent_id", uuid.UUID{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+			Optional(),
 	}
 }
 
 func (Category) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("children", Category.Type).
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 		edge.From("parent", Category.Type).
 			Ref("children").
 			Unique().
 			Field("parent_id").
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 	}
+}
+
+func (Category) Annotations() []schema.Annotation {
+	return []schema.Annotation{api.Resource()}
 }

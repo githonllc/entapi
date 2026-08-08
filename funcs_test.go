@@ -1,88 +1,21 @@
 package entapi
 
-import (
-	"testing"
-)
+import "testing"
 
-func TestTemplateFuncs(t *testing.T) {
+func TestTemplateFuncsExposeCoreSelectors(t *testing.T) {
 	funcs := templateFuncs()
-
-	// Test that all expected functions are present
-	expectedFuncs := []string{
-		"domainFields", "createFields", "patchFields", "responseFields",
+	expected := []string{
+		"createFields", "patchFields", "responseFields", "responseEdges",
+		"hasCreateFamily", "edgeJSONKey",
 		"isCreatePointer", "isCreateRequired", "isPatchClearable",
-		"responseEdges", "softDeleteTypes", "softDeleteField",
-		"camelCase",
+		"queryFields", "isFilterable", "isSearchable", "isSortable",
 	}
-
-	for _, funcName := range expectedFuncs {
-		if _, exists := funcs[funcName]; !exists {
-			t.Errorf("Expected template function %s not found", funcName)
+	for _, name := range expected {
+		if _, ok := funcs[name]; !ok {
+			t.Errorf("template func %q is not registered", name)
 		}
 	}
-}
-
-// TestGetDomainFieldAnnotationFromMap exercises the map branch of
-// getDomainFieldAnnotation, the shape a DomainField arrives in when the schema
-// was loaded from its serialized form rather than built in-process. It goes
-// through the production decoder deliberately: a test-local reimplementation
-// would pass while the real one drifted.
-func TestGetDomainFieldAnnotationFromMap(t *testing.T) {
-	// Test with map[string]interface{} annotation (runtime format)
-	mapAnnotation := map[string]interface{}{
-		"scopes":     []interface{}{"create", "update", "response"},
-		"required":   map[string]interface{}{"create": true},
-		"searchable": true,
-		"filterable": true,
-		"sortable":   true,
-		"metadata": map[string]interface{}{
-			"description": "Test field description",
-		},
-	}
-
-	fld := newStringField("test_field", nil)
-	fld.Annotations = map[string]interface{}{"DomainField": mapAnnotation}
-
-	annotation := getDomainFieldAnnotation(fld)
-
-	if annotation == nil {
-		t.Fatal("Expected annotation to be converted")
-	}
-
-	// Description moved onto the metadata block on #17, so this also pins that
-	// the JSON round-trip in getDomainFieldAnnotation still reaches a nested
-	// object and not only the top level.
-	if annotation.Metadata == nil {
-		t.Fatal("Expected the metadata block to be converted")
-	}
-	if annotation.Metadata.Description != "Test field description" {
-		t.Errorf("Expected description 'Test field description', got '%s'", annotation.Metadata.Description)
-	}
-
-	if !annotation.Searchable {
-		t.Error("Field should be searchable")
-	}
-
-	if !annotation.Filterable {
-		t.Error("Field should be filterable")
-	}
-
-	if !annotation.Sortable {
-		t.Error("Field should be sortable")
-	}
-
-	// Test scopes conversion
-	expectedScopes := []FieldScope{ScopeCreate, ScopeUpdate, ScopeResponse}
-	if len(annotation.Scopes) != len(expectedScopes) {
-		t.Errorf("Expected %d scopes, got %d", len(expectedScopes), len(annotation.Scopes))
-	}
-
-	// Test required map conversion
-	if annotation.Required == nil {
-		t.Error("Required map should be initialized")
-	}
-
-	if !annotation.Required[ScopeCreate] {
-		t.Error("Field should be required for create scope")
+	if _, old := funcs["domainFields"]; old {
+		t.Error("retired domainFields remains registered")
 	}
 }

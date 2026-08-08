@@ -18,6 +18,8 @@ type Tx struct {
 	Author *AuthorClient
 	// Note is the client for interacting with the Note builders.
 	Note *NoteClient
+	// Patchless is the client for interacting with the Patchless builders.
+	Patchless *PatchlessClient
 
 	// lazily loaded.
 	client     *Client
@@ -152,6 +154,7 @@ func (tx *Tx) init() {
 	tx.Article = NewArticleClient(tx.config)
 	tx.Author = NewAuthorClient(tx.config)
 	tx.Note = NewNoteClient(tx.config)
+	tx.Patchless = NewPatchlessClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

@@ -33,8 +33,10 @@ func dtoImports(node *gen.Type) []string {
 		}
 	}
 
-	for _, f := range createFields(node) {
-		add(f)
+	if hasCreateFamily(node) {
+		for _, f := range createFields(node) {
+			add(f)
+		}
 	}
 	for _, f := range patchFields(node) {
 		add(f)
@@ -51,7 +53,7 @@ func dtoImports(node *gen.Type) []string {
 
 	// The Response and Summary structs are emitted for EVERY entity the
 	// generator handles, so the ID's import is unconditional. An entity whose
-	// every annotated field is InputOnly has no response field at all and still
+	// every scalar field is Sensitive has no response field at all and still
 	// has a response carrying its ID — which is precisely the case that used to
 	// slip through, because the ID was only added alongside a non-empty
 	// responseFields.
@@ -118,7 +120,11 @@ func enumValidatorImport(node *gen.Type) string {
 	if node.Config == nil {
 		return ""
 	}
-	for _, f := range append(createFields(node), patchFields(node)...) {
+	fields := patchFields(node)
+	if hasCreateFamily(node) {
+		fields = append(createFields(node), fields...)
+	}
+	for _, f := range fields {
 		if f.IsEnum() {
 			return quoteImport("", node.Config.Package+"/"+node.Package())
 		}

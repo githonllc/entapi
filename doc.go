@@ -1,129 +1,84 @@
-// Package entapi provides an [entgo.io/ent] extension that generates
-// request/response DTOs, a query surface and operation wiring from annotated
-// Ent schemas.
+// Package entapi provides the code-generation half of EntAPI.
 //
-// This package is the code-generation half only. It is loaded by ent at
-// `go generate` time and produces request/response DTOs, filter structs with a
-// sort allow-list, and one free function per operation, for each Ent schema
-// annotated with EntAPI markers. It also carries the annotation types and
-// [SoftDeleteMixin], which consumer SCHEMAS embed — also generation-time code.
-//
-// The runtime half — the generic CRUD operations, ListRequest, the error
-// sentinels, the error mapper and the pointer helpers — lives in
-// [github.com/githonllc/entapi/runtime], which imports no ent package and
-// embeds no templates.
-//
-// # Migration: the runtime moved (#15)
-//
-// The two halves used to share this package, so importing it for
-// entapi.ErrValidation also embedded five templates into the consumer's
-// binary and ran the template loader during package initialisation. The runtime
-// symbols are GONE from this package; there are no deprecation aliases.
-//
-//	was: import "github.com/githonllc/entapi"
-//	now: import "github.com/githonllc/entapi/runtime"
-//
-// The runtime package is still named entapi, so every `entapi.X` call
-// site is unchanged — only the import path moves. Schema files, which use the
-// annotation builders and [SoftDeleteMixin], keep importing this package and
-// need no edit. A file that needs both imports both, aliasing one.
-//
-// Regenerating picks the new path up automatically:
-// [WithEntAPIPackage]'s default is now the runtime path.
+// Consumer entc programs import this package for [Extension]. Ent schema files
+// import [github.com/githonllc/entapi/api] for schema-time annotations. Generated
+// production code imports [github.com/githonllc/entapi/runtime], which depends
+// only on the standard library and embeds no templates.
 //
 // # Quick Start
 //
-// Annotate fields in your Ent schema:
+// Opt an entity into generation with api.Resource. Field shape is otherwise
+// derived from Ent's Optional, Default, Nillable, Immutable and Sensitive
+// declarations; annotations only express deviations.
 //
-//	field.String("name").
-//	    Annotations(entapi.DefaultField().
-//	        WithRequired(entapi.ScopeCreate))
-//
-// Annotate edges with [Edge]. An edge's exposure is its own decision, not one
-// derived from its foreign-key field: "put author_id in the response" and "put
-// a nested author object in the response" are different intents, and a to-many
-// edge has no field on this entity to derive anything from.
-//
-//	edge.To("posts", Post.Type).
-//	    Annotations(entapi.Edge().InResponse())
-//
-// A field stays out of responses two ways: by not carrying [ScopeResponse], or
-// by being marked Sensitive() in the ent schema. The second is unconditional —
-// ent's fact overrides a response scope the annotation granted, for both
-// {Entity}Response and {Entity}Summary — so passwords and secrets need no scope
-// bookkeeping. [InputOnlyField] and custom scope lists remain the mechanism for
-// withholding a field ent says nothing about. DomainField.Sensitive and
-// AsSensitive have been removed; they were never read by anything, so a field
-// marked sensitive was emitted into the response struct regardless, and that is
-// the leak the ent fact closes. See the README for the migration note.
-//
-// Wire the extension in your entc.go:
-//
-//	func main() {
-//	    ext := entapi.NewExtensionWithOptions(
-//	        entapi.WithEntAPIPackage("github.com/githonllc/entapi/runtime"),
-//	    )
-//	    if err := entc.Generate("./schema", &gen.Config{}, entc.Extensions(ext)); err != nil {
-//	        log.Fatal(err)
-//	    }
+//	func (Article) Annotations() []schema.Annotation {
+//		return []schema.Annotation{api.Resource()}
 //	}
 //
-// Run go generate to produce {entity}_dto.go, {entity}_filter.go and
-// {entity}_wiring.go for each annotated schema.
+//	func (Article) Fields() []ent.Field {
+//		return []ent.Field{
+//			field.String("title").
+//				Annotations(api.Searchable(), api.Filterable(), api.Sortable()),
+//			field.String("password_hash").Sensitive(),
+//			field.Time("created_at").Default(time.Now).Immutable().
+//				Annotations(api.ReadOnly()),
+//		}
+//	}
 //
-// The generated base service and base handler have been removed, along with
-// WithBaseService and WithBaseHandler — see the README for the migration note.
-// Every artifact is now emitted unconditionally for an annotated entity, so
-// there is nothing left to switch on.
+// api.Hidden and api.ReadOnly remove fields from request surfaces. Ent's
+// Sensitive removes a field from responses while leaving it settable. Query
+// dimensions are opt-in through api.Searchable, api.Filterable and api.Sortable.
+// An edge carrying api.Expand appears one level deep as the target's Summary;
+// JSONKey changes its response key.
 //
-// # Supported identifier types
+//	edge.To("posts", Post.Type).
+//		Annotations(api.Expand().JSONKey("articles"))
 //
-// All of them. The identifier is rendered from the schema's own type in every
-// template and arrives at the runtime as a type parameter, so an int, a string
-// and a uuid.UUID primary key are equally supported. The uuid.UUID restriction
-// that used to be enforced at generation time belonged to the base service and
-// base handler templates and went with them.
+// api.Resource().Except(api.OpCreate, api.OpDelete) removes those public
+// operation surfaces. Request DTOs and wiring functions remain available to
+// service code, except that an unusable create family is omitted when create
+// is explicitly excepted.
 //
-// # What the annotations actually do
+// Wire the extension into entc and regenerate:
 //
-// Eleven of the twenty-six exported settings reach a template:
-// [DomainField.Scopes], [DomainField.Required], [DomainEdge.Scopes],
-// [DomainEdge.JSONKey], [DomainField.Filterable], [DomainField.Searchable],
-// [DomainField.Sortable], and the [ScopeCreate], [ScopeUpdate], [ScopeQuery]
-// and [ScopeResponse] constants. The other fifteen are the whole
-// [FieldMetadata] block, which is accepted and stored but changes nothing that
-// is generated yet.
+//	func main() {
+//		ext := entapi.NewExtensionWithOptions()
+//		if err := entc.Generate("./schema", &gen.Config{}, entc.Extensions(ext)); err != nil {
+//			log.Fatal(err)
+//		}
+//	}
 //
-// # Migration
+// # Migration from the scope model
 //
-// Generated Update{Entity} has been renamed to Patch{Entity}. Regenerate and
-// rename call sites; the request type and behavior are unchanged.
+// The old field model was removed without compatibility aliases. Migrate by
+// effect, not by constructor name:
 //
-// Generated RegisterSoftDelete has been removed. Regenerate and delete every
-// ent.RegisterSoftDelete(client) call: embedding [SoftDeleteMixin] now injects
-// the hook and interceptor into every generated client automatically. This
-// also makes the soft-delete hook outermost, ahead of hooks added later with
-// Client.Use. See the README migration notes.
+//	DefaultField()                         -> no field annotation
+//	InputOnlyField()                       -> Ent Sensitive()
+//	OutputOnlyField()                      -> api.ReadOnly()
+//	CreateOnlyField()                      -> Ent Immutable()
+//	IdField()                              -> no annotation; Ent's ID is automatic
+//	AuditLogField()                        -> api.ReadOnly()
+//	NewDomainField()                       -> api.Hidden()
+//	DomainFieldWithScopes(...)             -> spell the intended effect with Ent plus the five words
+//	ScopeCreate / ScopeUpdate              -> derived from Optional, Default, Nillable and Immutable
+//	ScopeResponse                          -> derived; use Hidden or Sensitive to remove it
+//	ScopeQuery                             -> api.Searchable(), api.Filterable() and/or api.Sortable()
+//	WithRequired(ScopeCreate)              -> no successor; requiredness is !Optional && !Default
+//	AsSearchable/AsFilterable/AsSortable   -> api.Searchable/api.Filterable/api.Sortable
+//	AsReadOnly                             -> api.ReadOnly()
+//	AsWriteOnly                            -> Ent Sensitive()
+//	WithMetadata and metadata builders     -> no successor
+//	Edge().InResponse().As("key")          -> api.Expand().JSONKey("key")
 //
-// DomainField.Validation and WithValidation are gone, with no replacement:
-// Validate() on the generated request types supersedes them. WithDescription
-// and WithExample still exist and still chain, but store onto [FieldMetadata]
-// rather than [DomainField] — read them as d.Metadata.Description and
-// d.Metadata.Example. The entity-level DomainConfig annotation is gone
-// entirely. See the README's migration sections for the before/after of each.
+// InputOnlyField previously expressed an HTTP-only promise. Sensitive is an
+// Ent field-builder fact: it also binds service-layer and logging behaviour.
+// That broader meaning is deliberate; an annotation cannot honestly alias it.
+// WithRequired has no successor because HTTP requiredness no longer overrides
+// the database schema.
 //
-// The three query markers are opt-in per field: no preset builder grants them,
-// because they now produce real query parameters and a real sort allow-list,
-// and a permissive default would make essentially every response-visible field
-// orderable. [ScopeQuery] is the gate the markers sit behind — it says the
-// field may be reached from the query API, and the marker says in which
-// dimension.
-//
-// The README's "Annotation surface" section lists each with the issue that will
-// consume it. That list is derived by a test, not maintained by hand, so it
-// cannot drift from the code in either direction.
-//
-// See the README for the full annotation reference and generated code examples,
-// and [github.com/githonllc/entapi/runtime] for what the generated code
-// calls at run time.
+// Generated Update{Entity} was renamed to Patch{Entity}. The generated base
+// service, base handler and RegisterSoftDelete entry point were removed in
+// earlier migrations. See README.md for the complete generated surface and
+// refusal matrix.
 package entapi

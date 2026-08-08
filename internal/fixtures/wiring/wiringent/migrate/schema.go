@@ -52,11 +52,24 @@ var (
 		Columns:    NotesColumns,
 		PrimaryKey: []*schema.Column{NotesColumns[0]},
 	}
+	// PatchlessesColumns holds the columns for the "patchlesses" table.
+	PatchlessesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "label", Type: field.TypeString, Default: "fixed"},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// PatchlessesTable holds the schema information for the "patchlesses" table.
+	PatchlessesTable = &schema.Table{
+		Name:       "patchlesses",
+		Columns:    PatchlessesColumns,
+		PrimaryKey: []*schema.Column{PatchlessesColumns[0]},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		ArticlesTable,
 		AuthorsTable,
 		NotesTable,
+		PatchlessesTable,
 	}
 )
 

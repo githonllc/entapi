@@ -16,21 +16,12 @@ import (
 // exposed to templates as $field.Ops. Restating it here would be a second table
 // that can only drift out of agreement with the where.go ent actually writes.
 
-// queryFields returns the fields exposed to the query API: those whose
-// annotation carries ScopeQuery.
-//
-// It is the outer loop of every query artifact, and the three markers below are
-// the inner test. Scope answers "may this field be reached from a query at
-// all", the marker answers "in which dimension" — the same split the create,
-// update and response scopes already use, so that withholding ScopeQuery is a
-// single, visible way to keep a column out of the query surface entirely.
+// queryFields returns fields carrying at least one query-dimension word.
 func queryFields(node *gen.Type) []*gen.Field {
 	var fields []*gen.Field
 	for _, f := range node.Fields {
-		if getDomainFieldAnnotation(f) == nil {
-			continue
-		}
-		if hasDomainScope(f, ScopeQuery) {
+		a := getFieldAnnotation(f)
+		if a != nil && (a.Filterable || a.Searchable || a.Sortable) {
 			fields = append(fields, f)
 		}
 	}
@@ -40,13 +31,13 @@ func queryFields(node *gen.Type) []*gen.Field {
 // isFilterable reports whether a field asks for structured, per-field,
 // per-operator filter parameters.
 func isFilterable(f *gen.Field) bool {
-	a := getDomainFieldAnnotation(f)
+	a := getFieldAnnotation(f)
 	return a != nil && a.Filterable
 }
 
 // isSearchable reports whether a field takes part in the free-text disjunction.
 func isSearchable(f *gen.Field) bool {
-	a := getDomainFieldAnnotation(f)
+	a := getFieldAnnotation(f)
 	return a != nil && a.Searchable
 }
 
@@ -58,7 +49,7 @@ func isSearchable(f *gen.Field) bool {
 // read. A field that does not answer true here is not orderable, and no caller
 // string can make it one.
 func isSortable(f *gen.Field) bool {
-	a := getDomainFieldAnnotation(f)
+	a := getFieldAnnotation(f)
 	return a != nil && a.Sortable
 }
 

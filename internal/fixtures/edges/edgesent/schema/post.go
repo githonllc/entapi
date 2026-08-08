@@ -2,11 +2,12 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Post carries both foreign keys, so it is where "expose the scalar" and
@@ -18,22 +19,16 @@ type Post struct {
 // Fields of the Post.
 func (Post) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("title").
-			Annotations(entapi.DefaultField()),
+		field.String("title"),
 
 		// Response-scoped scalar whose edge IS annotated.
-		field.UUID("author_id", uuid.UUID{}).
-			Annotations(entapi.DefaultField()),
+		field.UUID("author_id", uuid.UUID{}),
 
 		// Response-scoped scalar whose edge is NOT annotated. PostResponse must
 		// carry ReviewerID and must not carry Reviewer.
-		field.UUID("reviewer_id", uuid.UUID{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+		field.UUID("reviewer_id", uuid.UUID{}).Optional(),
 	}
 }
 
@@ -48,7 +43,7 @@ func (Post) Edges() []ent.Edge {
 			Unique().
 			Required().
 			Field("author_id").
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 
 		// Unannotated on purpose — see reviewer_id above.
 		edge.From("reviewer", User.Type).
@@ -57,3 +52,5 @@ func (Post) Edges() []ent.Edge {
 			Field("reviewer_id"),
 	}
 }
+
+func (Post) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

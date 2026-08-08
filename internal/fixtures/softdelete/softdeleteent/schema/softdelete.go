@@ -23,11 +23,13 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/privacy"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
 	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Doc is the conforming soft-deletable entity.
@@ -54,12 +56,9 @@ func (Doc) Policy() ent.Policy {
 // Fields of the Doc.
 func (Doc) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("title").
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.String("title"),
 	}
 }
 
@@ -69,9 +68,11 @@ func (Doc) Edges() []ent.Edge {
 		edge.From("note", Note.Type).
 			Ref("docs").
 			Unique().
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 	}
 }
+
+func (Doc) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }
 
 // Note is the hard-delete entity. Nothing about it may change because Doc is
 // soft-deletable, and its "docs" edge is the eager-load path: a sub-query built
@@ -84,12 +85,9 @@ type Note struct {
 // Fields of the Note.
 func (Note) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("body").
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.String("body"),
 	}
 }
 
@@ -97,9 +95,11 @@ func (Note) Fields() []ent.Field {
 func (Note) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("docs", Doc.Type).
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 	}
 }
+
+func (Note) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }
 
 // Ledger carries a hand-written deleted_at that is NOT Nillable and no mixin.
 // It must be treated as an ordinary hard-delete entity.
@@ -110,18 +110,18 @@ type Ledger struct {
 // Fields of the Ledger.
 func (Ledger) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("entry").
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.String("entry"),
 
 		// Named exactly like the retired convention's trigger, Optional so ent
 		// still generates a DeletedAtIsNil predicate for it — everything the
 		// old rule needed except Nillable. It is tracked by ent and appears in
 		// no HTTP struct, so it carries no entapi annotation.
 		field.Time("deleted_at").
-			Optional(),
+			Optional().
+			Annotations(api.Hidden()),
 	}
 }
+
+func (Ledger) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

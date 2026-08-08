@@ -18,8 +18,9 @@ import (
 // ============================================================================================
 // Layered Architecture Overview:
 //
-// 1. CreateRequest/PatchRequest - HTTP-layer request models, restricted by scope.
-//    - Only includes fields for the corresponding scope (ScopeCreate/ScopeUpdate).
+// 1. CreateRequest/PatchRequest - HTTP-layer request models derived from Ent.
+//    - Hidden and ReadOnly are the only annotation-side request exclusions.
+//    - Optional, Default, Nillable and Immutable determine the remaining shape.
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
 //    - Presence is recorded per request, so an omitted key, an explicit null and
@@ -27,9 +28,9 @@ import (
 //    - Apply is defined on the VALIDATED request only, so a builder cannot be
 //      written without validating first.
 //
-// 2. Response/Summary - HTTP-layer response models, restricted by scope.
-//    - Only includes fields in ScopeResponse.
-//    - Includes a nested edge when the EDGE carries an InResponse annotation.
+// 2. Response/Summary - HTTP-layer response models derived from Ent.
+//    - Hidden and Ent Sensitive fields are excluded; ReadOnly fields remain.
+//    - Includes a nested edge when the edge carries api.Expand().
 //      Exposing the foreign-key scalar and exposing the nested object are
 //      independent decisions; neither is derived from the other.
 //    - A nested edge is rendered as the target's Summary, which carries no
@@ -38,7 +39,7 @@ import (
 //
 // Key Design Principles:
 // - transport → record_wiring.go → entapi runtime → ent.Client
-// - HTTP scope only affects struct generation; it restricts nothing at the ent layer.
+// - Deviation words affect HTTP generation only; they restrict nothing at the Ent layer.
 // - The consumer's own code operates directly on ent entities with full ORM capabilities.
 // ============================================================================================
 
@@ -409,8 +410,8 @@ func NewRecordSummary(e *Record) *RecordSummary {
 
 // RecordResponse represents the response for Record.
 //
-// It is emitted unconditionally: an entity whose every annotated field is
-// InputOnly still has a meaningful response carrying its ID, and
+// It is emitted unconditionally: an entity whose every scalar field is
+// Sensitive still has a meaningful response carrying its ID, and
 // RecordListResponse below refers to this type either way.
 type RecordResponse struct {
 	// ID field is always included in responses

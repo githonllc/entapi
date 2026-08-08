@@ -45,6 +45,18 @@ func (f NoteFunc) Mutate(ctx context.Context, m wiringent.Mutation) (wiringent.V
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *wiringent.NoteMutation", m)
 }
 
+// The PatchlessFunc type is an adapter to allow the use of ordinary
+// function as Patchless mutator.
+type PatchlessFunc func(context.Context, *wiringent.PatchlessMutation) (wiringent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PatchlessFunc) Mutate(ctx context.Context, m wiringent.Mutation) (wiringent.Value, error) {
+	if mv, ok := m.(*wiringent.PatchlessMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *wiringent.PatchlessMutation", m)
+}
+
 // Condition is a hook condition function.
 type Condition func(context.Context, wiringent.Mutation) bool
 

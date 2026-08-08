@@ -23,7 +23,7 @@ type Extension struct {
 //
 // GenerateBaseService and GenerateBaseHandler used to live here. Both are gone
 // with the templates they selected (#29); every generated artifact is now
-// emitted unconditionally for an annotated entity, so there is nothing left to
+// emitted unconditionally for an api.Resource, so there is nothing left to
 // switch on. See the migration note in README.md.
 type ExtensionConfig struct {
 	// EntAPIPackage is the import path generated code imports for the Layer 2
@@ -133,9 +133,8 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 
 		// PHASE 1 — render and format everything, write nothing.
 		//
-		// Separate files are produced for each Type that has entapi
-		// annotations. Entities without annotations are skipped to avoid empty
-		// generated files.
+		// Separate files are produced for each api.Resource. Other entities are
+		// skipped completely.
 		//
 		// written records this run's output set, which is what tells a file
 		// left over from an earlier run apart from one just produced.
@@ -143,7 +142,7 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 		written := make(map[string]bool)
 		wiredAny := false
 		for _, node := range g.Nodes {
-			if len(domainFields(node)) == 0 {
+			if !isResource(node) {
 				continue
 			}
 			wiredAny = true

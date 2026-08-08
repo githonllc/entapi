@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	entapi "github.com/githonllc/entapi/runtime"
 	"github.com/google/uuid"
@@ -16,8 +17,9 @@ import (
 // ============================================================================================
 // Layered Architecture Overview:
 //
-// 1. CreateRequest/PatchRequest - HTTP-layer request models, restricted by scope.
-//    - Only includes fields for the corresponding scope (ScopeCreate/ScopeUpdate).
+// 1. CreateRequest/PatchRequest - HTTP-layer request models derived from Ent.
+//    - Hidden and ReadOnly are the only annotation-side request exclusions.
+//    - Optional, Default, Nillable and Immutable determine the remaining shape.
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
 //    - Presence is recorded per request, so an omitted key, an explicit null and
@@ -25,9 +27,9 @@ import (
 //    - Apply is defined on the VALIDATED request only, so a builder cannot be
 //      written without validating first.
 //
-// 2. Response/Summary - HTTP-layer response models, restricted by scope.
-//    - Only includes fields in ScopeResponse.
-//    - Includes a nested edge when the EDGE carries an InResponse annotation.
+// 2. Response/Summary - HTTP-layer response models derived from Ent.
+//    - Hidden and Ent Sensitive fields are excluded; ReadOnly fields remain.
+//    - Includes a nested edge when the edge carries api.Expand().
 //      Exposing the foreign-key scalar and exposing the nested object are
 //      independent decisions; neither is derived from the other.
 //    - A nested edge is rendered as the target's Summary, which carries no
@@ -36,7 +38,7 @@ import (
 //
 // Key Design Principles:
 // - transport → account_wiring.go → entapi runtime → ent.Client
-// - HTTP scope only affects struct generation; it restricts nothing at the ent layer.
+// - Deviation words affect HTTP generation only; they restrict nothing at the Ent layer.
 // - The consumer's own code operates directly on ent entities with full ORM capabilities.
 // ============================================================================================
 
@@ -48,8 +50,9 @@ import (
 // value, so an omitted key leaves the schema's default in effect. A field ent
 // requires and cannot default is a value type and is always written.
 type AccountCreateRequest struct {
-	PasswordHash string `json:"password_hash"`
-	Name         string `json:"name"`
+	PasswordHash string      `json:"password_hash"`
+	Name         string      `json:"name"`
+	LoginWindow  []time.Time `json:"login_window"`
 
 	// present records which keys the payload actually carried. It is what makes
 	// "omitted" distinguishable from "sent as the zero value" for a field whose
@@ -64,7 +67,7 @@ type AccountCreateRequest struct {
 // accountCreateRequestTags is the canonical JSON key of every field on
 // AccountCreateRequest, in declaration order. UnmarshalJSON needs the tags as
 // data, not as struct tags, to tell a case variant from an unrelated key.
-var accountCreateRequestTags = []string{"password_hash", "name"}
+var accountCreateRequestTags = []string{"password_hash", "name", "login_window"}
 
 // UnmarshalJSON records presence, then decodes normally.
 //
@@ -130,6 +133,9 @@ func (r *AccountCreateRequest) HasPasswordHash() bool { return r.has("password_h
 // HasName reports whether the payload carried "name".
 func (r *AccountCreateRequest) HasName() bool { return r.has("name") }
 
+// HasLoginWindow reports whether the payload carried "login_window".
+func (r *AccountCreateRequest) HasLoginWindow() bool { return r.has("login_window") }
+
 // ValidAccountCreateRequest wraps a AccountCreateRequest that has
 // passed Validate. Apply is defined on this type and nowhere else, so a caller
 // who skips validation has no method to call — a compile error rather than a
@@ -147,6 +153,9 @@ func (r *AccountCreateRequest) Validate() (*ValidAccountCreateRequest, error) {
 	if r.Name == "" {
 		return nil, fmt.Errorf("%w: name is required", entapi.ErrValidation)
 	}
+	if !r.HasLoginWindow() {
+		return nil, fmt.Errorf("%w: login_window is required", entapi.ErrValidation)
+	}
 	return &ValidAccountCreateRequest{r: r}, nil
 }
 
@@ -159,6 +168,7 @@ func (v *ValidAccountCreateRequest) Apply(b *AccountCreate) *AccountCreate {
 	r := v.r
 	b.SetPasswordHash(r.PasswordHash)
 	b.SetName(r.Name)
+	b.SetLoginWindow(r.LoginWindow)
 	return b
 }
 
@@ -176,15 +186,16 @@ func (v *ValidAccountCreateRequest) Apply(b *AccountCreate) *AccountCreate {
 // who sends it gets silence — rejecting that needs DisallowUnknownFields, which
 // belongs to the consumer's handler.
 type AccountPatchRequest struct {
-	PasswordHash *string `json:"password_hash,omitempty"`
-	Name         *string `json:"name,omitempty"`
+	PasswordHash *string      `json:"password_hash,omitempty"`
+	Name         *string      `json:"name,omitempty"`
+	LoginWindow  *[]time.Time `json:"login_window,omitempty"`
 
 	present map[string]bool
 }
 
 // accountPatchRequestTags is the canonical JSON key of every field on
 // AccountPatchRequest, in declaration order.
-var accountPatchRequestTags = []string{"password_hash", "name"}
+var accountPatchRequestTags = []string{"password_hash", "name", "login_window"}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from
@@ -231,6 +242,9 @@ func (r *AccountPatchRequest) HasPasswordHash() bool { return r.has("password_ha
 // HasName reports whether the payload carried "name".
 func (r *AccountPatchRequest) HasName() bool { return r.has("name") }
 
+// HasLoginWindow reports whether the payload carried "login_window".
+func (r *AccountPatchRequest) HasLoginWindow() bool { return r.has("login_window") }
+
 // ValidAccountPatchRequest wraps a AccountPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidAccountPatchRequest struct{ r *AccountPatchRequest }
@@ -251,6 +265,9 @@ func (r *AccountPatchRequest) Validate() (*ValidAccountPatchRequest, error) {
 	if r.HasName() && r.Name == nil {
 		return nil, fmt.Errorf("%w: name cannot be null", entapi.ErrValidation)
 	}
+	if r.HasLoginWindow() && r.LoginWindow == nil {
+		return nil, fmt.Errorf("%w: login_window cannot be null", entapi.ErrValidation)
+	}
 	return &ValidAccountPatchRequest{r: r}, nil
 }
 
@@ -263,6 +280,9 @@ func (v *ValidAccountPatchRequest) Apply(b *AccountUpdateOne) *AccountUpdateOne 
 	}
 	if r.HasName() {
 		b.SetName(*r.Name)
+	}
+	if r.HasLoginWindow() {
+		b.SetLoginWindow(*r.LoginWindow)
 	}
 	return b
 }
@@ -296,8 +316,8 @@ func NewAccountSummary(e *Account) *AccountSummary {
 
 // AccountResponse represents the response for Account.
 //
-// It is emitted unconditionally: an entity whose every annotated field is
-// InputOnly still has a meaningful response carrying its ID, and
+// It is emitted unconditionally: an entity whose every scalar field is
+// Sensitive still has a meaningful response carrying its ID, and
 // AccountListResponse below refers to this type either way.
 type AccountResponse struct {
 	// ID field is always included in responses

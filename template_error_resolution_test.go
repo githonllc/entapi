@@ -156,7 +156,7 @@ func TestWiringMapsEveryExportedOperation(t *testing.T) {
 
 			checked := 0
 			for _, node := range loadFixtureNodes(t, schemaDir, pkgPath) {
-				if len(domainFields(node)) == 0 {
+				if !isResource(node) {
 					continue
 				}
 				rendered := renderTemplate(t, ext, "wiring", wiringTemplate, node)

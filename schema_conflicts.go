@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"entgo.io/ent/entc/gen"
+
+	"github.com/githonllc/entapi/api"
 )
 
 // checkGraphConflicts rejects a graph this package cannot generate correct code
@@ -25,8 +27,8 @@ import (
 // classes share one list for that reason: they are one answer to "why did
 // generation stop", and each line names its own subject.
 //
-// Every check here is unconditional, because every artifact is now generated
-// unconditionally. This function used to take the extension config as well, to
+// HTTP checks run only for api.Resources; soft-delete and graph-symbol checks
+// have their own graph-level gates. This function used to take the extension config, to
 // decide whether the identifier-type refusal applied: base_service.tmpl and
 // base_handler.tmpl wrote "uuid.UUID" into every signature, so an int-keyed
 // entity had no correct output. Those templates are gone (#29) and the
@@ -35,14 +37,14 @@ import (
 func checkGraphConflicts(g *gen.Graph) error {
 	var conflicts []string
 	for _, node := range g.Nodes {
-		// Checked before the domain-field gate below: soft delete is declared
+		// Checked before the Resource gate below: soft delete is declared
 		// on the ent schema, not on the HTTP surface, so an entity with no
 		// annotated field at all can still carry the mixin and still be
 		// generated for.
 		if msg := unusableSoftDeleteField(node); msg != "" {
 			conflicts = append(conflicts, msg)
 		}
-		if len(domainFields(node)) == 0 {
+		if !isResource(node) {
 			// Generation skips this node entirely, so nothing it declares can
 			// produce output to be wrong about.
 			continue
@@ -109,28 +111,126 @@ func unusableSoftDeleteField(node *gen.Type) string {
 // "intid" fixture now asserts by generating and building, where it previously
 // asserted the refusal message.
 
-// nodeConflicts returns one human-readable message per contradiction found on
-// one entity — its fields first, then its edges. Each message names the entity,
-// the field or edge, and both conflicting facts, because the schema author has
-// to know which of the two to change.
+// nodeConflicts returns every refusal-matrix row for one Resource.
 func nodeConflicts(node *gen.Type) []string {
 	var out []string
+	if node.ID != nil && getFieldAnnotation(node.ID) != nil {
+		out = append(out, fmt.Sprintf(
+			"%s.%s: the primary key carries api.%s(), but ID has a fixed HTTP shape and typ.ID is not part of typ.Fields; remove every field deviation word from the id",
+			node.Name, node.ID.Name, markerList(getFieldAnnotation(node.ID))))
+	}
+	if node.ID != nil && hasRawAnnotation(node.ID.Annotations, edgeAnnotationName) {
+		out = append(out, misplacedExpandConflict(node, node.ID))
+	}
+
 	for _, f := range node.Fields {
-		if getDomainFieldAnnotation(f) == nil {
+		a := getFieldAnnotation(f)
+		if a != nil {
+			out = append(out, fieldWordConflicts(node, f, a)...)
+			out = append(out, queryConflicts(node, f, a)...)
+		}
+		if hasRawAnnotation(f.Annotations, edgeAnnotationName) {
+			out = append(out, misplacedExpandConflict(node, f))
+		}
+	}
+
+	for _, f := range blockedCreateFields(node) {
+		if resourceExcepts(node, api.OpCreate) {
 			continue
 		}
-		if f.Immutable && hasDomainScope(f, ScopeUpdate) {
-			out = append(out, immutableUpdateConflict(node, f))
+		a := getFieldAnnotation(f)
+		word := "ReadOnly"
+		if a.Hidden {
+			word = "Hidden"
 		}
-		out = append(out, queryConflicts(node, f)...)
+		out = append(out, fmt.Sprintf(
+			"%s.%s: field is required by Ent and has no Default, but api.%s() keeps it out of the create request, so every create would fail. Repair it by adding api.Resource().Except(api.OpCreate), by making the field Optional or giving it a Default, or by removing api.%s()",
+			node.Name, f.Name, word, word))
 	}
+
+	if len(patchFields(node)) == 0 && !resourceExcepts(node, api.OpPatch) {
+		out = append(out, fmt.Sprintf(
+			"%s: the derived PATCH field set is empty, so the PATCH endpoint would be useless; add api.Resource().Except(api.OpPatch), or leave at least one mutable field outside api.Hidden()/api.ReadOnly()",
+			node.Name))
+	}
+
+	for _, edge := range node.Edges {
+		if hasRawAnnotation(edge.Annotations, fieldAnnotationName) {
+			out = append(out, fmt.Sprintf(
+				"%s.%s: an api field deviation word is attached to an edge, where it has no reader; use api.Expand() for an edge or move the field word to a field",
+				node.Name, edge.Name))
+		}
+		if a := getEdgeAnnotation(edge); a != nil && a.Expand && (edge.Type == nil || !isResource(edge.Type)) {
+			target := "<unknown>"
+			if edge.Type != nil {
+				target = edge.Type.Name
+			}
+			out = append(out, fmt.Sprintf(
+				"%s.%s: api.Expand() targets %s, but %s is not an api.Resource and therefore has no generated Summary; add api.Resource() to the target or remove api.Expand()",
+				node.Name, edge.Name, target, target))
+		}
+	}
+
 	out = append(out, asymmetricSelfEdgeConflicts(node)...)
 	return out
 }
 
-// asymmetricSelfEdgeConflicts reports every self-referential edge pair on this
-// entity whose two ends disagree about whether they carry a DomainEdge
-// annotation at all.
+func hasRawAnnotation(annotations gen.Annotations, name string) bool {
+	if annotations == nil {
+		return false
+	}
+	_, ok := annotations[name]
+	return ok
+}
+
+func misplacedExpandConflict(node *gen.Type, f *gen.Field) string {
+	return fmt.Sprintf(
+		"%s.%s: api.Expand() is attached to a field, where it has no reader; use one of the five api field words on fields or move api.Expand() to an edge",
+		node.Name, f.Name)
+}
+
+func fieldWordConflicts(node *gen.Type, f *gen.Field, a *api.FieldAnnotation) []string {
+	var out []string
+	if a.Hidden {
+		others := markerList(&api.FieldAnnotation{
+			ReadOnly: a.ReadOnly, Searchable: a.Searchable,
+			Filterable: a.Filterable, Sortable: a.Sortable,
+		})
+		if others != "" {
+			out = append(out, fmt.Sprintf(
+				"%s.%s: api.Hidden() conflicts with api.%s(); Hidden removes the field from every HTTP surface, so remove Hidden or every other deviation word",
+				node.Name, f.Name, others))
+		}
+	}
+	if f.Sensitive() {
+		if dimensions := dimensionList(a); dimensions != "" {
+			out = append(out, fmt.Sprintf(
+				"%s.%s: Ent marks the field Sensitive(), but api.%s() would expose a query oracle over the secret; remove the query word or Sensitive()",
+				node.Name, f.Name, dimensions))
+		}
+		if a.ReadOnly {
+			out = append(out, fmt.Sprintf(
+				"%s.%s: Ent marks the field Sensitive() while api.ReadOnly() asks to return it; use api.Hidden() for a service-managed secret",
+				node.Name, f.Name))
+		}
+	}
+	if dimensions := dimensionList(a); dimensions != "" {
+		if resourceExcepts(node, api.OpList) {
+			out = append(out, fmt.Sprintf(
+				"%s.%s: api.%s() has no reachable query surface because the resource Excepts api.OpList; remove the query word or keep OpList",
+				node.Name, f.Name, dimensions))
+		}
+		if strings.HasPrefix(f.StorageKey(), "_") {
+			out = append(out, fmt.Sprintf(
+				"%s.%s: query word api.%s() exposes storage key %q, but '_' is reserved for framework query parameters; change the field StorageKey or remove the query word",
+				node.Name, f.Name, dimensions, f.StorageKey()))
+		}
+	}
+	return out
+}
+
+// asymmetricSelfEdgeConflicts reports every self-referential edge pair whose
+// two ends disagree about whether they carry EntAPIEdge at all.
 //
 // The pair is found from the inverse end: gen resolves Edge.Ref to the assoc
 // edge it names, and a self-referential pair is one whose target is the entity
@@ -155,8 +255,8 @@ func asymmetricSelfEdgeConflicts(node *gen.Type) []string {
 			continue
 		}
 		assoc := inverse.Ref
-		assocAnnotated := getDomainEdgeAnnotation(assoc) != nil
-		inverseAnnotated := getDomainEdgeAnnotation(inverse) != nil
+		assocAnnotated := getEdgeAnnotation(assoc) != nil
+		inverseAnnotated := getEdgeAnnotation(inverse) != nil
 		if assocAnnotated == inverseAnnotated {
 			continue
 		}
@@ -184,10 +284,9 @@ func asymmetricSelfEdgeConflicts(node *gen.Type) []string {
 // is on the asymmetry rather than on the syntax, and the message names the
 // chained form as the likely cause instead of asserting it.
 //
-// One end exposed on purpose stays expressible: annotate the other end with a
-// bare entapi.Edge(). It grants no scope, so nothing about the output
-// changes; what changes is that the decision is written down where the next
-// reader, and this check, can see it.
+// A deliberate one-way self edge is not expressible in the one-word edge
+// vocabulary because it is indistinguishable here from the chained-builder
+// accident. Issue #79 tracks owner review; generation keeps refusing it.
 func asymmetricSelfEdgeConflict(node *gen.Type, assoc, inverse *gen.Edge, assocAnnotated bool) string {
 	annotated, bare := inverse, assoc
 	cause := fmt.Sprintf(
@@ -199,56 +298,34 @@ func asymmetricSelfEdgeConflict(node *gen.Type, assoc, inverse *gen.Edge, assocA
 		cause = fmt.Sprintf("the %q end was most likely annotated and the %q end forgotten", assoc.Name, inverse.Name)
 	}
 
-	carries := "carries a DomainEdge annotation"
-	if hasEdgeScope(annotated, ScopeResponse) {
-		carries = "is annotated for the response"
-	}
-
 	return fmt.Sprintf(
-		"%s.%s / %s.%s: the two ends of this self-referential edge pair disagree — %s.%s %s while %s.%s carries no DomainEdge annotation at all, "+
+		"%s.%s / %s.%s: the two ends of this self-referential edge pair disagree — %s.%s carries api.Expand() while %s.%s carries no EntAPIEdge annotation at all, "+
 			"so %q appears in no response type and in no eager-load plan, and nothing else in generation says so; %s. "+
-			"Declare the two ends separately and give each its own annotation — edge.To(%q, %s.Type).Annotations(entapi.Edge().InResponse()) "+
-			"and edge.From(%q, %s.Type).Ref(%q).Annotations(entapi.Edge().InResponse()) — "+
-			"or, to expose %q alone on purpose, annotate %q with a bare entapi.Edge(), which grants no scope and says the end was considered",
+			"Declare the two ends separately and give both api.Expand(), or remove api.Expand() from both; a deliberately one-way self pair has no spelling in this vocabulary (issue #79)",
 		node.Name, assoc.Name, node.Name, inverse.Name,
-		node.Name, annotated.Name, carries, node.Name, bare.Name,
+		node.Name, annotated.Name, node.Name, bare.Name,
 		bare.Name, cause,
-		assoc.Name, node.Name,
-		inverse.Name, node.Name, assoc.Name,
-		annotated.Name, bare.Name,
 	)
 }
 
 // queryConflicts reports the contradictions between a field's query markers and
 // what ent generates for that field.
 //
-// All four have the same shape as the immutable/update conflict above: the
+// All three have the same shape: the
 // annotation asks for a call to something ent never wrote. Emitting it anyway
 // produces an undefined symbol inside the consumer's own ent package, naming
 // ent's API, with nothing pointing back at the annotation that asked for it.
 // Silently dropping the marker instead would be worse — the parameter would
 // vanish from the query API without a word, and the caller would find out by
 // getting unfiltered results.
-func queryConflicts(node *gen.Type, f *gen.Field) []string {
-	a := getDomainFieldAnnotation(f)
-	if a == nil {
-		return nil
-	}
+func queryConflicts(node *gen.Type, f *gen.Field, a *api.FieldAnnotation) []string {
 	var out []string
-
-	if (a.Filterable || a.Searchable || a.Sortable) && !hasDomainScope(f, ScopeQuery) {
-		out = append(out, fmt.Sprintf(
-			"%s.%s: annotation marks the field %s but withholds scope %q, so it is not exposed to the query API and no query artifact is generated for it; "+
-				"add %s to the field's scopes (entapi.DefaultField(), CreateOnlyField() and OutputOnlyField() all carry it), or drop the marker",
-			node.Name, f.Name, markerList(a), ScopeQuery, ScopeQuery,
-		))
-	}
 
 	if a.Searchable && !fieldHasOp(f, gen.Contains) {
 		out = append(out, fmt.Sprintf(
 			"%s.%s: annotation marks the field Searchable, but ent derives no Contains predicate for type %q "+
 				"(entc/gen/func.go fieldOps), so there is no %sContains to put in the free-text disjunction. "+
-				"Free-text search is a substring match and only string fields have one — drop AsSearchable(); AsFilterable() offers this type's non-substring operators",
+				"Free-text search is a substring match and only string fields have one — remove api.Searchable(); api.Filterable() offers this type's non-substring operators",
 			node.Name, f.Name, f.Type.String(), f.StructField(),
 		))
 	}
@@ -256,7 +333,7 @@ func queryConflicts(node *gen.Type, f *gen.Field) []string {
 	if a.Filterable && len(f.Ops()) == 0 {
 		out = append(out, fmt.Sprintf(
 			"%s.%s: annotation marks the field Filterable, but ent derives no predicates at all for type %q "+
-				"(entc/gen/func.go fieldOps), so the filter group would be empty and the parameter would silently do nothing. Drop AsFilterable()",
+				"(entc/gen/func.go fieldOps), so the filter group would be empty and the parameter would silently do nothing. Remove api.Filterable()",
 			node.Name, f.Name, f.Type.String(),
 		))
 	}
@@ -264,7 +341,7 @@ func queryConflicts(node *gen.Type, f *gen.Field) []string {
 	if a.Sortable && (f.Type == nil || !f.Type.Comparable()) {
 		out = append(out, fmt.Sprintf(
 			"%s.%s: annotation marks the field Sortable, but type %q is not comparable, so ent's order builders skip it "+
-				"(entc/gen/template/dialect/sql/meta.tmpl) and there is no %s to put in the sort allow-list. Drop AsSortable()",
+				"(entc/gen/template/dialect/sql/meta.tmpl) and there is no %s to put in the sort allow-list. Remove api.Sortable()",
 			node.Name, f.Name, f.Type.String(), f.OrderName(),
 		))
 	}
@@ -274,8 +351,14 @@ func queryConflicts(node *gen.Type, f *gen.Field) []string {
 
 // markerList names the query markers a field carries, so the scope message says
 // which annotation the author has to reconcile.
-func markerList(a *DomainField) string {
+func markerList(a *api.FieldAnnotation) string {
 	var set []string
+	if a.Hidden {
+		set = append(set, "Hidden")
+	}
+	if a.ReadOnly {
+		set = append(set, "ReadOnly")
+	}
 	if a.Filterable {
 		set = append(set, "Filterable")
 	}
@@ -286,6 +369,13 @@ func markerList(a *DomainField) string {
 		set = append(set, "Sortable")
 	}
 	return strings.Join(set, "/")
+}
+
+func dimensionList(a *api.FieldAnnotation) string {
+	copy := *a
+	copy.Hidden = false
+	copy.ReadOnly = false
+	return markerList(&copy)
 }
 
 // fieldHasOp reports whether ent derived op for this field. The question is
@@ -322,22 +412,21 @@ const errorMapSymbol = "ErrorMap"
 // checkGraphConflicts' per-node loop:
 //
 //   - whether the graph-level error file is emitted at all is a property of the
-//     graph (any annotated entity), not of the node being examined;
+//     graph (any Resource), not of the node being examined;
 //   - the colliding entity does NOT have to be annotated. ent generates a type
 //     for every entity in the schema, annotated or not, so a bare `type
 //     ErrorMap struct{ ent.Schema }` collides just as hard — and the per-node
 //     loop skips exactly those.
 //
-// The derived half is checked against the MAXIMAL set of names an annotated
-// entity can produce, never against the set this particular entity's scopes
-// happen to trigger. An entity with no create-scoped field emits no
-// <Name>CreateRequest today, but adding one scope later would, and a refusal
-// that appears only after an unrelated annotation change is worse than one that
-// is stable. Refusing a name that would not have collided is the accepted cost.
+// The derived half is checked against the MAXIMAL set of names a Resource can
+// produce, not only the families this particular Resource emits today. A
+// refusal that appears only after an unrelated deviation change is worse than
+// a stable reserved set. Refusing a name that would not collide today is the
+// accepted cost.
 func reservedNameConflicts(g *gen.Graph) []string {
 	var annotated []*gen.Type
 	for _, node := range g.Nodes {
-		if len(domainFields(node)) > 0 {
+		if isResource(node) {
 			annotated = append(annotated, node)
 		}
 	}
@@ -349,10 +438,10 @@ func reservedNameConflicts(g *gen.Graph) []string {
 	// when anything is annotated.
 	if len(annotated) > 0 {
 		out = append(out, graphSymbolConflicts(g, errorMapSymbol, "var", errorMapFileName,
-			annotated, "carries entapi annotations, so the error classifier is generated for this schema")...)
+			annotated, "carries api.Resource(), so the error classifier is generated for this schema")...)
 	}
 
-	// The derived half: every pair of (annotated entity, any entity) where the
+	// The derived half: every pair of (Resource, any entity) where the
 	// second one's name is a name the first one's generated files declare.
 	for _, a := range annotated {
 		for _, d := range derivedEntityDecls(a) {
@@ -409,7 +498,7 @@ type derivedName struct {
 }
 
 // derivedEntityDecls returns every EXPORTED top-level declaration the three
-// per-type templates emit for an annotated node.
+// per-type templates can emit for a Resource node.
 //
 // This is the list #62 turns on, and it is the one thing here that rots: a
 // template gains a declaration and this list does not, and the collision it was
@@ -508,31 +597,7 @@ func derivedNameConflict(a, b *gen.Type, d derivedName) string {
 		"%s / %s: the schema declares an entity named %s, so ent generates `type %s` for it; %s is also one of the names this extension derives from the annotated entity %s and declares in %s, "+
 			"so the two share one identifier in the generated package and it fails to compile with `%s redeclared in this block`. "+
 			"So rename one of the two entities — %s's derived names follow from its own name and cannot be configured. "+
-			"The name is reserved even if %s's current scopes do not happen to emit it: adding a scope later would, and a refusal that appears on an unrelated annotation change is worse than one that is stable",
+			"The name is reserved even if %s's current operation families do not emit it: a refusal that appears on an unrelated deviation change is worse than one that is stable",
 		b.Name, a.Name, b.Name, b.Name, d.name, a.Name, d.file, d.name, a.Name, a.Name,
-	)
-}
-
-// immutableUpdateConflict describes the field-level contradiction: a field ent
-// marks Immutable that carries ScopeUpdate.
-//
-// ent's Update and UpdateOne builders iterate MutableFields, which excludes
-// immutable fields, so no update setter exists for one. Generating the update
-// request anyway produces a call to a method that is not there, and the
-// consumer discovers it as a compile error in their own ent package with no
-// indication of the cause. Silently dropping the field instead would be worse:
-// the field would vanish from the PATCH API without a word, and neither
-// encoding/json nor the generated Validate can observe a key that has no struct
-// field to land in — an API client would find out in production.
-//
-// Note that entapi.DefaultField() grants ScopeUpdate, so an immutable field
-// carrying the default annotation always lands here. That is intended: the fix
-// is one annotation, and it has to be written down somewhere.
-func immutableUpdateConflict(node *gen.Type, f *gen.Field) string {
-	return fmt.Sprintf(
-		"%s.%s: field is Immutable() in the ent schema but its DomainField annotation carries scope %q; "+
-			"ent generates no Set%s on %sUpdateOne (update builders iterate MutableFields), so no update request can be generated for it. "+
-			"Give the field an annotation without ScopeUpdate (entapi.CreateOnlyField() or entapi.OutputOnlyField()), or drop Immutable() from the field",
-		node.Name, f.Name, ScopeUpdate, f.StructField(), node.Name,
 	)
 }

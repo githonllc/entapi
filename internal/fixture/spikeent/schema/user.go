@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entapi"
 	"github.com/google/uuid"
+
+	"github.com/githonllc/entapi/api"
 )
 
 type User struct {
@@ -20,39 +22,37 @@ type User struct {
 func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+			Default(uuid.New),
 
 		field.String("name").
-			Annotations(entapi.DefaultField().AsFilterable().AsSortable().AsSearchable()),
+			Annotations(api.Filterable(), api.Sortable(), api.Searchable()),
 
 		field.String("email").
 			Unique().
-			Annotations(entapi.DefaultField().AsFilterable().AsSearchable()),
+			Annotations(api.Filterable(), api.Searchable()),
 
 		field.Enum("status").
 			Values("active", "banned").
 			Default("active").
-			Annotations(entapi.DefaultField().AsFilterable()),
+			Annotations(api.Filterable()),
 
 		field.Int("age").
 			Optional().
 			Nillable().
-			Annotations(entapi.DefaultField().AsFilterable()),
+			Annotations(api.Filterable()),
 
 		field.String("nickname").
 			Optional().
-			Nillable().
-			Annotations(entapi.DefaultField()),
+			Nillable(),
 
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
-			Annotations(entapi.OutputOnlyField().AsFilterable().AsSortable()),
+			Annotations(api.ReadOnly(), api.Filterable(), api.Sortable()),
 
 		// Never filterable, searchable or sortable, and never in a response.
 		field.String("password_hash").
-			Annotations(entapi.InputOnlyField()),
+			Sensitive(),
 	}
 }
 
@@ -61,6 +61,10 @@ func (User) Fields() []ent.Field {
 func (User) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("posts", Post.Type).
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 	}
+}
+
+func (User) Annotations() []schema.Annotation {
+	return []schema.Annotation{api.Resource()}
 }

@@ -275,7 +275,7 @@ func TestEagerLoadPlanCoversExactlyTheResponseEdges(t *testing.T) {
 }
 
 // TestEntityWithNoResponseFieldsStillHasAResponse is the shape transferred from
-// #9: every annotated field on Secret is InputOnly, so the response carries only
+// #9: every scalar field on Secret is Sensitive, so the response carries only
 // the ID — and ListResponse referring to it must still compile.
 func TestEntityWithNoResponseFieldsStillHasAResponse(t *testing.T) {
 	id := uuid.New()
@@ -292,7 +292,7 @@ func TestEntityWithNoResponseFieldsStillHasAResponse(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	if strings.Contains(string(encoded), "hunter2") {
-		t.Errorf("an InputOnly field reached a response: %s", encoded)
+		t.Errorf("a Sensitive field reached a response: %s", encoded)
 	}
 
 	var list SecretListResponse

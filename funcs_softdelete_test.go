@@ -200,7 +200,7 @@ func TestSoftDeleteMixinDeclaresNoHooks(t *testing.T) {
 // but the failure they prevent is a compile error inside the consumer's own ent
 // package, naming a predicate they never wrote.
 func TestUnusableSoftDeleteFieldIsRefused(t *testing.T) {
-	title := newStringField("title", ptr(DefaultField()))
+	title := newStringField("title", nil)
 
 	t.Run("marker names an absent field", func(t *testing.T) {
 		node := newSoftDeletableType("Doc", map[string]any{"field": "nope"}, title)

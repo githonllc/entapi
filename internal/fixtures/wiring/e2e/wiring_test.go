@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	stdsql "database/sql"
 
@@ -30,14 +31,15 @@ import (
 
 // newClient opens a per-test in-memory database. A shared DSN would only work
 // because tests happen to run sequentially, which is luck rather than isolation.
-func newClient(t *testing.T) (*ent.Client, context.Context) {
+func newClient(t *testing.T, opts ...ent.Option) (*ent.Client, context.Context) {
 	t.Helper()
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := stdsql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	c := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, db)))
+	opts = append(opts, ent.Driver(entsql.OpenDB(dialect.SQLite, db)))
+	c := ent.NewClient(opts...)
 	t.Cleanup(func() { _ = c.Close() })
 	ctx := context.Background()
 	if err := c.Schema.Create(ctx); err != nil {
@@ -338,6 +340,62 @@ func TestWiringWithoutResponseEdges(t *testing.T) {
 	}
 	if p.Total != 1 {
 		t.Errorf("total = %d, want 1", p.Total)
+	}
+}
+
+// TestEmptyPatchMeasuresEntUpdateDefault records the database operation rather
+// than inferring it from generated code. Patchless has no HTTP-writable patch
+// fields, but its Ent schema carries an UpdateDefault field.
+func TestEmptyPatchMeasuresEntUpdateDefault(t *testing.T) {
+	var sqlLog []string
+	c, ctx := newClient(t, ent.Debug(), ent.Log(func(v ...any) {
+		sqlLog = append(sqlLog, fmt.Sprint(v...))
+	}))
+
+	create, err := (&ent.PatchlessCreateRequest{}).Validate()
+	if err != nil {
+		t.Fatalf("validate create: %v", err)
+	}
+	created, err := ent.CreatePatchless(ctx, c, create)
+	if err != nil {
+		t.Fatalf("CreatePatchless: %v", err)
+	}
+
+	// Make a same-value result impossible at SQLite's stored timestamp
+	// precision, then isolate the log to the patch operation itself.
+	time.Sleep(time.Millisecond)
+	sqlLog = nil
+	var patch ent.PatchlessPatchRequest
+	if err := patch.UnmarshalJSON([]byte(`{}`)); err != nil {
+		t.Fatalf("unmarshal empty patch: %v", err)
+	}
+	valid, err := patch.Validate()
+	if err != nil {
+		t.Fatalf("validate empty patch: %v", err)
+	}
+	got, err := ent.PatchPatchless(ctx, c, created.ID, valid)
+	if err != nil {
+		t.Fatalf("PatchPatchless: %v", err)
+	}
+
+	updates := 0
+	for _, line := range sqlLog {
+		if strings.Contains(line, "UPDATE `patchlesses`") {
+			updates++
+		}
+	}
+	if updates != 1 {
+		t.Fatalf("empty PatchPatchless issued %d UPDATE statements, want 1; log: %v", updates, sqlLog)
+	}
+	if !got.UpdatedAt.After(created.UpdatedAt) {
+		t.Fatalf("UpdateDefault result = %s, want after create value %s", got.UpdatedAt, created.UpdatedAt)
+	}
+	reread, err := ent.GetPatchless(ctx, c, created.ID)
+	if err != nil {
+		t.Fatalf("GetPatchless after empty patch: %v", err)
+	}
+	if !reread.UpdatedAt.Equal(got.UpdatedAt) {
+		t.Fatalf("stored updated_at = %s, returned %s", reread.UpdatedAt, got.UpdatedAt)
 	}
 }
 

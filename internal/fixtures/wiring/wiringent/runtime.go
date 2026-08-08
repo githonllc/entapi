@@ -8,6 +8,7 @@ import (
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/article"
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/author"
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/note"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/patchless"
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/schema"
 	"github.com/google/uuid"
 )
@@ -38,4 +39,20 @@ func init() {
 	noteDescID := noteFields[0].Descriptor()
 	// note.DefaultID holds the default value on creation for the id field.
 	note.DefaultID = noteDescID.Default.(func() uuid.UUID)
+	patchlessFields := schema.Patchless{}.Fields()
+	_ = patchlessFields
+	// patchlessDescLabel is the schema descriptor for label field.
+	patchlessDescLabel := patchlessFields[1].Descriptor()
+	// patchless.DefaultLabel holds the default value on creation for the label field.
+	patchless.DefaultLabel = patchlessDescLabel.Default.(string)
+	// patchlessDescUpdatedAt is the schema descriptor for updated_at field.
+	patchlessDescUpdatedAt := patchlessFields[2].Descriptor()
+	// patchless.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	patchless.DefaultUpdatedAt = patchlessDescUpdatedAt.Default.(func() time.Time)
+	// patchless.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	patchless.UpdateDefaultUpdatedAt = patchlessDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// patchlessDescID is the schema descriptor for id field.
+	patchlessDescID := patchlessFields[0].Descriptor()
+	// patchless.DefaultID holds the default value on creation for the id field.
+	patchless.DefaultID = patchlessDescID.Default.(func() uuid.UUID)
 }

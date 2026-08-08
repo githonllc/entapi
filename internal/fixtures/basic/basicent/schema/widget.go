@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Widget is the single happy-path fixture entity. Its fields cover the three
@@ -27,23 +28,21 @@ type Widget struct {
 func (Widget) Fields() []ent.Field {
 	return []ent.Field{
 		// UUID primary key — BaseService hardcodes uuid.UUID in its signatures.
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
 		// create + update + response, required on create.
-		field.String("name").
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.String("name"),
 
 		// create + update + response, optional — exercises the pointer branches.
-		field.String("description").
-			Optional().
-			Annotations(entapi.DefaultField()),
+		field.String("description").Optional(),
 
 		// response only — never settable from an HTTP request.
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
-			Annotations(entapi.OutputOnlyField()),
+			Annotations(api.ReadOnly()),
 	}
 }
+
+// Annotations opts Widget into entapi generation.
+func (Widget) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

@@ -2,14 +2,15 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Secret has no response-scoped field at all: every annotated field is
-// InputOnly, and gen.Type.Fields excludes the id, so responseFields is empty.
+// Sensitive, and gen.Type.Fields excludes the id, so responseFields is empty.
 //
 // This is the shape transferred onto #25 from #9. The v1 dto.tmpl guarded the
 // response struct on responseFields being non-empty but emitted ListResponse
@@ -23,11 +24,10 @@ type Secret struct {
 // Fields of the Secret.
 func (Secret) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("token").
-			Annotations(entapi.InputOnlyField()),
+		field.String("token").Sensitive(),
 	}
 }
+
+func (Secret) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

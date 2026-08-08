@@ -14,3 +14,6 @@ type Author func(*sql.Selector)
 
 // Note is the predicate function for note builders.
 type Note func(*sql.Selector)
+
+// Patchless is the predicate function for patchless builders.
+type Patchless func(*sql.Selector)

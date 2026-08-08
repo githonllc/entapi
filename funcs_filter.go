@@ -299,10 +299,15 @@ var opTagSuffix = map[gen.Op]string{
 // substringOps is the expensive class (ADR-0005): emitted only when the
 // field is also Searchable. EqualFold is exact-match SEMANTICS but sits
 // here for its cost profile — LOWER(x)=LOWER(?) scans without a
-// functional index, exactly like a substring match.
+// functional index, exactly like a substring match. HasPrefix joined this
+// class in #83: PostgreSQL does not index-serve left-anchored LIKE 'x%' under
+// the default non-C collation unless the index has an explicit pattern operator
+// class (text_pattern_ops, varchar_pattern_ops or bpchar_pattern_ops), and ent
+// does not create such an index by default. The old justification was
+// engine-specific.
 var substringOps = map[gen.Op]bool{
 	gen.Contains: true, gen.ContainsFold: true,
-	gen.EqualFold: true, gen.HasSuffix: true,
+	gen.EqualFold: true, gen.HasPrefix: true, gen.HasSuffix: true,
 }
 
 // nullTagSuffix names the one parameter the IsNil/NotNil pair collapses into.

@@ -46,14 +46,13 @@ func TestFilterParamsFollowEntsOperatorTable(t *testing.T) {
 		want  []string
 	}{
 		{
-			// Filterable only: the cheap class. HasSuffix and Contains are
-			// operators ent derived and this field did not earn.
+			// Filterable only: the cheap class. HasPrefix, HasSuffix and Contains
+			// are operators ent derived and this field did not earn.
 			name:  "string/filterable",
 			field: newStringField("title", fieldPtr(api.Filterable())),
 			want: []string{
 				"Title", "TitleNEQ", "TitleIn", "TitleNotIn",
 				"TitleGT", "TitleGTE", "TitleLT", "TitleLTE",
-				"TitleHasPrefix",
 			},
 		},
 		{
@@ -122,7 +121,7 @@ func TestFilterParamsCollapseTheNullPair(t *testing.T) {
 // template branches on Kind and a wrong Kind is a compile error in a
 // consumer's package rather than here.
 func TestFilterParamShapes(t *testing.T) {
-	f := newStringField("title", nil)
+	f := newStringField("title", fieldPtr(api.FieldAnnotation{Filterable: true, Searchable: true}))
 	ps := filterParamsNamed(f, f.StructField())
 	byName := map[string]filterParam{}
 	for _, p := range ps {
@@ -237,7 +236,7 @@ func TestParseFieldsIncludesPrimaryKeyAndFilterableFields(t *testing.T) {
 	if got, want := parseOperatorPrefixes(got[1].Operators), []string{"eq", "ne", "in", "not_in", "gt", "ge", "lt", "le", "like", "prefix", "suffix", "from", "to", "between"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("searchable title operators = %v, want %v", got, want)
 	}
-	if got, want := parseOperatorPrefixes(got[2].Operators), []string{"eq", "ne", "in", "not_in", "gt", "ge", "lt", "le", "prefix", "from", "to", "between"}; !reflect.DeepEqual(got, want) {
+	if got, want := parseOperatorPrefixes(got[2].Operators), []string{"eq", "ne", "in", "not_in", "gt", "ge", "lt", "le", "from", "to", "between"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("filterable-only ref operators = %v, want %v", got, want)
 	}
 }

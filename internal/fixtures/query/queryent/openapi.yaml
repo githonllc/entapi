@@ -156,8 +156,8 @@ paths:
         - name: "reference"
           in: query
           required: false
-          schema: {"type": "string", "pattern": "^(?:(eq|ne|in|not_in|gt|ge|lt|le|prefix|is_null|not_null|from|to|between):)?"}
-          description: "Filter on reference. A bare value means eq. Any other comparison is written as \"<operator>:<value>\"; this field accepts eq, ne, in, not_in, gt, ge, lt, le, prefix, is_null, not_null, from, to, between. A prefix outside the global operator vocabulary is taken literally, so \"eq:\" is the escape for a value that begins with one. An operator in that vocabulary but outside this field's set is rejected with 400. Repeating the parameter is legal and ANDs the resulting predicates. \"in:\" and \"between:\" split their value on commas, so a value containing a comma cannot be expressed through them; \"is_null:\" and \"not_null:\" take no value at all."
+          schema: {"type": "string", "pattern": "^(?:(eq|ne|in|not_in|gt|ge|lt|le|is_null|not_null|from|to|between):)?"}
+          description: "Filter on reference. A bare value means eq. Any other comparison is written as \"<operator>:<value>\"; this field accepts eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between. A prefix outside the global operator vocabulary is taken literally, so \"eq:\" is the escape for a value that begins with one. An operator in that vocabulary but outside this field's set is rejected with 400. Repeating the parameter is legal and ANDs the resulting predicates. \"in:\" and \"between:\" split their value on commas, so a value containing a comma cannot be expressed through them; \"is_null:\" and \"not_null:\" take no value at all."
         - name: "status"
           in: query
           required: false

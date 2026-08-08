@@ -256,15 +256,15 @@ func TestNoSortRequestedOrdersByID(t *testing.T) {
 // ent derived becomes a URL parameter, never a second operator table.
 //
 // title is Filterable AND Searchable, so it carries the full set. ref is
-// Filterable ONLY, so it carries the cheap class and the four substring
-// parameters are absent by name: `LIKE '%x%'` defeats the index exactly like
+// Filterable ONLY, so it carries the cheap class and the five expensive-class
+// operators are absent by name: `LIKE '%x%'` defeats the index exactly like
 // the unchecked sort the allow-list above exists to prevent, and no annotation
 // on ref ever asked for it.
 func TestOperatorCoverageFollowsTheClassRule(t *testing.T) {
 	want := map[string]int{
 		"id":         8,  // numericOps; the primary key is naturally Filterable
 		"title":      12, // stringOps plus ContainsFold, minus EqualFold (no wire spelling)
-		"reference":  10, // Go field Ref; every wire surface follows StorageKey
+		"reference":  9,  // Go field Ref; every wire surface follows StorageKey
 		"status":     4,  // enumOps
 		"score":      9,  // numericOps (8) + IsNil/NotNil collapsed into one
 		"created_at": 8,  // numericOps
@@ -315,7 +315,7 @@ func TestOperatorCoverageFollowsTheClassRule(t *testing.T) {
 	}
 
 	// And the cheap class is exactly what remains, in ent's own operator order.
-	wantRef := []string{"Ref", "RefNEQ", "RefIn", "RefNotIn", "RefGT", "RefGTE", "RefLT", "RefLTE", "RefHasPrefix", "RefIsNull"}
+	wantRef := []string{"Ref", "RefNEQ", "RefIn", "RefNotIn", "RefGT", "RefGTE", "RefLT", "RefLTE", "RefIsNull"}
 	var gotRef []string
 	for i := 0; i < rt.NumField(); i++ {
 		if name := rt.Field(i).Name; strings.HasPrefix(name, "Ref") {
@@ -472,7 +472,11 @@ func TestParseRule3AllowedPrefixAppliesItsOperator(t *testing.T) {
 }
 
 func TestParseRule4KnownButDisallowedPrefixIsValidationError(t *testing.T) {
-	requireQueryValidation(t, url.Values{"reference": {"like:scan"}}, "reference", "like:scan", "legal operators", "prefix")
+	requireQueryValidation(t, url.Values{"reference": {"like:scan"}}, "reference", "like:scan", "legal operators", "between")
+}
+
+func TestParseFilterableOnlyPrefixIsValidationError(t *testing.T) {
+	requireQueryValidation(t, url.Values{"reference": {"prefix:left"}}, "reference", "prefix:left", "legal operators")
 }
 
 func TestParseRule5UnknownPrefixFallsBackToWholeEqualityLiteral(t *testing.T) {
@@ -496,7 +500,6 @@ func TestParseRecordQueryCoversEveryOperatorClass(t *testing.T) {
 	f, r := parseRecord(t, url.Values{
 		"id":         {"in:" + id1.String() + "," + id2.String()},
 		"title":      {"ne:x", "gt:a", "ge:b", "lt:y", "le:z", "like:mid", "ilike:FOLD", "prefix:pre", "suffix:suf"},
-		"reference":  {"prefix:left"},
 		"status":     {"in:draft,live", "not_in:draft"},
 		"score":      {"is_null:", "not_null:", "from:10", "to:90", "between:20,80"},
 		"created_at": {"eq:2026-08-08T12:34:56Z"},
@@ -521,8 +524,8 @@ func TestParseRecordQueryCoversEveryOperatorClass(t *testing.T) {
 	if f.Q == nil || *f.Q != "needle" || r.Page != 2 || r.Size != 1001 || len(r.Sort) != 2 {
 		t.Errorf("reserved params = Q:%v request:%+v", f.Q, r)
 	}
-	if len(f.Predicates()) != 21 {
-		t.Errorf("Predicates() = %d, want 21 independent predicates", len(f.Predicates()))
+	if len(f.Predicates()) != 20 {
+		t.Errorf("Predicates() = %d, want 20 independent predicates", len(f.Predicates()))
 	}
 }
 

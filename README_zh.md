@@ -538,8 +538,8 @@ wire 采用 `field=op:value`，只在第一个冒号处分割；无前缀值就�
 | `is_null:` `not_null:` | 空值谓词 |
 | `from:` `to:` `between:a,b` | 闭区间语法糖 |
 
-每个字段只得到 Ent 谓词与上述 wire 词汇的交集。`like:`、`ilike:`、`suffix:` 还要求
-`api.Searchable()`，`prefix:` 不要求。`_ieq` 没有 wire 写法。无前缀的 `*` 与 `?`
+每个字段只得到 Ent 谓词与上述 wire 词汇的交集。`like:`、`ilike:`、`prefix:` 与
+`suffix:` 还要求 `api.Searchable()`。`_ieq` 没有 wire 写法。无前缀的 `*` 与 `?`
 仍是普通等值字面量，不会隐式变成 `LIKE`。
 
 解析严格按六条规则执行：空的无前缀值忽略，但空 `eq:` 有效；无冒号就是等值；字段允许的
@@ -843,9 +843,9 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
    dialect 请在 `API()` 前调用 `WithUniqueViolation`。
 2. **`New{E}Response(nil)` 返回 `(nil, nil)`。** 不是错误。如果你把一次未命中的查询直接喂
    进它，拿到的是一对 nil，而不是 not-found。
-3. **`like:`、`ilike:` 与 `suffix:` 需要 `api.Searchable()`。** 用在只 Filterable 的
-   字符串字段时，它们是已知但不允许的操作符，生成 parser 返回 `ErrValidation`；`prefix:`
-   仍然可用。
+3. **`like:`、`ilike:`、`prefix:` 与 `suffix:` 需要 `api.Searchable()`。** 用在只
+   Filterable 的字符串字段时，它们是已知但不允许的操作符，生成 parser 返回
+   `ErrValidation`。
 4. **只有主键的查询维度会推导。** 它天然 Filterable 与 Sortable；所有非 ID 字段仍需自己的
    查询词。
 5. **全 Immutable 的 PATCH 会被拒绝**，除非 resource 写 `Except(api.OpPatch)`；请求类型与

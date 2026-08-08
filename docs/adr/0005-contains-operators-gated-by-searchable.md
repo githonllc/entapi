@@ -37,6 +37,16 @@ Operator classes, not one bucket:
   `_contains`, `_icontains`, `_ieq`, `_suffix` — the operators whose cost
   profile matches the free-text disjunction that marker already owns.
 
+> **Correction (2026-08-08, #83):** The preceding `_prefix` classification and
+> "left-anchored LIKE uses the index" justification are superseded. That claim
+> is engine-specific: MySQL generally serves this shape from an index;
+> PostgreSQL does not under the default non-C collation unless the index uses an
+> explicit pattern operator class (`text_pattern_ops`, `varchar_pattern_ops` or
+> `bpchar_pattern_ops`), which ent never creates by default; and SQLite does so
+> only under specific configurations. `_prefix` therefore belongs to the
+> Searchable-gated expensive class. The Addendum governs enforcement under the
+> op-in-value wire format.
+
 Two classification notes, recorded from the ratification audit:
 
 - `_ieq` (EqualFold) is **exact-match semantics**, not substring — it sits in

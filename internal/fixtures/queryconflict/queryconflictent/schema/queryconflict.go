@@ -43,6 +43,10 @@ func (Bad) Fields() []ent.Field {
 		// not even the null pair — so the filter group would be empty.
 		field.JSON("meta", map[string]string{}).Annotations(api.Filterable()),
 
+		// Ent derives comparison predicates for bytes, but the URL parser cannot
+		// turn text into []byte without an explicit text contract.
+		field.Bytes("opaque").Annotations(api.Filterable()),
+
 		field.String("token").
 			Sensitive().
 			Annotations(api.Filterable()),

@@ -2,10 +2,7 @@ package entapi
 
 import (
 	"context"
-	"fmt"
 	"math"
-	"slices"
-	"strings"
 )
 
 // This file is Layer 2: the CRUD algorithms, written once, in Go, with type
@@ -79,26 +76,6 @@ func (r ListRequest) Offset() int {
 		return math.MaxInt
 	}
 	return off
-}
-
-// SortKey validates the requested sort field against an allow-list and reports
-// the direction. An empty request falls back to def.
-//
-// The allow-list is the whole point: an unchecked sort field is an injection
-// site, an unindexed-scan trigger, and — combined with paging — an ordering
-// oracle over columns the caller was never meant to read.
-func (r ListRequest) SortKey(allow []string, def string) (key string, desc bool, err error) {
-	key = r.SortBy
-	if key == "" {
-		key = def
-	}
-	if key == "" {
-		return "", false, nil
-	}
-	if !slices.Contains(allow, key) {
-		return "", false, fmt.Errorf("%w: cannot sort by %q", ErrValidation, key)
-	}
-	return key, strings.EqualFold(r.Order, "desc"), nil
 }
 
 // ListPage runs a filtered, ordered, paginated query and converts the results.

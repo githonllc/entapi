@@ -8,7 +8,7 @@ func TestTemplateFuncsExposeCoreSelectors(t *testing.T) {
 		"createFields", "patchFields", "responseFields", "responseEdges",
 		"hasCreateFamily", "edgeJSONKey",
 		"isCreatePointer", "isCreateRequired", "isPatchClearable",
-		"queryFields", "isFilterable", "isSearchable", "isSortable",
+		"queryFields", "parseFields", "unfilterableFields", "searchFields", "isSortable",
 	}
 	for _, name := range expected {
 		if _, ok := funcs[name]; !ok {

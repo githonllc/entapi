@@ -5,112 +5,257 @@
 package intident
 
 import (
+	"fmt"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+
 	"entgo.io/ent/dialect/sql"
 	"github.com/githonllc/entapi/internal/fixtures/intid/intident/counter"
 	"github.com/githonllc/entapi/internal/fixtures/intid/intident/predicate"
 	entapi "github.com/githonllc/entapi/runtime"
 )
 
-// ============================================================================
-// Query surface for Counter — filters, free-text search and the sort
-// allow-list. They are three dimensions of one list endpoint, not three
-// features, so they are one artifact.
-//
-// Every field below carries at least one query-dimension word. A field with no
-// Searchable, Filterable or Sortable word is absent from all three, and there
-// is no runtime switch that can bring it back.
-// ============================================================================
-
-// CounterFilter is the structured query surface for Counter.
-//
-// One parameter per operator per Filterable field, with the operator set taken
-// from ent's own per-type table ($field.Ops) rather than from a curated
-// selection: emitting an operator costs nothing here, whereas adding one later
-// means changing a template, regenerating and possibly breaking a URL contract
-// consumers already depend on. Substring-class operators (_contains,
-// _icontains, _ieq, _suffix) additionally require api.Searchable() on the field —
-// see docs/adr/0005.
-//
-// Every parameter is a pointer or a slice, because "absent" and "the zero
-// value" are different requests.
+// CounterFilter is the typed query representation for Counter.
+// Repeated URL parameters occupy repeated slots and Predicates ANDs them.
 type CounterFilter struct {
+	// id: int
+	ID      []int   `json:"id,omitempty"`
+	IDNEQ   []int   `json:"id_neq,omitempty"`
+	IDIn    [][]int `json:"id_in,omitempty"`
+	IDNotIn [][]int `json:"id_not_in,omitempty"`
+	IDGT    []int   `json:"id_gt,omitempty"`
+	IDGTE   []int   `json:"id_gte,omitempty"`
+	IDLT    []int   `json:"id_lt,omitempty"`
+	IDLTE   []int   `json:"id_lte,omitempty"`
 }
 
-// Predicates converts the filter into ent predicates.
-//
-// The result is applied with Where(...), which combines conjunctively, so every
-// parameter the caller set narrows the result further. The free-text term is
-// the one disjunction: it ORs across the searchable fields and joins the rest
-// as a single conjunct.
-//
-// A nil receiver yields no predicates, so an endpoint with no filter bound does
-// not need a branch of its own.
+// Predicates converts the typed filter into conjunctive ent predicates.
 func (f *CounterFilter) Predicates() []predicate.Counter {
 	if f == nil {
 		return nil
 	}
 	var ps []predicate.Counter
+	entapi.AppendEach(&ps, f.ID, counter.IDEQ)
+	entapi.AppendEach(&ps, f.IDNEQ, counter.IDNEQ)
+	entapi.AppendEachSlice(&ps, f.IDIn, counter.IDIn)
+	entapi.AppendEachSlice(&ps, f.IDNotIn, counter.IDNotIn)
+	entapi.AppendEach(&ps, f.IDGT, counter.IDGT)
+	entapi.AppendEach(&ps, f.IDGTE, counter.IDGTE)
+	entapi.AppendEach(&ps, f.IDLT, counter.IDLT)
+	entapi.AppendEach(&ps, f.IDLTE, counter.IDLTE)
 	return ps
 }
 
-// counterSortOptions maps an allowed sort key to ent's own order
-// builder for that column. It is unexported: the mapping is reached through
-// CounterOrder, which checks the key first.
-var counterSortOptions = map[string]func(...sql.OrderTermOption) counter.OrderOption{}
-
-// CounterSortKeys is the sort allow-list: exactly the fields annotated
-// Sortable, and nothing else.
-//
-// This is the load-bearing part of the query surface. An unchecked sort field
-// is an injection site, an unindexed-scan trigger and — combined with paging —
-// an ordering oracle over columns the caller was never meant to read. An entity
-// that marks nothing is orderable by nothing, which is the safe end of the
-// default rather than an oversight.
-var CounterSortKeys = []string{}
-
-// CounterOrder turns a list request into ent order options.
-//
-// The caller's string is checked against CounterSortKeys and then thrown
-// away: what reaches the query is the order builder ent generated for that
-// column, looked up by an already-validated key. No caller-supplied string is
-// ever interpolated into SQL.
-//
-// A key outside the allow-list is a validation error, not a silent fallback —
-// a request to sort by a column that is out of bounds has no correct answer,
-// and quietly serving a differently-ordered page is worse than refusing.
-//
-// There is still no default sort COLUMN. Which column to order by when the
-// caller names none is a policy the schema does not contain, so generation does
-// not invent one; a consumer that wants a default passes SortBy itself.
-//
-// Every result nevertheless ends with the primary key (ADR-0002). Offset
-// pagination is only correct over a TOTAL order: LIMIT/OFFSET over a result set
-// that is unordered, or ordered by a column with ties, lets rows repeat or
-// vanish between pages with zero concurrent writes. The primary key is unique,
-// so appending it turns any prefix order into a total one — that is the whole
-// correctness argument.
-//
-// The primary-key term is a determinism floor, not a default sort: the response
-// does not claim an ordering the caller never requested, it merely stops being
-// random. The tiebreak follows the requested direction so that a descending
-// walk stays descending, and it is skipped when the requested key IS the
-// primary key, since ORDER BY id, id says nothing the first term did not.
-func CounterOrder(r entapi.ListRequest) ([]counter.OrderOption, error) {
-	key, desc, err := r.SortKey(CounterSortKeys, "")
+func parseCounterIDQueryValue(raw, whole string) (int, error) {
+	parsed, err := strconv.ParseInt(raw, 10, 0)
 	if err != nil {
-		return nil, err
+		var zero int
+		return zero, fmt.Errorf("%w: field %q value %q is not a valid int: %v", entapi.ErrValidation, "id", whole, err)
 	}
-	dir := sql.OrderAsc()
-	if desc {
-		dir = sql.OrderDesc()
+	return int(parsed), nil
+}
+
+// ParseCounterQuery parses the complete URL query contract in sorted-key
+// order. Runtime code owns lexical grammar; this generated switch owns the
+// field-local operator set, conversion and predicate slots.
+func ParseCounterQuery(q url.Values) (*CounterFilter, entapi.ListRequest, error) {
+	f := &CounterFilter{}
+	var request entapi.ListRequest
+	keys := make([]string, 0, len(q))
+	for key := range q {
+		keys = append(keys, key)
 	}
-	by, ok := counterSortOptions[key]
-	if !ok {
+	sort.Strings(keys)
+	for _, key := range keys {
+		values := q[key]
+		reserved, recognized, err := entapi.ReservedQueryValue(key, values)
+		if err != nil {
+			return nil, entapi.ListRequest{}, err
+		}
+		if recognized {
+			switch key {
+			case "_sort":
+				request.Sort, err = entapi.ParseSortSpecs(reserved)
+			case "_page":
+				request.Page, err = entapi.ParsePageParam(key, reserved)
+			case "_size":
+				request.Size, err = entapi.ParsePageParam(key, reserved)
+			case "_q":
+				err = fmt.Errorf("%w: _q value %q is invalid because Counter has no Searchable fields", entapi.ErrValidation, reserved)
+			}
+			if err != nil {
+				return nil, entapi.ListRequest{}, err
+			}
+			continue
+		}
+		if strings.HasPrefix(key, "_") {
+			return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown reserved query parameter %q", entapi.ErrValidation, key)
+		}
+		switch key {
+		case "id":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseCounterIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ID = append(f.ID, parsed)
+				case "ne":
+					parsed, parseErr := parseCounterIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDNEQ = append(f.IDNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]int, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseCounterIDQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.IDIn = append(f.IDIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]int, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseCounterIDQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.IDNotIn = append(f.IDNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseCounterIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGT = append(f.IDGT, parsed)
+				case "ge":
+					parsed, parseErr := parseCounterIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseCounterIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLT = append(f.IDLT, parsed)
+				case "le":
+					parsed, parseErr := parseCounterIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLTE = append(f.IDLTE, parsed)
+				case "from":
+					parsed, parseErr := parseCounterIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, parsed)
+				case "to":
+					parsed, parseErr := parseCounterIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLTE = append(f.IDLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseCounterIDQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseCounterIDQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, lower)
+					f.IDLTE = append(f.IDLTE, upper)
+				}
+			}
+		default:
+			switch key {
+			case "label":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+			default:
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown query field %q with value %q", entapi.ErrValidation, key, values)
+			}
+		}
+	}
+	return f, request, nil
+}
+
+var counterSortOptions = map[string]func(...sql.OrderTermOption) counter.OrderOption{
+	"id": counter.ByID,
+}
+
+// CounterSortKeys is the complete sort allow-list. The primary key is
+// naturally Sortable; every other key requires api.Sortable().
+var CounterSortKeys = []string{
+	"id",
+}
+
+// CounterOrder is the single sort allow-list seam.
+func CounterOrder(r entapi.ListRequest) ([]counter.OrderOption, error) {
+	if len(r.Sort) == 0 {
 		return []counter.OrderOption{counter.ByID(sql.OrderAsc())}, nil
 	}
-	order := []counter.OrderOption{by(dir)}
-	if key != "id" {
-		order = append(order, counter.ByID(dir))
+	order := make([]counter.OrderOption, 0, len(r.Sort)+1)
+	idPresent := false
+	lastDir := sql.OrderAsc()
+	for _, spec := range r.Sort {
+		by, ok := counterSortOptions[spec.Key]
+		if !ok {
+			return nil, fmt.Errorf("%w: cannot sort by %q; legal keys: %s", entapi.ErrValidation, spec.Key, strings.Join(CounterSortKeys, ", "))
+		}
+		dir := sql.OrderAsc()
+		if spec.Desc {
+			dir = sql.OrderDesc()
+		}
+		order = append(order, by(dir))
+		lastDir = dir
+		if spec.Key == "id" {
+			idPresent = true
+		}
+	}
+	if !idPresent {
+		order = append(order, counter.ByID(lastDir))
 	}
 	return order, nil
 }

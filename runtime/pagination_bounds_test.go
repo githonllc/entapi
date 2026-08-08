@@ -15,11 +15,11 @@ import (
 //	types.go:10  MaxPageSize = 1000
 //	types.go:17  validate:"omitempty,min=1,max=100"
 //
-// A third-party tag validator would reject size=500 while Validate() and
-// Limit() both accept it. A struct tag cannot reference a constant, so the tag
+// A third-party tag validator would reject size=500 while Limit() accepts it.
+// A struct tag cannot reference a constant, so the tag
 // can never be made to *refer* to MaxPageSize — it can only restate it and
 // drift. MaxPageSize is therefore the single home, and the tag must not carry a
-// numeric ceiling at all. Limit() clamps to it; Validate() rejects above it.
+// numeric ceiling at all. Limit() clamps to it.
 func TestPageSizeCeilingHasExactlyOneHome(t *testing.T) {
 	f, ok := reflect.TypeOf(ListRequest{}).FieldByName("Size")
 	if !ok {
@@ -45,23 +45,17 @@ func TestCeilingDecidedInOnePlace(t *testing.T) {
 		}
 	})
 
-	t.Run("exactly MaxPageSize is allowed by both", func(t *testing.T) {
+	t.Run("exactly MaxPageSize is allowed", func(t *testing.T) {
 		r := ListRequest{Size: MaxPageSize}
 		if got := r.Limit(); got != MaxPageSize {
 			t.Fatalf("Limit() = %d, want %d", got, MaxPageSize)
-		}
-		if err := r.Validate(); err != nil {
-			t.Fatalf("Validate() rejected the ceiling itself: %v", err)
 		}
 	})
 
 }
 
-// TestClampingIsTheOnlyReactionToTheCeiling settles the residual left by the
-// first pass: Validate() rejected a size above MaxPageSize while Limit()
-// clamped it — one bound, two reactions.
-//
-// Clamping wins, and Validate() gets out of it entirely. Limit() sits on the
+// TestClampingIsTheOnlyReactionToTheCeiling pins the runtime behaviour.
+// Limit() sits on the
 // only path into ListPage, so it enforces whether or not anyone remembers to
 // call Validate(); a rule that fires only when someone opts in is advice, not a
 // bound. Whether an oversized request deserves a 400 is a Layer 3 policy the
@@ -69,18 +63,8 @@ func TestCeilingDecidedInOnePlace(t *testing.T) {
 func TestClampingIsTheOnlyReactionToTheCeiling(t *testing.T) {
 	for _, size := range []int{MaxPageSize + 1, 10_000, -1, 0} {
 		r := ListRequest{Size: size}
-		if err := r.Validate(); err != nil {
-			t.Errorf("Validate() must not react to Size=%d; Limit() already normalises it to %d (got %v)",
-				size, r.Limit(), err)
-		}
 		if got := r.Limit(); got <= 0 || got > MaxPageSize {
 			t.Errorf("Limit() = %d for Size=%d, want 1..%d", got, size, MaxPageSize)
-		}
-	}
-	for _, page := range []int{-1, -1000} {
-		r := ListRequest{Page: page}
-		if err := r.Validate(); err != nil {
-			t.Errorf("Validate() must not react to Page=%d; Offset() already normalises it (got %v)", page, err)
 		}
 	}
 }
@@ -94,25 +78,6 @@ func TestNoDefaultingCallToForget(t *testing.T) {
 	if _, found := reflect.TypeOf(&ListRequest{}).MethodByName("SetDefaults"); found {
 		t.Fatal("ListRequest.SetDefaults is back. A defaulting call a caller can forget " +
 			"is the defect; Limit() and Offset() default and clamp on the only path into ListPage")
-	}
-}
-
-// TestValidateErrorsAreClassifiable: Validate() now returns only errors about
-// input it cannot silently repair, so they should be tellable from an
-// arbitrary failure the way SortKey's already are.
-func TestValidateErrorsAreClassifiable(t *testing.T) {
-	r := ListRequest{Order: "sideways"}
-	err := r.Validate()
-	if err == nil {
-		t.Fatal("an unrecognised order must be rejected; nothing downstream repairs it")
-	}
-	if !IsValidation(err) {
-		t.Fatalf("Validate() error must satisfy IsValidation, got %v", err)
-	}
-
-	var nilReq *ListRequest
-	if err := nilReq.Validate(); err == nil || !IsValidation(err) {
-		t.Fatalf("a nil request must yield a validation error, got %v", err)
 	}
 }
 

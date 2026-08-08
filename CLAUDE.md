@@ -26,7 +26,7 @@ One Go module, **three packages**, split by *when the code runs* (#15, #71).
 
 1. **`github.com/githonllc/entapi` — code-generation time.** The Ent extension and `SoftDeleteMixin`. It writes `{entity}_dto.go`, `{entity}_filter.go`, `{entity}_wiring.go` per `api.Resource()`, plus graph files, into the consumer's `ent/` package.
 2. **`github.com/githonllc/entapi/api` — schema time only.** The three mergeable annotations and their builders. It may import only `entgo.io/ent/schema` and stdlib; `TestSchemaAPIPackageIsGeneratorFree` guards the transitive closure.
-3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendIf`/`AppendIfSlice`, error sentinels and mapper, pointer helpers, and soft-delete context switches.
+3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`/`SortSpec`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendEach`/`AppendEachSlice`, the lexical URL-query helpers, error sentinels and mapper, pointer helpers, and soft-delete context switches.
 
 **The split is load-bearing, not cosmetic.** `template_index.go` declares package-level vars calling `mustLoadTemplate`, so while the two halves shared a package, a consumer's production binary that wanted `ErrValidation` embedded five templates and ran the template loader at init. Measured, and asserted by `TestRuntimePackageIsGeneratorFree`: `go list -deps ./runtime` reports **0** `entgo.io` packages out of 62 (all standard library) and `EmbedFiles` is empty, against **15** for the generator — which is correct there, since generating genuinely needs ent.
 
@@ -84,11 +84,26 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 | `funcs_imports.go` | `dtoImports`: the import specs the DTO must declare for its field types |
 | `funcs_codegen.go` | `fieldValueExpr` — the response constructor's per-field expression, and the only caller of `isComplexFieldType` |
 | `funcs_strings.go` | `camelCase`, and nothing else — Ent's `gen.Funcs` already supplies `contains`, `hasPrefix`, `lower`, `snake`, `plural`, … |
-| `funcs_filter.go` | the query surface: `queryFields` (any dimension word), `isFilterable`/`isSearchable`/`isSortable`, `searchFields`, `filterParams`, `filterImports` |
+| `funcs_filter.go` | the query surface: `queryFields`, `parseFields` (ID plus Filterable fields), `searchFields`, `isSortable`, per-field wire operator sets and conversion expressions, `filterImports` |
 | `annotations_edge.go` | `responseEdgeSet` and `edgeJSONKey`, reading `api.Expand()` through the normalized edge reader |
 | `api/annotations.go` | schema-time `ResourceAnnotation`, `FieldAnnotation`, `EdgeAnnotation`; every type implements `schema.Merger` |
 
 **A helper is only callable from a template if it appears in `templateFuncs()`.** Adding a func to a `funcs_*.go` file is not enough.
+
+### Query wire format (#72)
+
+`templates/filter.tmpl` emits `Parse{Entity}Query(url.Values)`, the typed filter,
+and `{Entity}Order`. Runtime owns only lexical grammar: split on the first colon,
+the global operator-prefix vocabulary, reserved parameter syntax and sort-spec
+parsing. Generated code owns semantic permission and conversion: each field's
+allowed operators are `$field.Ops` intersected with the wire vocabulary, with
+Searchable gating the expensive substring class. Wire field names always come
+from `StorageKey()`. The primary key is annotation-free but always Filterable
+and Sortable; its predicates use Ent's `ID…` prefix and its order uses
+`$.ID.OrderName`. Repeated field values become separate ANDed predicates;
+reserved parameters remain single-valued. `{Entity}Order`, not the parser, is
+the only sort-key allow-list check and appends the ID tiebreak only when ID is
+absent from the entire sort list.
 
 ### Annotation access
 

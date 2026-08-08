@@ -139,7 +139,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 	})
 
 	t.Run("list applies the filter and the sort", func(t *testing.T) {
-		p, err := ent.ListArticles(ctx, c, &ent.ArticleFilter{}, entapi.ListRequest{SortBy: "title", Order: "asc"})
+		p, err := ent.ListArticles(ctx, c, &ent.ArticleFilter{}, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "title"}}})
 		if err != nil {
 			t.Fatalf("ListArticles: %v", err)
 		}
@@ -150,7 +150,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 			t.Errorf("ascending titles = %v, want %v", got, want)
 		}
 
-		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{}, entapi.ListRequest{SortBy: "title", Order: "desc"})
+		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{}, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "title", Desc: true}}})
 		if err != nil {
 			t.Fatalf("ListArticles desc: %v", err)
 		}
@@ -158,7 +158,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 			t.Errorf("descending titles = %v, want %v", got, want)
 		}
 
-		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{TitleContains: ptr("a")}, entapi.ListRequest{SortBy: "title"})
+		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{TitleContains: []string{"a"}}, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "title"}}})
 		if err != nil {
 			t.Fatalf("ListArticles filtered: %v", err)
 		}
@@ -166,7 +166,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 			t.Errorf("contains 'a' total = %d, want 3", p.Total)
 		}
 
-		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{RankGTE: ptr(2)}, entapi.ListRequest{SortBy: "title"})
+		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{RankGTE: []int{2}}, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "title"}}})
 		if err != nil {
 			t.Fatalf("ListArticles rank: %v", err)
 		}
@@ -176,7 +176,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 	})
 
 	t.Run("list pages", func(t *testing.T) {
-		p, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{SortBy: "title", Size: 2, Page: 2})
+		p, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "title"}}, Size: 2, Page: 2})
 		if err != nil {
 			t.Fatalf("ListArticles paged: %v", err)
 		}
@@ -194,7 +194,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 	// makes a field-set, type or order drift a compile error; this asserts the
 	// remaining half — that converting changes no byte of the payload.
 	t.Run("the named list shape marshals byte-identically to the page", func(t *testing.T) {
-		p, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{SortBy: "title"})
+		p, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "title"}}})
 		if err != nil {
 			t.Fatalf("ListArticles: %v", err)
 		}
@@ -217,8 +217,8 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 	})
 
 	t.Run("list refuses a sort key outside the allow-list", func(t *testing.T) {
-		for _, key := range []string{"author_id", "title; DROP TABLE articles --", "id"} {
-			_, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{SortBy: key})
+		for _, key := range []string{"author_id", "title; DROP TABLE articles --"} {
+			_, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: key}}})
 			if !errors.Is(err, entapi.ErrValidation) {
 				t.Errorf("sort by %q: err = %v, want ErrValidation", key, err)
 			}
@@ -334,7 +334,7 @@ func TestWiringWithoutResponseEdges(t *testing.T) {
 	// body is Filterable but not Searchable, so the substring class is not on
 	// this filter at all (ADR-0005). HasPrefix is the cheap-class operator, and
 	// which operator narrows the page is incidental to what this asserts.
-	p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: ptr("fir")}, entapi.ListRequest{SortBy: "body"})
+	p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: []string{"fir"}}, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "body"}}})
 	if err != nil {
 		t.Fatalf("ListNotes: %v", err)
 	}

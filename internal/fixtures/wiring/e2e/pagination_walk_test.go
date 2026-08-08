@@ -120,17 +120,21 @@ func TestPaginationWalkServesEveryRowExactlyOnce(t *testing.T) {
 	})
 
 	t.Run("sorted by a non-unique column", func(t *testing.T) {
-		for _, order := range []string{"asc", "desc"} {
-			t.Run(order, func(t *testing.T) {
-				served := walkPages(t, ctx, c, entapi.ListRequest{SortBy: "title", Order: order})
-				if order == "desc" {
+		for _, desc := range []bool{false, true} {
+			name := "asc"
+			if desc {
+				name = "desc"
+			}
+			t.Run(name, func(t *testing.T) {
+				served := walkPages(t, ctx, c, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "title", Desc: desc}}})
+				if desc {
 					// The tiebreak follows the requested direction, so reverse
 					// before asserting the same ascending invariant.
 					for i, j := 0, len(served)-1; i < j; i, j = i+1, j-1 {
 						served[i], served[j] = served[j], served[i]
 					}
 				}
-				assertWalkIsTotal(t, "walk sorted by title "+order, served, inserted)
+				assertWalkIsTotal(t, "walk sorted by title "+name, served, inserted)
 			})
 		}
 	})

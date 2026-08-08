@@ -5,112 +5,261 @@
 package fieldshapesent
 
 import (
+	"encoding"
+	"fmt"
+	"net/url"
+	"sort"
+	"strings"
+
 	"entgo.io/ent/dialect/sql"
 	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/nillablewidget"
 	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/predicate"
 	entapi "github.com/githonllc/entapi/runtime"
+	"github.com/google/uuid"
 )
 
-// ============================================================================
-// Query surface for NillableWidget — filters, free-text search and the sort
-// allow-list. They are three dimensions of one list endpoint, not three
-// features, so they are one artifact.
-//
-// Every field below carries at least one query-dimension word. A field with no
-// Searchable, Filterable or Sortable word is absent from all three, and there
-// is no runtime switch that can bring it back.
-// ============================================================================
-
-// NillableWidgetFilter is the structured query surface for NillableWidget.
-//
-// One parameter per operator per Filterable field, with the operator set taken
-// from ent's own per-type table ($field.Ops) rather than from a curated
-// selection: emitting an operator costs nothing here, whereas adding one later
-// means changing a template, regenerating and possibly breaking a URL contract
-// consumers already depend on. Substring-class operators (_contains,
-// _icontains, _ieq, _suffix) additionally require api.Searchable() on the field —
-// see docs/adr/0005.
-//
-// Every parameter is a pointer or a slice, because "absent" and "the zero
-// value" are different requests.
+// NillableWidgetFilter is the typed query representation for NillableWidget.
+// Repeated URL parameters occupy repeated slots and Predicates ANDs them.
 type NillableWidgetFilter struct {
+	// id: uuid.UUID
+	ID      []uuid.UUID   `json:"id,omitempty"`
+	IDNEQ   []uuid.UUID   `json:"id_neq,omitempty"`
+	IDIn    [][]uuid.UUID `json:"id_in,omitempty"`
+	IDNotIn [][]uuid.UUID `json:"id_not_in,omitempty"`
+	IDGT    []uuid.UUID   `json:"id_gt,omitempty"`
+	IDGTE   []uuid.UUID   `json:"id_gte,omitempty"`
+	IDLT    []uuid.UUID   `json:"id_lt,omitempty"`
+	IDLTE   []uuid.UUID   `json:"id_lte,omitempty"`
 }
 
-// Predicates converts the filter into ent predicates.
-//
-// The result is applied with Where(...), which combines conjunctively, so every
-// parameter the caller set narrows the result further. The free-text term is
-// the one disjunction: it ORs across the searchable fields and joins the rest
-// as a single conjunct.
-//
-// A nil receiver yields no predicates, so an endpoint with no filter bound does
-// not need a branch of its own.
+// Predicates converts the typed filter into conjunctive ent predicates.
 func (f *NillableWidgetFilter) Predicates() []predicate.NillableWidget {
 	if f == nil {
 		return nil
 	}
 	var ps []predicate.NillableWidget
+	entapi.AppendEach(&ps, f.ID, nillablewidget.IDEQ)
+	entapi.AppendEach(&ps, f.IDNEQ, nillablewidget.IDNEQ)
+	entapi.AppendEachSlice(&ps, f.IDIn, nillablewidget.IDIn)
+	entapi.AppendEachSlice(&ps, f.IDNotIn, nillablewidget.IDNotIn)
+	entapi.AppendEach(&ps, f.IDGT, nillablewidget.IDGT)
+	entapi.AppendEach(&ps, f.IDGTE, nillablewidget.IDGTE)
+	entapi.AppendEach(&ps, f.IDLT, nillablewidget.IDLT)
+	entapi.AppendEach(&ps, f.IDLTE, nillablewidget.IDLTE)
 	return ps
 }
 
-// nillableWidgetSortOptions maps an allowed sort key to ent's own order
-// builder for that column. It is unexported: the mapping is reached through
-// NillableWidgetOrder, which checks the key first.
-var nillableWidgetSortOptions = map[string]func(...sql.OrderTermOption) nillablewidget.OrderOption{}
+func parseNillableWidgetIDQueryValue(raw, whole string) (uuid.UUID, error) {
+	var parsed uuid.UUID
+	if err := encoding.TextUnmarshaler(&parsed).UnmarshalText([]byte(raw)); err != nil {
+		return parsed, fmt.Errorf("%w: field %q value %q is invalid: %v", entapi.ErrValidation, "id", whole, err)
+	}
+	return parsed, nil
+}
 
-// NillableWidgetSortKeys is the sort allow-list: exactly the fields annotated
-// Sortable, and nothing else.
-//
-// This is the load-bearing part of the query surface. An unchecked sort field
-// is an injection site, an unindexed-scan trigger and — combined with paging —
-// an ordering oracle over columns the caller was never meant to read. An entity
-// that marks nothing is orderable by nothing, which is the safe end of the
-// default rather than an oversight.
-var NillableWidgetSortKeys = []string{}
+// ParseNillableWidgetQuery parses the complete URL query contract in sorted-key
+// order. Runtime code owns lexical grammar; this generated switch owns the
+// field-local operator set, conversion and predicate slots.
+func ParseNillableWidgetQuery(q url.Values) (*NillableWidgetFilter, entapi.ListRequest, error) {
+	f := &NillableWidgetFilter{}
+	var request entapi.ListRequest
+	keys := make([]string, 0, len(q))
+	for key := range q {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		values := q[key]
+		reserved, recognized, err := entapi.ReservedQueryValue(key, values)
+		if err != nil {
+			return nil, entapi.ListRequest{}, err
+		}
+		if recognized {
+			switch key {
+			case "_sort":
+				request.Sort, err = entapi.ParseSortSpecs(reserved)
+			case "_page":
+				request.Page, err = entapi.ParsePageParam(key, reserved)
+			case "_size":
+				request.Size, err = entapi.ParsePageParam(key, reserved)
+			case "_q":
+				err = fmt.Errorf("%w: _q value %q is invalid because NillableWidget has no Searchable fields", entapi.ErrValidation, reserved)
+			}
+			if err != nil {
+				return nil, entapi.ListRequest{}, err
+			}
+			continue
+		}
+		if strings.HasPrefix(key, "_") {
+			return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown reserved query parameter %q", entapi.ErrValidation, key)
+		}
+		switch key {
+		case "id":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseNillableWidgetIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ID = append(f.ID, parsed)
+				case "ne":
+					parsed, parseErr := parseNillableWidgetIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDNEQ = append(f.IDNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]uuid.UUID, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseNillableWidgetIDQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.IDIn = append(f.IDIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]uuid.UUID, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseNillableWidgetIDQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.IDNotIn = append(f.IDNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseNillableWidgetIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGT = append(f.IDGT, parsed)
+				case "ge":
+					parsed, parseErr := parseNillableWidgetIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseNillableWidgetIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLT = append(f.IDLT, parsed)
+				case "le":
+					parsed, parseErr := parseNillableWidgetIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLTE = append(f.IDLTE, parsed)
+				case "from":
+					parsed, parseErr := parseNillableWidgetIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, parsed)
+				case "to":
+					parsed, parseErr := parseNillableWidgetIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLTE = append(f.IDLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseNillableWidgetIDQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseNillableWidgetIDQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, lower)
+					f.IDLTE = append(f.IDLTE, upper)
+				}
+			}
+		default:
+			switch key {
+			case "nickname":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+			case "handle":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+			case "quota":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+			default:
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown query field %q with value %q", entapi.ErrValidation, key, values)
+			}
+		}
+	}
+	return f, request, nil
+}
 
-// NillableWidgetOrder turns a list request into ent order options.
-//
-// The caller's string is checked against NillableWidgetSortKeys and then thrown
-// away: what reaches the query is the order builder ent generated for that
-// column, looked up by an already-validated key. No caller-supplied string is
-// ever interpolated into SQL.
-//
-// A key outside the allow-list is a validation error, not a silent fallback —
-// a request to sort by a column that is out of bounds has no correct answer,
-// and quietly serving a differently-ordered page is worse than refusing.
-//
-// There is still no default sort COLUMN. Which column to order by when the
-// caller names none is a policy the schema does not contain, so generation does
-// not invent one; a consumer that wants a default passes SortBy itself.
-//
-// Every result nevertheless ends with the primary key (ADR-0002). Offset
-// pagination is only correct over a TOTAL order: LIMIT/OFFSET over a result set
-// that is unordered, or ordered by a column with ties, lets rows repeat or
-// vanish between pages with zero concurrent writes. The primary key is unique,
-// so appending it turns any prefix order into a total one — that is the whole
-// correctness argument.
-//
-// The primary-key term is a determinism floor, not a default sort: the response
-// does not claim an ordering the caller never requested, it merely stops being
-// random. The tiebreak follows the requested direction so that a descending
-// walk stays descending, and it is skipped when the requested key IS the
-// primary key, since ORDER BY id, id says nothing the first term did not.
+var nillableWidgetSortOptions = map[string]func(...sql.OrderTermOption) nillablewidget.OrderOption{
+	"id": nillablewidget.ByID,
+}
+
+// NillableWidgetSortKeys is the complete sort allow-list. The primary key is
+// naturally Sortable; every other key requires api.Sortable().
+var NillableWidgetSortKeys = []string{
+	"id",
+}
+
+// NillableWidgetOrder is the single sort allow-list seam.
 func NillableWidgetOrder(r entapi.ListRequest) ([]nillablewidget.OrderOption, error) {
-	key, desc, err := r.SortKey(NillableWidgetSortKeys, "")
-	if err != nil {
-		return nil, err
-	}
-	dir := sql.OrderAsc()
-	if desc {
-		dir = sql.OrderDesc()
-	}
-	by, ok := nillableWidgetSortOptions[key]
-	if !ok {
+	if len(r.Sort) == 0 {
 		return []nillablewidget.OrderOption{nillablewidget.ByID(sql.OrderAsc())}, nil
 	}
-	order := []nillablewidget.OrderOption{by(dir)}
-	if key != "id" {
-		order = append(order, nillablewidget.ByID(dir))
+	order := make([]nillablewidget.OrderOption, 0, len(r.Sort)+1)
+	idPresent := false
+	lastDir := sql.OrderAsc()
+	for _, spec := range r.Sort {
+		by, ok := nillableWidgetSortOptions[spec.Key]
+		if !ok {
+			return nil, fmt.Errorf("%w: cannot sort by %q; legal keys: %s", entapi.ErrValidation, spec.Key, strings.Join(NillableWidgetSortKeys, ", "))
+		}
+		dir := sql.OrderAsc()
+		if spec.Desc {
+			dir = sql.OrderDesc()
+		}
+		order = append(order, by(dir))
+		lastDir = dir
+		if spec.Key == "id" {
+			idPresent = true
+		}
+	}
+	if !idPresent {
+		order = append(order, nillablewidget.ByID(lastDir))
 	}
 	return order, nil
 }

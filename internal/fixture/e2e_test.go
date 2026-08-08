@@ -105,7 +105,7 @@ func TestFilterSearchSortPaginate(t *testing.T) {
 	})
 
 	t.Run("sort by allow-listed field", func(t *testing.T) {
-		p, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{SortBy: "name", Order: "desc"})
+		p, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "name", Desc: true}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,14 +115,14 @@ func TestFilterSearchSortPaginate(t *testing.T) {
 	})
 
 	t.Run("sort by non-allow-listed field is rejected", func(t *testing.T) {
-		_, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{SortBy: "password_hash"})
+		_, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "password_hash"}}})
 		if !errors.Is(err, entapi.ErrValidation) {
 			t.Fatalf("want ErrValidation for password_hash sort, got %v", err)
 		}
 	})
 
 	t.Run("pagination", func(t *testing.T) {
-		p, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{SortBy: "name", Size: 2, Page: 2})
+		p, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "name"}}, Size: 2, Page: 2})
 		if err != nil {
 			t.Fatal(err)
 		}

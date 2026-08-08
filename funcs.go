@@ -57,12 +57,11 @@ func templateFuncs() template.FuncMap {
 
 		// Query surface: any dimension word enters the outer loop
 		// (funcs_filter.go)
-		"queryFields":  queryFields,
-		"searchFields": searchFields,
-		"isFilterable": isFilterable,
-		"isSearchable": isSearchable,
-		"isSortable":   isSortable,
-		"filterParams": filterParams,
+		"queryFields":        queryFields,
+		"parseFields":        parseFields,
+		"unfilterableFields": unfilterableFields,
+		"searchFields":       searchFields,
+		"isSortable":         isSortable,
 
 		// Soft delete: the graph-level traverser (funcs_softdelete.go)
 		"softDeleteTypes": softDeleteTypes,

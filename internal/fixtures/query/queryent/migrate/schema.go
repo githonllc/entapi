@@ -24,7 +24,7 @@ var (
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "title", Type: field.TypeString},
 		{Name: "body", Type: field.TypeString},
-		{Name: "ref", Type: field.TypeString, Nullable: true},
+		{Name: "reference", Type: field.TypeString, Nullable: true},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"draft", "live"}, Default: "draft"},
 		{Name: "score", Type: field.TypeInt, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},

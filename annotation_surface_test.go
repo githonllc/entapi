@@ -24,8 +24,8 @@ func TestEveryAnnotationKnobIsConsumedOrDeclaredPending(t *testing.T) {
 		"ResourceAnnotation.ExceptOps": {"hasCreateFamily", exceptChangesCreateFamily},
 		"FieldAnnotation.Hidden":       {"responseFields", hiddenChangesResponseFields},
 		"FieldAnnotation.ReadOnly":     {"createFields", readOnlyChangesCreateFields},
-		"FieldAnnotation.Searchable":   {"isSearchable", func() bool { return queryWordChanges(api.Searchable(), isSearchable) }},
-		"FieldAnnotation.Filterable":   {"isFilterable", func() bool { return queryWordChanges(api.Filterable(), isFilterable) }},
+		"FieldAnnotation.Searchable":   {"searchFields", searchableChangesSearchFields},
+		"FieldAnnotation.Filterable":   {"parseFields", filterableChangesParseFields},
 		"FieldAnnotation.Sortable":     {"isSortable", func() bool { return queryWordChanges(api.Sortable(), isSortable) }},
 		"EdgeAnnotation.Expand":        {"responseEdges", expandChangesResponseEdges},
 		"EdgeAnnotation.Key":           {"edgeJSONKey", keyChangesEdgeJSONKey},
@@ -106,6 +106,22 @@ func queryWordChanges(word api.FieldAnnotation, selector func(*gen.Field) bool) 
 	before := selector(field)
 	field.Annotations[fieldAnnotationName] = fieldPtr(word)
 	return before != selector(field)
+}
+
+func searchableChangesSearchFields() bool {
+	field := newStringField("value", fieldPtr(api.FieldAnnotation{}))
+	node := newTestType("Probe", field)
+	before := len(searchFields(node))
+	field.Annotations[fieldAnnotationName] = fieldPtr(api.Searchable())
+	return before != len(searchFields(node))
+}
+
+func filterableChangesParseFields() bool {
+	field := newStringField("value", fieldPtr(api.FieldAnnotation{}))
+	node := newTestType("Probe", field)
+	before := len(parseFields(node))
+	field.Annotations[fieldAnnotationName] = fieldPtr(api.Filterable())
+	return before != len(parseFields(node))
 }
 
 func expandChangesResponseEdges() bool {

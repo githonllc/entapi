@@ -4,7 +4,7 @@ package namedtypewidget
 
 import (
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/predicate"
 	"github.com/google/uuid"
 )
 

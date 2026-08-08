@@ -12,9 +12,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/doc"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/note"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/predicate"
 	"github.com/google/uuid"
 )
 

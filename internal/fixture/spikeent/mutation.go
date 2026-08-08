@@ -11,11 +11,11 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/category"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/post"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/predicate"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/tag"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/user"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/category"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/post"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/predicate"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/tag"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/user"
 	"github.com/google/uuid"
 )
 

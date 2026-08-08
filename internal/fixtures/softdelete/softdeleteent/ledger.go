@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/ledger"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
 	"github.com/google/uuid"
 )
 

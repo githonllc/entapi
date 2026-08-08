@@ -10,9 +10,9 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/predicate"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/sprocket"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/trinket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/sprocket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/trinket"
 	"github.com/google/uuid"
 )
 

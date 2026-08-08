@@ -5,7 +5,7 @@ package author
 import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/predicate"
 	"github.com/google/uuid"
 )
 

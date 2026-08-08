@@ -80,7 +80,7 @@ lint:
 
 fmt:
 	gofmt -w $(FMT_FILES)
-	goimports -w -local github.com/githonllc/entdomain $(FMT_FILES)
+	goimports -w -local github.com/githonllc/entapi $(FMT_FILES)
 
 vet:
 	go vet ./...

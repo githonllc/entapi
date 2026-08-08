@@ -12,10 +12,10 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/category"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/post"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/secret"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/user"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/category"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/post"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/secret"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/user"
 )
 
 // ent aliases to avoid import conflicts in user's code.

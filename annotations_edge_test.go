@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"testing"
@@ -19,7 +19,7 @@ func newEdge(name string, raw any) *gen.Edge {
 
 // realLoadedMap is the exact value ent hands to a generator for
 //
-//	edge.To("posts", Post.Type).Annotations(entdomain.Edge().InResponse())
+//	edge.To("posts", Post.Type).Annotations(entapi.Edge().InResponse())
 //
 // captured from entc.LoadGraph against internal/fixture/spikeent/schema. Keeping the
 // literal here rather than a hand-guessed shape is the point: the map branch of

@@ -9,16 +9,16 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/migrate"
 	"github.com/google/uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/enumwidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/jsonwidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/namedtypewidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/nillablewidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/enumwidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/jsonwidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/namedtypewidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/nillablewidget"
 )
 
 // Client is the client that holds all ent builders.

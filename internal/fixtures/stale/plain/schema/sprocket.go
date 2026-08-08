@@ -1,6 +1,6 @@
 // Package schema is the SECOND of the two schemas behind the "stale" fixture:
 // byte-for-byte the entity shapes of internal/fixtures/stale/annotated/schema
-// with Sprocket's entdomain annotations removed.
+// with Sprocket's entapi annotations removed.
 //
 // Generating this one over the target directory the annotated schema was
 // generated into is the "annotations removed between runs" case: Sprocket no

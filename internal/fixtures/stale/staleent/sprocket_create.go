@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/sprocket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/sprocket"
 	"github.com/google/uuid"
 )
 

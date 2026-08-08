@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/basic/basicent"
+	"github.com/githonllc/entapi/internal/fixtures/basic/basicent"
 )
 
 // The WidgetFunc type is an adapter to allow the use of ordinary

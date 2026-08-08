@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent"
 	// required by schema hooks.
-	_ "github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/runtime"
+	_ "github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/migrate"
 )
 
 type (

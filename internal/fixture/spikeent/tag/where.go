@@ -4,7 +4,7 @@ package tag
 
 import (
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/predicate"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/predicate"
 )
 
 // ID filters vertices based on their ID field.

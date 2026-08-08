@@ -9,8 +9,8 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/doc"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/note"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
 	"github.com/google/uuid"
 )
 

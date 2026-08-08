@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"reflect"
@@ -13,7 +13,7 @@ import (
 // DeleteBatch to write their own tombstone.
 //
 // #18 retired both. Soft delete is now declared by embedding
-// entdomain.SoftDeleteMixin (softdelete.go) and detected through the annotation
+// entapi.SoftDeleteMixin (softdelete.go) and detected through the annotation
 // the mixin attaches (funcs_softdelete.go), and the tombstone write happens in
 // one place: the generated hook. The convention could not tell an entity that
 // opted in from one that merely owns a column with that name, and it only ever
@@ -31,8 +31,8 @@ import (
 // underlying type is one of those.
 //
 // It decides which pointer helper the generated response constructor calls:
-// entdomain.PtrOrNil is [T comparable] and does not compile for such a type,
-// so those fields must go to entdomain.PtrNilSafe instead.
+// entapi.PtrOrNil is [T comparable] and does not compile for such a type,
+// so those fields must go to entapi.PtrNilSafe instead.
 //
 // The resolved type is the authority, not its rendered name. A named type
 // declared as `type Tags []string` renders as "schema.Tags" and matches no

@@ -5,9 +5,9 @@ package queryent
 import (
 	"time"
 
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/plain"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/record"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/plain"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/record"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/schema"
 	"github.com/google/uuid"
 )
 

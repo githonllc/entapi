@@ -9,7 +9,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Tree is self-referential, declared the way a schema author reaches for first.
@@ -22,14 +22,14 @@ func (Tree) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("name").
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		field.UUID("parent_id", uuid.UUID{}).
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 	}
 }
 
@@ -41,6 +41,6 @@ func (Tree) Edges() []ent.Edge {
 			From("parent").
 			Unique().
 			Field("parent_id").
-			Annotations(entdomain.Edge().InResponse()),
+			Annotations(entapi.Edge().InResponse()),
 	}
 }

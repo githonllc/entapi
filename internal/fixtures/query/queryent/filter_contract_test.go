@@ -22,9 +22,9 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/predicate"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/record"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/record"
+	entapi "github.com/githonllc/entapi/runtime"
 )
 
 // selectorSQL applies fns to a fresh selector over the record table and returns
@@ -97,10 +97,10 @@ func TestSortRejectsAnythingOutsideTheAllowList(t *testing.T) {
 		"(SELECT secret FROM records)", // not a column name
 	} {
 		t.Run(key, func(t *testing.T) {
-			opts, err := RecordOrder(entdomain.ListRequest{SortBy: key})
+			opts, err := RecordOrder(entapi.ListRequest{SortBy: key})
 
-			if !errors.Is(err, entdomain.ErrValidation) {
-				t.Fatalf("RecordOrder(SortBy=%q) error = %v, want one wrapping entdomain.ErrValidation", key, err)
+			if !errors.Is(err, entapi.ErrValidation) {
+				t.Fatalf("RecordOrder(SortBy=%q) error = %v, want one wrapping entapi.ErrValidation", key, err)
 			}
 			if len(opts) != 0 {
 				t.Fatalf("RecordOrder(SortBy=%q) returned %d order option(s) alongside the error", key, len(opts))
@@ -139,7 +139,7 @@ func TestSortAcceptsAnAllowedKeyInBothDirections(t *testing.T) {
 		{order: "DESC", wantDsc: true},
 	} {
 		t.Run("created_at/"+tc.order, func(t *testing.T) {
-			opts, err := RecordOrder(entdomain.ListRequest{SortBy: "created_at", Order: tc.order})
+			opts, err := RecordOrder(entapi.ListRequest{SortBy: "created_at", Order: tc.order})
 			if err != nil {
 				t.Fatalf("RecordOrder: unexpected error %v", err)
 			}
@@ -179,7 +179,7 @@ func TestSortAcceptsAnAllowedKeyInBothDirections(t *testing.T) {
 // makes the result total, and it is the only term returned here — the response
 // claims no ordering the caller did not request, it merely stops being random.
 func TestNoSortRequestedOrdersByID(t *testing.T) {
-	opts, err := RecordOrder(entdomain.ListRequest{})
+	opts, err := RecordOrder(entapi.ListRequest{})
 	if err != nil {
 		t.Fatalf("RecordOrder: unexpected error %v", err)
 	}

@@ -11,8 +11,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/predicate"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/trinket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/trinket"
 	"github.com/google/uuid"
 )
 

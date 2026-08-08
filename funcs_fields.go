@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"fmt"
@@ -88,7 +88,7 @@ func responseEdges(node *gen.Type) ([]*gen.Edge, error) {
 	for _, edge := range edges {
 		if len(domainFields(edge.Type)) == 0 {
 			return nil, fmt.Errorf(
-				"edge %s.%s is annotated for the response, but %s has no entdomain field annotation, "+
+				"edge %s.%s is annotated for the response, but %s has no entapi field annotation, "+
 					"so no %sSummary is generated: annotate a field on %s, or drop the edge annotation",
 				node.Name, edge.Name, edge.Type.Name, edge.Type.Name, edge.Type.Name)
 		}

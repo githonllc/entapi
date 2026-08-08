@@ -1,4 +1,4 @@
-// Package entdomain is the runtime half of the entdomain code generator: the
+// Package entapi is the runtime half of the entapi code generator: the
 // Layer 2 code a consumer's PRODUCTION binary links, and nothing else.
 //
 // It imports the standard library and nothing more. Not ent, not the ent
@@ -10,17 +10,17 @@
 // generator package, asserts the separation against `go list -deps` rather than
 // against a reading of these import blocks.
 //
-// The package name is deliberately entdomain rather than runtime: generated
-// code and consumer call sites read entdomain.ListPage, entdomain.ErrValidation
-// and entdomain.WithSoftDeleted whichever path they arrive by, so the move cost
+// The package name is deliberately entapi rather than runtime: generated
+// code and consumer call sites read entapi.ListPage, entapi.ErrValidation
+// and entapi.WithSoftDeleted whichever path they arrive by, so the move cost
 // exactly one line per file — the import — and no call site at all.
 //
 // # Import path
 //
-//	import "github.com/githonllc/entdomain/runtime"
+//	import "github.com/githonllc/entapi/runtime"
 //
 // The generation-time half — the annotation builders, SoftDeleteMixin and the
-// ent extension — stays at github.com/githonllc/entdomain and is imported by
+// ent extension — stays at github.com/githonllc/entapi and is imported by
 // schema files and entc.go. A file needing both imports both, aliasing one.
 //
 // [ListPage] runs a filtered, ordered, paginated query against anything
@@ -28,10 +28,10 @@
 // results. [GetOne] fetches one entity by id. Both infer all their type
 // arguments at the call site, including the identifier type:
 //
-//	user, err := entdomain.GetOne(ctx, db.User.Get, NewUserResponse, id)     // ID is uuid.UUID
-//	tag,  err := entdomain.GetOne(ctx, db.Tag.Get, NewTagResponse, tagID)    // ID is int
+//	user, err := entapi.GetOne(ctx, db.User.Get, NewUserResponse, id)     // ID is uuid.UUID
+//	tag,  err := entapi.GetOne(ctx, db.Tag.Get, NewTagResponse, tagID)    // ID is int
 //
-//	page, err := entdomain.ListPage(ctx, db.User.Query(),
+//	page, err := entapi.ListPage(ctx, db.User.Query(),
 //	    filter.Predicates(), orderOpts, req, NewUserResponse)
 //
 // [SaveOne] is the mutation half: it runs an ent create or update builder — both
@@ -39,7 +39,7 @@
 // it with the builder the validated request already wrote itself onto, so a
 // create or an update stays a single expression:
 //
-//	resp, err := entdomain.SaveOne(ctx, v.Apply(db.User.Create()), NewUserResponse)
+//	resp, err := entapi.SaveOne(ctx, v.Apply(db.User.Create()), NewUserResponse)
 //
 // [ListPage] uses offset pagination, which is O(n) deep, costs a COUNT per
 // page, and can skip or repeat rows under concurrent writes. It is also the
@@ -69,11 +69,11 @@
 // [ErrAlreadyExists]. It takes predicates as function values so the runtime
 // stays ent-free.
 //
-// Consumers do not construct one. Generation writes ent/entdomain_errors.go,
+// Consumers do not construct one. Generation writes ent/entapi_errors.go,
 // one declaration for the package, and every generated operation returns
 // through it:
 //
-//	var ErrorMap = entdomain.NewErrorMapper(IsNotFound, IsConstraintError)
+//	var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError)
 //
 // One variable rather than a per-call parameter is what makes IsNotFound answer
 // the same way whichever operation failed.
@@ -91,4 +91,4 @@
 // changes what reads return, the other changes what a delete does, and neither
 // implies the other. The schema-side half — SoftDeleteMixin — is in the
 // generator package, because a schema is only ever loaded at generation time.
-package entdomain
+package entapi

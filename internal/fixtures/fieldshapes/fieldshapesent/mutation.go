@@ -10,12 +10,12 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/enumwidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/jsonwidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/namedtypewidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/nillablewidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/predicate"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/enumwidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/jsonwidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/namedtypewidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/nillablewidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/schema"
 	"github.com/google/uuid"
 )
 

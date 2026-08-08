@@ -2,7 +2,7 @@
 // fixture: query annotations that contradict what ent generates for the field
 // they are attached to.
 //
-// Every field here is legal ent and legal entdomain in isolation. The
+// Every field here is legal ent and legal entapi in isolation. The
 // combination has no correct output at all, so generation is refused rather
 // than emitting a call to a function ent never wrote — which the consumer would
 // meet as an undefined symbol inside their own ent package, with nothing
@@ -14,7 +14,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Bad carries one instance of each contradiction, because the refusal reports
@@ -28,27 +28,27 @@ func (Bad) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		// Sortable, but a JSON column is not comparable, so ent's order-builder
 		// template skips it and there is no ByTags to put in the allow-list.
 		field.JSON("tags", []string{}).
 			Optional().
-			Annotations(entdomain.DefaultField().AsSortable()),
+			Annotations(entapi.DefaultField().AsSortable()),
 
 		// Searchable, but free-text search is a substring match and ent emits
 		// no Contains predicate for an int.
 		field.Int("count").
-			Annotations(entdomain.DefaultField().AsSearchable()),
+			Annotations(entapi.DefaultField().AsSearchable()),
 
 		// Filterable, but a required JSON column has no predicates at all —
 		// not even the null pair — so the filter group would be empty.
 		field.JSON("meta", map[string]string{}).
-			Annotations(entdomain.DefaultField().AsFilterable()),
+			Annotations(entapi.DefaultField().AsFilterable()),
 
 		// Filterable, but the annotation withholds the query scope, so the
 		// field is not exposed to the query API in the first place.
 		field.String("token").
-			Annotations(entdomain.InputOnlyField().AsFilterable()),
+			Annotations(entapi.InputOnlyField().AsFilterable()),
 	}
 }

@@ -9,14 +9,14 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/migrate"
 	"github.com/google/uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/sprocket"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/trinket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/sprocket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/trinket"
 )
 
 // Client is the client that holds all ent builders.

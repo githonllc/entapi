@@ -11,8 +11,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/ledger"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/predicate"
 )
 
 // LedgerUpdate is the builder for updating Ledger entities.

@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/tag"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/tag"
 )
 
 // TagCreate is the builder for creating a Tag entity.

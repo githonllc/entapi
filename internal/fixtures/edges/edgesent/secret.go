@@ -8,7 +8,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/secret"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/secret"
 	"github.com/google/uuid"
 )
 

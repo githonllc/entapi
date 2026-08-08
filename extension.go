@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-// Extension is the entdomain Ent extension.
+// Extension is the entapi Ent extension.
 type Extension struct {
 	// Config holds the extension configuration.
 	Config *ExtensionConfig
@@ -26,13 +26,13 @@ type Extension struct {
 // emitted unconditionally for an annotated entity, so there is nothing left to
 // switch on. See the migration note in README.md.
 type ExtensionConfig struct {
-	// EntDomainPackage is the import path generated code imports for the Layer 2
+	// EntAPIPackage is the import path generated code imports for the Layer 2
 	// runtime — ErrValidation, ListRequest, ListPage, the error mapper.
-	// Default: "github.com/githonllc/entdomain/runtime"
-	EntDomainPackage string
+	// Default: "github.com/githonllc/entapi/runtime"
+	EntAPIPackage string
 }
 
-// defaultEntDomainPackage is the RUNTIME package, not this one (#15).
+// defaultEntAPIPackage is the RUNTIME package, not this one (#15).
 //
 // The two were the same string until the runtime types moved out, and that is
 // what put the embedded templates and the template loader's init into every
@@ -40,18 +40,18 @@ type ExtensionConfig struct {
 // linked the generator. They are now different packages, and
 // TestRuntimePackageIsGeneratorFree is what keeps them apart.
 //
-// The runtime package is still named `entdomain`, so this changes the import
-// LINE in generated output and nothing else — every `entdomain.X` reference in
+// The runtime package is still named `entapi`, so this changes the import
+// LINE in generated output and nothing else — every `entapi.X` reference in
 // every generated file and every consumer call site is unaffected.
-const defaultEntDomainPackage = "github.com/githonllc/entdomain/runtime"
+const defaultEntAPIPackage = "github.com/githonllc/entapi/runtime"
 
 // NewExtension creates a new extension instance
 func NewExtension(config *ExtensionConfig) *Extension {
 	if config == nil {
 		config = &ExtensionConfig{}
 	}
-	if config.EntDomainPackage == "" {
-		config.EntDomainPackage = defaultEntDomainPackage
+	if config.EntAPIPackage == "" {
+		config.EntAPIPackage = defaultEntAPIPackage
 	}
 
 	return &Extension{
@@ -124,7 +124,7 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 
 		// PHASE 1 — render and format everything, write nothing.
 		//
-		// Separate files are produced for each Type that has entdomain
+		// Separate files are produced for each Type that has entapi
 		// annotations. Entities without annotations are skipped to avoid empty
 		// generated files.
 		//
@@ -183,7 +183,7 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 
 		// The soft-delete traverser is generated once per GRAPH, not per type:
 		// it is one type switch over the entities embedding
-		// entdomain.SoftDeleteMixin. It sits outside the loop above for a
+		// entapi.SoftDeleteMixin. It sits outside the loop above for a
 		// second reason too — that loop skips a node with no domain fields,
 		// and soft delete is a property of the ent schema rather than of the
 		// HTTP surface, so an entity with no annotated field at all still has
@@ -306,7 +306,7 @@ func (e *Extension) renderWiringFile(g *gen.Graph, node *gen.Type) (pendingFile,
 
 // renderErrorMapFile renders and formats the package-level error classifier the
 // wiring returns every error through.
-// Output: ent/entdomain_errors.go
+// Output: ent/entapi_errors.go
 //
 // It names ent's own IsNotFound and IsConstraintError, which are generated into
 // the consumer's package rather than exported by the framework — so this one
@@ -337,10 +337,10 @@ func (e *Extension) renderErrorMapFile(g *gen.Graph) (pendingFile, error) {
 // renderSoftDeleteFile renders and formats the soft-delete traverser, the
 // delete-rewriting hook and the single registration function, for the whole
 // graph at once.
-// Output: ent/entdomain_softdelete.go
+// Output: ent/entapi_softdelete.go
 //
 // It returns the zero pendingFile — an empty path — when no entity embeds
-// entdomain.SoftDeleteMixin, in which case nothing is written and
+// entapi.SoftDeleteMixin, in which case nothing is written and
 // removeStaleArtifacts deletes any file an earlier run left. A file holding an
 // empty type switch would compile, but it would also publish a
 // RegisterSoftDelete that quietly does nothing.
@@ -435,7 +435,7 @@ func writeFormatted(path string, formatted []byte) error {
 // templateFuncMap returns the combined template function map with Ent standard functions.
 //
 // The layering is Ent's gen.Funcs first, then templateFuncs(), then the
-// entdomainPkg closure — so a later source wins on a name collision, silently
+// entapiPkg closure — so a later source wins on a name collision, silently
 // and invisibly at the call site. That shadowing hazard is neutralised at the
 // source rather than managed here: templateFuncs() is required to stay
 // disjoint from gen.Funcs, which TestTemplateFuncsDoNotShadowEntBuiltins
@@ -455,8 +455,8 @@ func (e *Extension) templateFuncMap() template.FuncMap {
 		funcs[k] = v
 	}
 
-	pkg := e.Config.EntDomainPackage
-	funcs["entdomainPkg"] = func() string { return pkg }
+	pkg := e.Config.EntAPIPackage
+	funcs["entapiPkg"] = func() string { return pkg }
 
 	return funcs
 }
@@ -470,10 +470,10 @@ type Option func(*ExtensionConfig)
 // this extension has left, apart from the import path below. See the migration
 // note in README.md.
 
-// WithEntDomainPackage sets the import path for the entdomain package
-func WithEntDomainPackage(pkg string) Option {
+// WithEntAPIPackage sets the import path for the entapi package
+func WithEntAPIPackage(pkg string) Option {
 	return func(c *ExtensionConfig) {
-		c.EntDomainPackage = pkg
+		c.EntAPIPackage = pkg
 	}
 }
 

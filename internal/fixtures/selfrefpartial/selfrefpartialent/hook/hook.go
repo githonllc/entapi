@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent"
+	"github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent"
 )
 
 // The NodeFunc type is an adapter to allow the use of ordinary

@@ -10,8 +10,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/counter"
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/counter"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/predicate"
 )
 
 // CounterUpdate is the builder for updating Counter entities.

@@ -18,7 +18,7 @@ import (
 // response. The schema declares the two edges separately for this reason.
 func TestEdgeAnnotationsSurviveToCodegen(t *testing.T) {
 	g, err := entc.LoadGraph("./spikeent/schema", &gen.Config{
-		Package: "github.com/githonllc/entdomain/internal/fixture/spikeent",
+		Package: "github.com/githonllc/entapi/internal/fixture/spikeent",
 	})
 	if err != nil {
 		t.Fatalf("load graph: %v", err)
@@ -53,7 +53,7 @@ func TestEdgeAnnotationsSurviveToCodegen(t *testing.T) {
 // handle. Annotations do not arrive as the Go type they were written as.
 func TestEdgeAnnotationArrivesAsMap(t *testing.T) {
 	g, err := entc.LoadGraph("./spikeent/schema", &gen.Config{
-		Package: "github.com/githonllc/entdomain/internal/fixture/spikeent",
+		Package: "github.com/githonllc/entapi/internal/fixture/spikeent",
 	})
 	if err != nil {
 		t.Fatalf("load graph: %v", err)

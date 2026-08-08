@@ -10,8 +10,8 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent/node"
-	"github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent/node"
+	"github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent/predicate"
 	"github.com/google/uuid"
 )
 

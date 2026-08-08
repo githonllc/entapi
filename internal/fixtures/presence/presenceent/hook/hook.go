@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/presence/presenceent"
+	"github.com/githonllc/entapi/internal/fixtures/presence/presenceent"
 )
 
 // The AccountFunc type is an adapter to allow the use of ordinary

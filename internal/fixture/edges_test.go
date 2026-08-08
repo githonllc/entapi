@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/dto"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	"github.com/githonllc/entapi/internal/fixture/spikeent"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/dto"
+	entapi "github.com/githonllc/entapi/runtime"
 	"github.com/google/uuid"
 )
 
@@ -73,7 +73,7 @@ func TestToOneEdgeAndScalarAreIndependent(t *testing.T) {
 	u := mustUser(t, c, ctx, "writer", "writer@x.io")
 	mustPost(t, c, ctx, u.ID, "titled")
 
-	page, err := dto.ListPosts(ctx, c, entdomain.ListRequest{})
+	page, err := dto.ListPosts(ctx, c, entapi.ListRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}

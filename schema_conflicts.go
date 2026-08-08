@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 )
 
 // checkGraphConflicts rejects a graph this package cannot generate correct code
-// for — either because an entdomain annotation contradicts the ent schema it is
+// for — either because an entapi annotation contradicts the ent schema it is
 // attached to, or because the schema uses a shape the templates cannot express.
 //
 // The policy, decided on #10 and applying to every later generation slice:
@@ -56,7 +56,7 @@ func checkGraphConflicts(g *gen.Graph) error {
 	if len(conflicts) == 0 {
 		return nil
 	}
-	return fmt.Errorf("entdomain: %d schema problem(s) prevent generation:\n  - %s",
+	return fmt.Errorf("entapi: %d schema problem(s) prevent generation:\n  - %s",
 		len(conflicts), strings.Join(conflicts, "\n  - "))
 }
 
@@ -65,7 +65,7 @@ func checkGraphConflicts(g *gen.Graph) error {
 // none.
 //
 // Two ways that happens, and neither is reachable by embedding
-// entdomain.SoftDeleteMixin as documented — both mean the annotation was
+// entapi.SoftDeleteMixin as documented — both mean the annotation was
 // attached by hand or by another mixin:
 //
 //   - the named field is not on the entity, so there is no column to filter on;
@@ -84,7 +84,7 @@ func unusableSoftDeleteField(node *gen.Type) string {
 	if f == nil {
 		return fmt.Sprintf(
 			"%s: carries the %s marker naming field %q, but the entity has no such field. "+
-				"Soft delete is opted into by embedding entdomain.SoftDeleteMixin, which declares the field it marks; "+
+				"Soft delete is opted into by embedding entapi.SoftDeleteMixin, which declares the field it marks; "+
 				"attaching %s by hand is not supported",
 			node.Name, SoftDeleteAnnotationName, a.Field, SoftDeleteAnnotationName)
 	}
@@ -92,7 +92,7 @@ func unusableSoftDeleteField(node *gen.Type) string {
 		return fmt.Sprintf(
 			"%s.%s: is the soft-delete tombstone field but is not Optional, so ent generates no %s.%sIsNil predicate "+
 				"and the generated traverser (templates/softdelete.tmpl) would not compile. "+
-				"Use entdomain.SoftDeleteMixin, which declares the field Optional and Nillable",
+				"Use entapi.SoftDeleteMixin, which declares the field Optional and Nillable",
 			node.Name, f.Name, node.Package(), f.StructField())
 	}
 	return ""
@@ -185,7 +185,7 @@ func asymmetricSelfEdgeConflicts(node *gen.Type) []string {
 // chained form as the likely cause instead of asserting it.
 //
 // One end exposed on purpose stays expressible: annotate the other end with a
-// bare entdomain.Edge(). It grants no scope, so nothing about the output
+// bare entapi.Edge(). It grants no scope, so nothing about the output
 // changes; what changes is that the decision is written down where the next
 // reader, and this check, can see it.
 func asymmetricSelfEdgeConflict(node *gen.Type, assoc, inverse *gen.Edge, assocAnnotated bool) string {
@@ -207,9 +207,9 @@ func asymmetricSelfEdgeConflict(node *gen.Type, assoc, inverse *gen.Edge, assocA
 	return fmt.Sprintf(
 		"%s.%s / %s.%s: the two ends of this self-referential edge pair disagree — %s.%s %s while %s.%s carries no DomainEdge annotation at all, "+
 			"so %q appears in no response type and in no eager-load plan, and nothing else in generation says so; %s. "+
-			"Declare the two ends separately and give each its own annotation — edge.To(%q, %s.Type).Annotations(entdomain.Edge().InResponse()) "+
-			"and edge.From(%q, %s.Type).Ref(%q).Annotations(entdomain.Edge().InResponse()) — "+
-			"or, to expose %q alone on purpose, annotate %q with a bare entdomain.Edge(), which grants no scope and says the end was considered",
+			"Declare the two ends separately and give each its own annotation — edge.To(%q, %s.Type).Annotations(entapi.Edge().InResponse()) "+
+			"and edge.From(%q, %s.Type).Ref(%q).Annotations(entapi.Edge().InResponse()) — "+
+			"or, to expose %q alone on purpose, annotate %q with a bare entapi.Edge(), which grants no scope and says the end was considered",
 		node.Name, assoc.Name, node.Name, inverse.Name,
 		node.Name, annotated.Name, carries, node.Name, bare.Name,
 		bare.Name, cause,
@@ -239,7 +239,7 @@ func queryConflicts(node *gen.Type, f *gen.Field) []string {
 	if (a.Filterable || a.Searchable || a.Sortable) && !hasDomainScope(f, ScopeQuery) {
 		out = append(out, fmt.Sprintf(
 			"%s.%s: annotation marks the field %s but withholds scope %q, so it is not exposed to the query API and no query artifact is generated for it; "+
-				"add %s to the field's scopes (entdomain.DefaultField(), CreateOnlyField() and OutputOnlyField() all carry it), or drop the marker",
+				"add %s to the field's scopes (entapi.DefaultField(), CreateOnlyField() and OutputOnlyField() all carry it), or drop the marker",
 			node.Name, f.Name, markerList(a), ScopeQuery, ScopeQuery,
 		))
 	}
@@ -324,7 +324,7 @@ const (
 //
 // The failure it prevents (#62): ent generates `type ErrorMap` for an entity
 // called ErrorMap, templates/errors.tmpl generates `var ErrorMap` into
-// entdomain_errors.go, and Go gives types, variables and functions ONE
+// entapi_errors.go, and Go gives types, variables and functions ONE
 // identifier namespace per package — so the consumer's own ent package stops
 // compiling with `ErrorMap redeclared in this block`, in two files they did not
 // write, with nothing naming the extension as the cause.
@@ -362,11 +362,11 @@ func reservedNameConflicts(g *gen.Graph) []string {
 	// embeds the mixin.
 	if len(annotated) > 0 {
 		out = append(out, graphSymbolConflicts(g, errorMapSymbol, "var", errorMapFileName,
-			annotated, "carries entdomain annotations, so the error classifier is generated for this schema")...)
+			annotated, "carries entapi annotations, so the error classifier is generated for this schema")...)
 	}
 	if sd := softDeleteTypes(g); len(sd) > 0 {
 		out = append(out, graphSymbolConflicts(g, registerSoftDeleteSymbol, "func", softDeleteFileName,
-			sd, "embeds entdomain.SoftDeleteMixin, so the soft-delete wiring is generated for this schema")...)
+			sd, "embeds entapi.SoftDeleteMixin, so the soft-delete wiring is generated for this schema")...)
 	}
 
 	// The derived half: every pair of (annotated entity, any entity) where the
@@ -389,7 +389,7 @@ func reservedNameConflicts(g *gen.Graph) []string {
 //
 // causes are the entities that make the file be generated at all, and one of
 // them is named in the message, because that is the fact the author cannot see:
-// entdomain_errors.go carries no entity name, and an author staring at a
+// entapi_errors.go carries no entity name, and an author staring at a
 // redeclared ErrorMap has no way to tell which annotation summoned it. An entity
 // other than the colliding one is preferred as the witness — "ErrorMap is
 // annotated, therefore ErrorMap is generated" is true but says nothing.
@@ -506,7 +506,7 @@ var entPlural = mustEntPlural()
 func mustEntPlural() func(string) string {
 	fn, ok := gen.Funcs["plural"].(func(string) string)
 	if !ok {
-		panic("entdomain: entc/gen no longer exposes \"plural\" as func(string) string, " +
+		panic("entapi: entc/gen no longer exposes \"plural\" as func(string) string, " +
 			"so the derived names in schema_conflicts.go can no longer be spelled the way templates/wiring.tmpl spells them")
 	}
 	return fn
@@ -542,14 +542,14 @@ func derivedNameConflict(a, b *gen.Type, d derivedName) string {
 // encoding/json nor the generated Validate can observe a key that has no struct
 // field to land in — an API client would find out in production.
 //
-// Note that entdomain.DefaultField() grants ScopeUpdate, so an immutable field
+// Note that entapi.DefaultField() grants ScopeUpdate, so an immutable field
 // carrying the default annotation always lands here. That is intended: the fix
 // is one annotation, and it has to be written down somewhere.
 func immutableUpdateConflict(node *gen.Type, f *gen.Field) string {
 	return fmt.Sprintf(
 		"%s.%s: field is Immutable() in the ent schema but its DomainField annotation carries scope %q; "+
 			"ent generates no Set%s on %sUpdateOne (update builders iterate MutableFields), so no update request can be generated for it. "+
-			"Give the field an annotation without ScopeUpdate (entdomain.CreateOnlyField() or entdomain.OutputOnlyField()), or drop Immutable() from the field",
+			"Give the field an annotation without ScopeUpdate (entapi.CreateOnlyField() or entapi.OutputOnlyField()), or drop Immutable() from the field",
 		node.Name, f.Name, ScopeUpdate, f.StructField(), node.Name,
 	)
 }

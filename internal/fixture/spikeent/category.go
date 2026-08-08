@@ -8,7 +8,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/category"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/category"
 	"github.com/google/uuid"
 )
 

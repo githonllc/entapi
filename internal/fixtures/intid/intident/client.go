@@ -9,12 +9,12 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/migrate"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/counter"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/counter"
 )
 
 // Client is the client that holds all ent builders.

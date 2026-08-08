@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent"
+	"github.com/githonllc/entapi/internal/fixture/spikeent"
 )
 
 // The CategoryFunc type is an adapter to allow the use of ordinary

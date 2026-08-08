@@ -13,11 +13,11 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Tags is a named type whose underlying type is a slice. Reaching the generated
-// response constructor through entdomain.PtrOrNil (constraint: comparable) does
+// response constructor through entapi.PtrOrNil (constraint: comparable) does
 // not compile, so complex-type detection has to see through the name.
 type Tags []string
 
@@ -35,27 +35,27 @@ func (NillableWidget) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		// Nillable + optional: the entity field is *string.
 		field.String("nickname").
 			Optional().
 			Nillable().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		// Nillable + required on create: the create request must carry *string,
 		// because the create builder's setter is SetNillableHandle(*string).
 		field.String("handle").
 			Optional().
 			Nillable().
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 
 		// Same, non-string, so the required-field validator's string special
 		// case is not the only thing exercised.
 		field.Int("quota").
 			Optional().
 			Nillable().
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 	}
 }
 
@@ -70,16 +70,16 @@ func (EnumWidget) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.Enum("status").
 			Values("draft", "live").
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 
 		field.Enum("tier").
 			Values("free", "paid").
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 	}
 }
 
@@ -93,21 +93,21 @@ func (JSONWidget) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.JSON("tags", []string{}).
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		field.JSON("meta", map[string]string{}).
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		field.JSON("required_tags", []string{}).
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 
 		field.JSON("required_meta", map[string]string{}).
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 	}
 }
 
@@ -122,20 +122,20 @@ func (NamedTypeWidget) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.JSON("labels", Tags{}).
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		field.JSON("attrs", Attrs{}).
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		field.JSON("required_labels", Tags{}).
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 
 		field.JSON("required_attrs", Attrs{}).
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 	}
 }

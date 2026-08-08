@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/basic/basicent/widget"
+	"github.com/githonllc/entapi/internal/fixtures/basic/basicent/widget"
 	"github.com/google/uuid"
 )
 

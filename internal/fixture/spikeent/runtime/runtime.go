@@ -2,7 +2,7 @@
 
 package runtime
 
-// The schema-stitching logic is generated in github.com/githonllc/entdomain/internal/fixture/spikeent/runtime.go
+// The schema-stitching logic is generated in github.com/githonllc/entapi/internal/fixture/spikeent/runtime.go
 
 const (
 	Version = "v0.14.4"                                         // Version of ent codegen.

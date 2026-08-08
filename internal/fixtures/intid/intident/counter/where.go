@@ -4,7 +4,7 @@ package counter
 
 import (
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/predicate"
 )
 
 // ID filters vertices based on their ID field.

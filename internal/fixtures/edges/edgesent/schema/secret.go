@@ -5,7 +5,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Secret has no response-scoped field at all: every annotated field is
@@ -25,9 +25,9 @@ func (Secret) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("token").
-			Annotations(entdomain.InputOnlyField()),
+			Annotations(entapi.InputOnlyField()),
 	}
 }

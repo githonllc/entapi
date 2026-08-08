@@ -8,8 +8,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/post"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/predicate"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/post"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/predicate"
 )
 
 // PostDelete is the builder for deleting a Post entity.

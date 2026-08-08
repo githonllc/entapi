@@ -2,4 +2,4 @@
 
 package runtime
 
-// The schema-stitching logic is generated in github.com/githonllc/entdomain/internal/fixtures/basic/basicent/runtime.go
+// The schema-stitching logic is generated in github.com/githonllc/entapi/internal/fixtures/basic/basicent/runtime.go

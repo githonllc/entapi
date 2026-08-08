@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent"
+	"github.com/githonllc/entapi/internal/fixture/spikeent"
 	// required by schema hooks.
-	_ "github.com/githonllc/entdomain/internal/fixture/spikeent/runtime"
+	_ "github.com/githonllc/entapi/internal/fixture/spikeent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/migrate"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/migrate"
 )
 
 type (

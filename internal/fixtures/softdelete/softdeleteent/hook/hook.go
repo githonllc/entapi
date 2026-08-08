@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent"
 )
 
 // The DocFunc type is an adapter to allow the use of ordinary

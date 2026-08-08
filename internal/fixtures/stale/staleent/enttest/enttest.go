@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent"
 	// required by schema hooks.
-	_ "github.com/githonllc/entdomain/internal/fixtures/stale/staleent/runtime"
+	_ "github.com/githonllc/entapi/internal/fixtures/stale/staleent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/migrate"
 )
 
 type (

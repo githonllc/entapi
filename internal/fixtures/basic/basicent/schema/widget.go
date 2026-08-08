@@ -14,7 +14,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Widget is the single happy-path fixture entity. Its fields cover the three
@@ -29,21 +29,21 @@ func (Widget) Fields() []ent.Field {
 		// UUID primary key — BaseService hardcodes uuid.UUID in its signatures.
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		// create + update + response, required on create.
 		field.String("name").
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 
 		// create + update + response, optional — exercises the pointer branches.
 		field.String("description").
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		// response only — never settable from an HTTP request.
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
-			Annotations(entdomain.OutputOnlyField()),
+			Annotations(entapi.OutputOnlyField()),
 	}
 }

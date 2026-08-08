@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"go/ast"
@@ -38,7 +38,7 @@ var removedCursorSymbols = []string{
 //
 // It scans BOTH halves of the split #15 made: "." is this runtime package,
 // where a revived Cursor would most naturally land, and ".." is the generator
-// package, which is still named entdomain and still published. Checking only
+// package, which is still named entapi and still published. Checking only
 // the directory the test happens to sit in would have turned a guard on the
 // public API into a guard on one directory of it.
 func TestCursorSymbolsStayOutOfThePackage(t *testing.T) {
@@ -56,9 +56,9 @@ func TestCursorSymbolsStayOutOfThePackage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parsing %s: %v", dir, err)
 		}
-		pkg, ok := pkgs["entdomain"]
+		pkg, ok := pkgs["entapi"]
 		if !ok {
-			t.Fatalf("package entdomain not found in %s; this test would pass vacuously", dir)
+			t.Fatalf("package entapi not found in %s; this test would pass vacuously", dir)
 		}
 
 		for path, file := range pkg.Files {

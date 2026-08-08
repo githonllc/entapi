@@ -10,11 +10,11 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/category"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/post"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/predicate"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/secret"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/user"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/category"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/post"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/secret"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/user"
 	"github.com/google/uuid"
 )
 

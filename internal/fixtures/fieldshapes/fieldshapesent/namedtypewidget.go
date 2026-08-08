@@ -9,8 +9,8 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/namedtypewidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/namedtypewidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/schema"
 	"github.com/google/uuid"
 )
 

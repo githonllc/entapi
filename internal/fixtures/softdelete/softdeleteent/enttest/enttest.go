@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent"
 	// required by schema hooks.
-	_ "github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/runtime"
+	_ "github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/migrate"
 )
 
 type (

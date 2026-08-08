@@ -4,7 +4,7 @@ package secret
 
 import (
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/predicate"
 	"github.com/google/uuid"
 )
 

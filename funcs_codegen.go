@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"fmt"
@@ -16,16 +16,16 @@ import (
 // zero value. A Nillable field already arrives as *T and is copied straight
 // across.
 //
-// The entdomain qualifier is literal on purpose: the emitted file lands in the
+// The entapi qualifier is literal on purpose: the emitted file lands in the
 // consumer's package ent and imports this package under that name.
 func fieldValueExpr(field *gen.Field, recv string) string {
 	switch {
 	case field.Nillable:
 		return fmt.Sprintf("%s.%s", recv, field.StructField())
 	case field.Optional && isComplexFieldType(field):
-		return fmt.Sprintf("entdomain.PtrNilSafe(%s.%s)", recv, field.StructField())
+		return fmt.Sprintf("entapi.PtrNilSafe(%s.%s)", recv, field.StructField())
 	case field.Optional:
-		return fmt.Sprintf("entdomain.PtrOrNil(%s.%s)", recv, field.StructField())
+		return fmt.Sprintf("entapi.PtrOrNil(%s.%s)", recv, field.StructField())
 	default:
 		return fmt.Sprintf("%s.%s", recv, field.StructField())
 	}

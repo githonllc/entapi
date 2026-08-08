@@ -5,8 +5,8 @@ package basicent
 import (
 	"time"
 
-	"github.com/githonllc/entdomain/internal/fixtures/basic/basicent/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/basic/basicent/widget"
+	"github.com/githonllc/entapi/internal/fixtures/basic/basicent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/basic/basicent/widget"
 	"github.com/google/uuid"
 )
 

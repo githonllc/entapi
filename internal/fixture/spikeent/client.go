@@ -9,17 +9,17 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/migrate"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/migrate"
 	"github.com/google/uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/category"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/post"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/tag"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/user"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/category"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/post"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/tag"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/user"
 )
 
 // Client is the client that holds all ent builders.

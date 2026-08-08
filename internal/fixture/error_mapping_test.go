@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	"github.com/githonllc/entapi/internal/fixture/spikeent"
+	entapi "github.com/githonllc/entapi/runtime"
 	"github.com/google/uuid"
 )
 
@@ -14,8 +14,8 @@ import (
 // client and real SQLite. The root-package tests use fake predicates because
 // the runtime must be linkable without ent; this file checks that the fakes
 // were faithful to what ent actually does.
-func newMapper() entdomain.ErrorMapper {
-	return entdomain.NewErrorMapper(spikeent.IsNotFound, spikeent.IsConstraintError).
+func newMapper() entapi.ErrorMapper {
+	return entapi.NewErrorMapper(spikeent.IsNotFound, spikeent.IsConstraintError).
 		// The dialect-specific half belongs to the consumer, not the library.
 		// SQLite reports "UNIQUE constraint failed: tags.name (2067)"; Postgres
 		// would use SQLSTATE 23505.
@@ -34,13 +34,13 @@ func TestMapErrorAgainstRealEnt(t *testing.T) {
 			t.Fatal("expected a not-found error")
 		}
 		got := m.MapError(err)
-		if !entdomain.IsNotFound(got) {
+		if !entapi.IsNotFound(got) {
 			t.Fatalf("want ErrNotFound, got %v", got)
 		}
 		if !errors.Is(got, err) {
 			t.Error("the ent error must stay in the chain")
 		}
-		if entdomain.IsAlreadyExists(got) {
+		if entapi.IsAlreadyExists(got) {
 			t.Error("a missing row must not read as already-exists")
 		}
 	})
@@ -52,10 +52,10 @@ func TestMapErrorAgainstRealEnt(t *testing.T) {
 			t.Fatal("expected a uniqueness violation")
 		}
 		got := m.MapError(err)
-		if !entdomain.IsAlreadyExists(got) {
+		if !entapi.IsAlreadyExists(got) {
 			t.Fatalf("want ErrAlreadyExists, got %v", got)
 		}
-		if entdomain.IsNotFound(got) {
+		if entapi.IsNotFound(got) {
 			t.Error("a duplicate must not read as not-found")
 		}
 	})
@@ -72,10 +72,10 @@ func TestMapErrorAgainstRealEnt(t *testing.T) {
 			t.Fatalf("precondition: ent must call this a constraint error, got %T", err)
 		}
 		got := m.MapError(err)
-		if entdomain.IsAlreadyExists(got) {
+		if entapi.IsAlreadyExists(got) {
 			t.Fatalf("#13: a foreign-key violation must not be reported as a duplicate, got %v", got)
 		}
-		if entdomain.IsNotFound(got) {
+		if entapi.IsNotFound(got) {
 			t.Fatalf("a foreign-key violation must not read as not-found, got %v", got)
 		}
 		if got == nil || !errors.Is(got, err) {
@@ -90,7 +90,7 @@ func TestMapErrorAgainstRealEnt(t *testing.T) {
 // the two predicates classifies neither rather than guessing.
 func TestTwoPredicatesCannotSeeUniqueness(t *testing.T) {
 	c, ctx := newClient(t)
-	m := entdomain.NewErrorMapper(spikeent.IsNotFound, spikeent.IsConstraintError)
+	m := entapi.NewErrorMapper(spikeent.IsNotFound, spikeent.IsConstraintError)
 
 	c.Tag.Create().SetName("dup").SaveX(ctx)
 	dup, err := c.Tag.Create().SetName("dup").Save(ctx)
@@ -105,10 +105,10 @@ func TestTwoPredicatesCannotSeeUniqueness(t *testing.T) {
 	if !spikeent.IsConstraintError(err) || !spikeent.IsConstraintError(fkErr) {
 		t.Fatal("precondition: ent calls both a constraint error")
 	}
-	if entdomain.IsAlreadyExists(m.MapError(err)) {
+	if entapi.IsAlreadyExists(m.MapError(err)) {
 		t.Error("without a uniqueness predicate the mapper must not claim already-exists")
 	}
-	if entdomain.IsAlreadyExists(m.MapError(fkErr)) {
+	if entapi.IsAlreadyExists(m.MapError(fkErr)) {
 		t.Error("a foreign-key violation must never claim already-exists")
 	}
 }

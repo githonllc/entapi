@@ -11,8 +11,8 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/basic/basicent/predicate"
-	"github.com/githonllc/entdomain/internal/fixtures/basic/basicent/widget"
+	"github.com/githonllc/entapi/internal/fixtures/basic/basicent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/basic/basicent/widget"
 	"github.com/google/uuid"
 )
 

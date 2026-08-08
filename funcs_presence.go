@@ -1,11 +1,11 @@
-package entdomain
+package entapi
 
 import (
 	"entgo.io/ent/entc/gen"
 )
 
 // The request half of the DTO layer is three predicates over one field, and all
-// three read ent's own schema rather than a parallel set of entdomain booleans
+// three read ent's own schema rather than a parallel set of entapi booleans
 // (#26). That is not a style preference: ent decides which setters exist, so any
 // second opinion this package forms about a field's shape shows up as a call to
 // a method that was never generated.

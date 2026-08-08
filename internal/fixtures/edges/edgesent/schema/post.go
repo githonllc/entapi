@@ -6,7 +6,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Post carries both foreign keys, so it is where "expose the scalar" and
@@ -20,20 +20,20 @@ func (Post) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("title").
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		// Response-scoped scalar whose edge IS annotated.
 		field.UUID("author_id", uuid.UUID{}).
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		// Response-scoped scalar whose edge is NOT annotated. PostResponse must
 		// carry ReviewerID and must not carry Reviewer.
 		field.UUID("reviewer_id", uuid.UUID{}).
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 	}
 }
 
@@ -48,7 +48,7 @@ func (Post) Edges() []ent.Edge {
 			Unique().
 			Required().
 			Field("author_id").
-			Annotations(entdomain.Edge().InResponse()),
+			Annotations(entapi.Edge().InResponse()),
 
 		// Unannotated on purpose — see reviewer_id above.
 		edge.From("reviewer", User.Type).

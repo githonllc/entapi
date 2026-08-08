@@ -10,8 +10,8 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/counter"
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/counter"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/predicate"
 )
 
 const (

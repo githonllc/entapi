@@ -5,10 +5,10 @@ package wiringent
 import (
 	"time"
 
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/article"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/author"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/note"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/article"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/author"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/note"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/schema"
 	"github.com/google/uuid"
 )
 

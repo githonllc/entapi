@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent"
 )
 
 // The ArticleFunc type is an adapter to allow the use of ordinary

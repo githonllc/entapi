@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"strings"
@@ -124,7 +124,7 @@ func TestCheckGraphConflicts_AsymmetricSelfReferentialEdgePair(t *testing.T) {
 		"chained form",
 		`edge.To("children", Tree.Type)`,
 		`edge.From("parent", Tree.Type).Ref("children")`,
-		"entdomain.Edge()",
+		"entapi.Edge()",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error does not mention %q\ngot: %v", want, err)
@@ -177,7 +177,7 @@ func TestCheckGraphConflicts_UnannotatedSelfReferentialEdgePairIsAccepted(t *tes
 }
 
 // TestCheckGraphConflicts_BareEdgeAnnotationExpressesOneSidedIntent pins the
-// escape hatch the refusal message recommends. A bare entdomain.Edge() grants no
+// escape hatch the refusal message recommends. A bare entapi.Edge() grants no
 // scope, so the generated output is identical to the unannotated end's — the
 // only thing it changes is that the decision is on the page.
 //
@@ -189,10 +189,10 @@ func TestCheckGraphConflicts_BareEdgeAnnotationExpressesOneSidedIntent(t *testin
 	selfRefPair(node, Edge(), Edge().InResponse())
 
 	if err := checkGraphConflicts(graphOf(node)); err != nil {
-		t.Fatalf("a bare entdomain.Edge() must express deliberate non-exposure, got: %v", err)
+		t.Fatalf("a bare entapi.Edge() must express deliberate non-exposure, got: %v", err)
 	}
 	if hasEdgeScope(node.Edges[0], ScopeResponse) {
-		t.Error("a bare entdomain.Edge() must not put the edge in the response")
+		t.Error("a bare entapi.Edge() must not put the edge in the response")
 	}
 }
 
@@ -361,7 +361,7 @@ func TestCheckGraphConflicts_EntityNamedRegisterSoftDelete(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for an entity named after the generated RegisterSoftDelete, got nil")
 	}
-	for _, want := range []string{"RegisterSoftDelete", "entdomain_softdelete.go", "Doc embeds entdomain.SoftDeleteMixin", "rename"} {
+	for _, want := range []string{"RegisterSoftDelete", "entapi_softdelete.go", "Doc embeds entapi.SoftDeleteMixin", "rename"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error does not mention %q\ngot: %v", want, err)
 		}
@@ -414,8 +414,8 @@ func TestCheckGraphConflicts_DerivedPluralNameIsReserved(t *testing.T) {
 // is taken and nothing is refused. An unconditional refusal would reject a
 // schema that generates and compiles.
 func TestCheckGraphConflicts_ReservedNamesAreConditionalOnTheEmission(t *testing.T) {
-	// Nothing annotated anywhere -> no entdomain_errors.go.
-	// Nothing soft-deletable    -> no entdomain_softdelete.go.
+	// Nothing annotated anywhere -> no entapi_errors.go.
+	// Nothing soft-deletable    -> no entapi_softdelete.go.
 	g := graphOf(
 		newTestType("ErrorMap", newStringField("label", nil)),
 		newTestType("RegisterSoftDelete", newStringField("title", nil)),

@@ -11,7 +11,7 @@ import (
 
 func main() {
 	if err := entc.Generate("./schema", &gen.Config{
-		Package: "github.com/githonllc/entdomain/internal/fixture/spikeent",
+		Package: "github.com/githonllc/entapi/internal/fixture/spikeent",
 	}); err != nil {
 		log.Fatalf("running ent codegen: %v", err)
 	}

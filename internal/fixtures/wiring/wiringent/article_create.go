@@ -10,8 +10,8 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/article"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/author"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/article"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/author"
 	"github.com/google/uuid"
 )
 

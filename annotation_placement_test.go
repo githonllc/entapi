@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"go/ast"

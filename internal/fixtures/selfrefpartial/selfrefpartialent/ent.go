@@ -12,7 +12,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent/node"
+	"github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent/node"
 )
 
 // ent aliases to avoid import conflicts in user's code.

@@ -4,7 +4,7 @@ package note
 
 import (
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/predicate"
 	"github.com/google/uuid"
 )
 

@@ -2,4 +2,4 @@
 
 package runtime
 
-// The schema-stitching logic is generated in github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/runtime.go
+// The schema-stitching logic is generated in github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/runtime.go

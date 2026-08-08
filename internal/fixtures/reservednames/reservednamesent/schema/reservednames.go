@@ -4,13 +4,13 @@
 //
 //	ErrorMap  an ordinary annotated entity that happens to be called ErrorMap.
 //	          ent generates `type ErrorMap` for it; templates/errors.tmpl
-//	          generates `var ErrorMap` into entdomain_errors.go for any schema
+//	          generates `var ErrorMap` into entapi_errors.go for any schema
 //	          with an annotated entity. Both land in the consumer's one package,
 //	          so the two declarations are `redeclared in this block` — a compile
 //	          error inside the consumer's own repository with nothing pointing
 //	          back at this schema. Generation is therefore refused.
 //	Probe     the ordinary annotated entity that makes the refusal reachable:
-//	          entdomain_errors.go is only emitted when SOMETHING is annotated,
+//	          entapi_errors.go is only emitted when SOMETHING is annotated,
 //	          so an ErrorMap entity alone would prove nothing.
 //
 // Probe does double duty. It is also the probe entity of
@@ -34,11 +34,11 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // ErrorMap is the colliding entity. Nothing about it is unusual except its
-// name, which is the entire point: the schema is legal ent and legal entdomain
+// name, which is the entire point: the schema is legal ent and legal entapi
 // field-by-field, and only the generated package's identifier namespace says
 // no.
 type ErrorMap struct {
@@ -50,10 +50,10 @@ func (ErrorMap) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("label").
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 	}
 }
 
@@ -67,7 +67,7 @@ type Probe struct {
 // RegisterSoftDelete a generated name in this graph.
 func (Probe) Mixin() []ent.Mixin {
 	return []ent.Mixin{
-		entdomain.SoftDeleteMixin{},
+		entapi.SoftDeleteMixin{},
 	}
 }
 
@@ -76,14 +76,14 @@ func (Probe) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		// create + update + response + the full query surface. Create and
 		// update scopes are what make ProbeCreateRequest, ProbePatchRequest,
 		// CreateProbe and UpdateProbe reachable at all.
 		field.String("name").
-			Annotations(entdomain.DefaultField().
-				WithRequired(entdomain.ScopeCreate).
+			Annotations(entapi.DefaultField().
+				WithRequired(entapi.ScopeCreate).
 				AsFilterable().
 				AsSearchable().
 				AsSortable()),
@@ -92,6 +92,6 @@ func (Probe) Fields() []ent.Field {
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
-			Annotations(entdomain.OutputOnlyField().AsSortable()),
+			Annotations(entapi.OutputOnlyField().AsSortable()),
 	}
 }

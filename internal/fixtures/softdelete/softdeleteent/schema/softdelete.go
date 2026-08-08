@@ -2,7 +2,7 @@
 // codegen fixture: the three shapes the soft-delete traverser generation has to
 // tell apart (#18).
 //
-//	Doc     embeds entdomain.SoftDeleteMixin      -> soft-deletable
+//	Doc     embeds entapi.SoftDeleteMixin      -> soft-deletable
 //	Note    embeds nothing, owns Docs by an edge  -> hard delete, and the
 //	                                                 eager-load path a filtered
 //	                                                 sub-query has to reach
@@ -26,7 +26,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Doc is the conforming soft-deletable entity.
@@ -37,7 +37,7 @@ type Doc struct {
 // Mixin of the Doc. This one line is the whole opt-in.
 func (Doc) Mixin() []ent.Mixin {
 	return []ent.Mixin{
-		entdomain.SoftDeleteMixin{},
+		entapi.SoftDeleteMixin{},
 	}
 }
 
@@ -46,10 +46,10 @@ func (Doc) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("title").
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 	}
 }
 
@@ -59,7 +59,7 @@ func (Doc) Edges() []ent.Edge {
 		edge.From("note", Note.Type).
 			Ref("docs").
 			Unique().
-			Annotations(entdomain.Edge().InResponse()),
+			Annotations(entapi.Edge().InResponse()),
 	}
 }
 
@@ -76,10 +76,10 @@ func (Note) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("body").
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 	}
 }
 
@@ -87,7 +87,7 @@ func (Note) Fields() []ent.Field {
 func (Note) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("docs", Doc.Type).
-			Annotations(entdomain.Edge().InResponse()),
+			Annotations(entapi.Edge().InResponse()),
 	}
 }
 
@@ -102,15 +102,15 @@ func (Ledger) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("entry").
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 
 		// Named exactly like the retired convention's trigger, Optional so ent
 		// still generates a DeletedAtIsNil predicate for it — everything the
 		// old rule needed except Nillable. It is tracked by ent and appears in
-		// no HTTP struct, so it carries no entdomain annotation.
+		// no HTTP struct, so it carries no entapi annotation.
 		field.Time("deleted_at").
 			Optional(),
 	}

@@ -12,8 +12,8 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/sprocket"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/trinket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/sprocket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/trinket"
 )
 
 // ent aliases to avoid import conflicts in user's code.

@@ -8,7 +8,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/tag"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/tag"
 )
 
 // Tag is the model entity for the Tag schema.

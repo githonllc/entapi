@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent"
+	"github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent"
 	// required by schema hooks.
-	_ "github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent/runtime"
+	_ "github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent/migrate"
 )
 
 type (

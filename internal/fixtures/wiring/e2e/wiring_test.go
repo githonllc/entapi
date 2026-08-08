@@ -23,9 +23,9 @@ import (
 	// written from the consumer's side, so the alias keeps them reading the way
 	// the code they stand in for does. Being spelled out, it is also nothing
 	// goimports has to resolve.
-	ent "github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/article"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	ent "github.com/githonllc/entapi/internal/fixtures/wiring/wiringent"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/article"
+	entapi "github.com/githonllc/entapi/runtime"
 )
 
 // newClient opens a per-test in-memory database. A shared DSN would only work
@@ -76,7 +76,7 @@ func createArticle(t *testing.T, ctx context.Context, c *ent.Client, title strin
 	return got
 }
 
-func titles(p *entdomain.Page[ent.ArticleResponse]) []string {
+func titles(p *entapi.Page[ent.ArticleResponse]) []string {
 	out := make([]string, 0, len(p.Data))
 	for _, r := range p.Data {
 		out = append(out, r.Title)
@@ -137,7 +137,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 	})
 
 	t.Run("list applies the filter and the sort", func(t *testing.T) {
-		p, err := ent.ListArticles(ctx, c, &ent.ArticleFilter{}, entdomain.ListRequest{SortBy: "title", Order: "asc"})
+		p, err := ent.ListArticles(ctx, c, &ent.ArticleFilter{}, entapi.ListRequest{SortBy: "title", Order: "asc"})
 		if err != nil {
 			t.Fatalf("ListArticles: %v", err)
 		}
@@ -148,7 +148,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 			t.Errorf("ascending titles = %v, want %v", got, want)
 		}
 
-		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{}, entdomain.ListRequest{SortBy: "title", Order: "desc"})
+		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{}, entapi.ListRequest{SortBy: "title", Order: "desc"})
 		if err != nil {
 			t.Fatalf("ListArticles desc: %v", err)
 		}
@@ -156,7 +156,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 			t.Errorf("descending titles = %v, want %v", got, want)
 		}
 
-		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{TitleContains: ptr("a")}, entdomain.ListRequest{SortBy: "title"})
+		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{TitleContains: ptr("a")}, entapi.ListRequest{SortBy: "title"})
 		if err != nil {
 			t.Fatalf("ListArticles filtered: %v", err)
 		}
@@ -164,7 +164,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 			t.Errorf("contains 'a' total = %d, want 3", p.Total)
 		}
 
-		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{RankGTE: ptr(2)}, entdomain.ListRequest{SortBy: "title"})
+		p, err = ent.ListArticles(ctx, c, &ent.ArticleFilter{RankGTE: ptr(2)}, entapi.ListRequest{SortBy: "title"})
 		if err != nil {
 			t.Fatalf("ListArticles rank: %v", err)
 		}
@@ -174,7 +174,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 	})
 
 	t.Run("list pages", func(t *testing.T) {
-		p, err := ent.ListArticles(ctx, c, nil, entdomain.ListRequest{SortBy: "title", Size: 2, Page: 2})
+		p, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{SortBy: "title", Size: 2, Page: 2})
 		if err != nil {
 			t.Fatalf("ListArticles paged: %v", err)
 		}
@@ -192,7 +192,7 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 	// makes a field-set, type or order drift a compile error; this asserts the
 	// remaining half — that converting changes no byte of the payload.
 	t.Run("the named list shape marshals byte-identically to the page", func(t *testing.T) {
-		p, err := ent.ListArticles(ctx, c, nil, entdomain.ListRequest{SortBy: "title"})
+		p, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{SortBy: "title"})
 		if err != nil {
 			t.Fatalf("ListArticles: %v", err)
 		}
@@ -216,8 +216,8 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 
 	t.Run("list refuses a sort key outside the allow-list", func(t *testing.T) {
 		for _, key := range []string{"author_id", "title; DROP TABLE articles --", "id"} {
-			_, err := ent.ListArticles(ctx, c, nil, entdomain.ListRequest{SortBy: key})
-			if !errors.Is(err, entdomain.ErrValidation) {
+			_, err := ent.ListArticles(ctx, c, nil, entapi.ListRequest{SortBy: key})
+			if !errors.Is(err, entapi.ErrValidation) {
 				t.Errorf("sort by %q: err = %v, want ErrValidation", key, err)
 			}
 		}
@@ -332,7 +332,7 @@ func TestWiringWithoutResponseEdges(t *testing.T) {
 	// body is Filterable but not Searchable, so the substring class is not on
 	// this filter at all (ADR-0005). HasPrefix is the cheap-class operator, and
 	// which operator narrows the page is incidental to what this asserts.
-	p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: ptr("fir")}, entdomain.ListRequest{SortBy: "body"})
+	p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: ptr("fir")}, entapi.ListRequest{SortBy: "body"})
 	if err != nil {
 		t.Fatalf("ListNotes: %v", err)
 	}
@@ -354,13 +354,13 @@ func TestConsumerReplacesOneOperation(t *testing.T) {
 	// A consumer's own list operation: same generated predicates, converter and
 	// eager-load plan, but a hard-coded ordering and a tenancy-style predicate
 	// the generator has no way to know about.
-	listMine := func(ctx context.Context, db *ent.Client, f *ent.ArticleFilter, r entdomain.ListRequest) (*entdomain.Page[ent.ArticleResponse], error) {
+	listMine := func(ctx context.Context, db *ent.Client, f *ent.ArticleFilter, r entapi.ListRequest) (*entapi.Page[ent.ArticleResponse], error) {
 		q := ent.ArticleQueryWithResponseEdges(db.Article.Query())
 		ps := append(f.Predicates(), article.AuthorID(author.ID))
-		return entdomain.ListPage(ctx, q, ps, []article.OrderOption{article.ByTitle()}, r, ent.NewArticleResponse)
+		return entapi.ListPage(ctx, q, ps, []article.OrderOption{article.ByTitle()}, r, ent.NewArticleResponse)
 	}
 
-	p, err := listMine(ctx, c, &ent.ArticleFilter{}, entdomain.ListRequest{})
+	p, err := listMine(ctx, c, &ent.ArticleFilter{}, entapi.ListRequest{})
 	if err != nil {
 		t.Fatalf("consumer list: %v", err)
 	}

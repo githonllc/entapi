@@ -3,8 +3,8 @@ package fixture
 import (
 	"testing"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	"github.com/githonllc/entapi/internal/fixture/spikeent"
+	entapi "github.com/githonllc/entapi/runtime"
 	"github.com/google/uuid"
 )
 
@@ -43,7 +43,7 @@ func TestGetOneAcceptsAUUIDIdentifier(t *testing.T) {
 	u := mustUser(t, c, ctx, "uuid-keyed", "uuid@x.io")
 
 	// ID inferred as uuid.UUID from c.User.Get.
-	got, err := entdomain.GetOne(ctx, c.User.Get, newUserView, u.ID)
+	got, err := entapi.GetOne(ctx, c.User.Get, newUserView, u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestGetOneAcceptsAnIntIdentifier(t *testing.T) {
 
 	// ID inferred as int from c.Tag.Get. Same runtime function, same call
 	// shape, a different identifier type.
-	got, err := entdomain.GetOne(ctx, c.Tag.Get, newTagView, tag.ID)
+	got, err := entapi.GetOne(ctx, c.Tag.Get, newTagView, tag.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,8 +78,8 @@ func TestListPageDrivesASecondEntBuilder(t *testing.T) {
 		c.Tag.Create().SetName(n).SaveX(ctx)
 	}
 
-	page, err := entdomain.ListPage(ctx, c.Tag.Query(), nil, nil,
-		entdomain.ListRequest{Size: 2, Page: 2}, newTagView)
+	page, err := entapi.ListPage(ctx, c.Tag.Query(), nil, nil,
+		entapi.ListRequest{Size: 2, Page: 2}, newTagView)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,18 +95,18 @@ func TestListPageDrivesASecondEntBuilder(t *testing.T) {
 }
 
 // TestListPageClampsToMaxPageSizeAgainstEnt checks the bound decided in
-// entdomain reaches a real SQL LIMIT, not just the returned metadata.
+// entapi reaches a real SQL LIMIT, not just the returned metadata.
 func TestListPageClampsToMaxPageSizeAgainstEnt(t *testing.T) {
 	c, ctx := newClient(t)
 	c.Tag.Create().SetName("only").SaveX(ctx)
 
-	page, err := entdomain.ListPage(ctx, c.Tag.Query(), nil, nil,
-		entdomain.ListRequest{Size: 10_000}, newTagView)
+	page, err := entapi.ListPage(ctx, c.Tag.Query(), nil, nil,
+		entapi.ListRequest{Size: 10_000}, newTagView)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Size != entdomain.MaxPageSize {
-		t.Fatalf("Size = %d, want the clamped %d", page.Size, entdomain.MaxPageSize)
+	if page.Size != entapi.MaxPageSize {
+		t.Fatalf("Size = %d, want the clamped %d", page.Size, entapi.MaxPageSize)
 	}
 }
 
@@ -118,12 +118,12 @@ func TestListPageDoesNotPanicOnANonEmptyTable(t *testing.T) {
 		c.Tag.Create().SetName(n).SaveX(ctx)
 	}
 
-	for _, r := range []entdomain.ListRequest{
+	for _, r := range []entapi.ListRequest{
 		{Size: 0},
 		{Size: -1},
 		{Size: -1, Page: -1},
 	} {
-		page, err := entdomain.ListPage(ctx, c.Tag.Query(), nil, nil, r, newTagView)
+		page, err := entapi.ListPage(ctx, c.Tag.Query(), nil, nil, r, newTagView)
 		if err != nil {
 			t.Fatalf("%+v: %v", r, err)
 		}

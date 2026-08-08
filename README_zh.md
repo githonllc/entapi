@@ -1,7 +1,7 @@
-# EntDomain
+# EntAPI
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/githonllc/entdomain.svg)](https://pkg.go.dev/github.com/githonllc/entdomain)
-[![Go Report Card](https://goreportcard.com/badge/github.com/githonllc/entdomain)](https://goreportcard.com/report/github.com/githonllc/entdomain)
+[![Go Reference](https://pkg.go.dev/badge/github.com/githonllc/entapi.svg)](https://pkg.go.dev/github.com/githonllc/entapi)
+[![Go Report Card](https://goreportcard.com/badge/github.com/githonllc/entapi)](https://goreportcard.com/report/github.com/githonllc/entapi)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 一个 [Ent](https://entgo.io) 扩展。你在 ent schema 的字段上标注「HTTP 层可以拿它做什么」，
@@ -13,7 +13,7 @@
 ```go
 // schema/article.go —— 你写这个
 field.String("title").
-    Annotations(entdomain.DefaultField().AsSearchable().AsFilterable().AsSortable()),
+    Annotations(entapi.DefaultField().AsSearchable().AsFilterable().AsSortable()),
 ```
 
 ```go
@@ -60,7 +60,7 @@ art,  err := ent.CreateArticle(ctx, client, validReq)     // POST /articles
 ## 安装
 
 ```bash
-go get github.com/githonllc/entdomain
+go get github.com/githonllc/entapi
 ```
 
 `go.mod` 声明 `go 1.23`，唯一的非 `golang.org/x` 直接依赖是 `entgo.io/ent v0.14.4` 与
@@ -70,13 +70,13 @@ go get github.com/githonllc/entdomain
 
 ## 两个 import 路径
 
-一个 module，两个包，按**代码何时运行**切分。两者的包名都是 `entdomain`，所以无论从哪条
-路径来，调用点都写作 `entdomain.X`；同时需要两者的文件就都 import，并给其中一个起别名。
+一个 module，两个包，按**代码何时运行**切分。两者的包名都是 `entapi`，所以无论从哪条
+路径来，调用点都写作 `entapi.X`；同时需要两者的文件就都 import，并给其中一个起别名。
 
 | Import | 被谁 import | 主要符号 |
 |---|---|---|
-| `github.com/githonllc/entdomain` | 你的 `entc.go` 和你的 **schema** 文件 | `Extension`、`DomainField` 及其构造器、`Edge()`、`SoftDeleteMixin` |
-| `github.com/githonllc/entdomain/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`、`ErrorMapper`、`AppendIf`、`Ptr`/`PtrOrNil`/`PtrNilSafe`、`WithSoftDeleted`/`WithHardDelete` |
+| `github.com/githonllc/entapi` | 你的 `entc.go` 和你的 **schema** 文件 | `Extension`、`DomainField` 及其构造器、`Edge()`、`SoftDeleteMixin` |
+| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`、`ErrorMapper`、`AppendIf`、`Ptr`/`PtrOrNil`/`PtrNilSafe`、`WithSoftDeleted`/`WithHardDelete` |
 
 这个切分是承重的，不是整洁癖：根包用 `//go:embed` 内嵌五个模板，并在**包初始化时**把五份
 全部从内嵌文件系统里读出来，读不到就 panic。只要 import 根包，这件事就会发生，无论你是否
@@ -104,11 +104,11 @@ import (
 
     "entgo.io/ent/entc"
     "entgo.io/ent/entc/gen"
-    "github.com/githonllc/entdomain"
+    "github.com/githonllc/entapi"
 )
 
 func main() {
-    ext := entdomain.NewExtensionWithOptions()
+    ext := entapi.NewExtensionWithOptions()
 
     if err := entc.Generate("./schema", &gen.Config{
         Target:  "../ent",
@@ -119,15 +119,15 @@ func main() {
 }
 ```
 
-`WithEntDomainPackage` 是**仅有的一个**选项，它改写生成文件 import 的 runtime 路径，默认值
-就是 `github.com/githonllc/entdomain/runtime`，所以只在你 vendor 了一份副本时才有意义。
+`WithEntAPIPackage` 是**仅有的一个**选项，它改写生成文件 import 的 runtime 路径，默认值
+就是 `github.com/githonllc/entapi/runtime`，所以只在你 vendor 了一份副本时才有意义。
 `NewExtension(cfg)` 直接接受 `*ExtensionConfig` 且对 nil 安全。
 
 扩展只挂一个 `gen.Hook`。`Templates()` 返回**空切片**——本扩展不走 ent 的 `GraphTemplate`
 机制，它自己渲染并写盘。
 
 > **实现：** `extension.go` — `Extension`、`ExtensionConfig`、`NewExtension`、
-> `NewExtensionWithOptions`、`Option`、`WithEntDomainPackage`、`defaultEntDomainPackage`、
+> `NewExtensionWithOptions`、`Option`、`WithEntAPIPackage`、`defaultEntAPIPackage`、
 > `Hooks`、`Templates`、`Annotations`、`Options`、`ConfigAnnotation`
 
 ## 注解模型
@@ -147,14 +147,14 @@ func main() {
 `AsFilterable()`、`AsSearchable()`、`AsSortable()`。
 
 ```go
-entdomain.DefaultField()                    // create + update + query + response
-entdomain.InputOnlyField()                  // create + update           （密码）
-entdomain.OutputOnlyField()                 // query + response          （时间戳、计算态）
-entdomain.CreateOnlyField()                 // create + query + response （创建后不可变）
-entdomain.IdField()                         // OutputOnly + 预置描述 + ReadOnly 元数据
-entdomain.AuditLogField()                   // OutputOnly + ReadOnly 元数据
-entdomain.NewDomainField()                  // 零作用域——ent 追踪它，但它不出现在任何 HTTP 结构体里
-entdomain.DomainFieldWithScopes(scopes...)  // 其他任意组合
+entapi.DefaultField()                    // create + update + query + response
+entapi.InputOnlyField()                  // create + update           （密码）
+entapi.OutputOnlyField()                 // query + response          （时间戳、计算态）
+entapi.CreateOnlyField()                 // create + query + response （创建后不可变）
+entapi.IdField()                         // OutputOnly + 预置描述 + ReadOnly 元数据
+entapi.AuditLogField()                   // OutputOnly + ReadOnly 元数据
+entapi.NewDomainField()                  // 零作用域——ent 追踪它，但它不出现在任何 HTTP 结构体里
+entapi.DomainFieldWithScopes(scopes...)  // 其他任意组合
 ```
 
 **没有任何预设会授予标记。** 六个预设的函数体只写 `Scopes` 字段，`Searchable` /
@@ -163,7 +163,7 @@ entdomain.DomainFieldWithScopes(scopes...)  // 其他任意组合
 
 ```go
 field.String("title").
-    Annotations(entdomain.DefaultField().
+    Annotations(entapi.DefaultField().
         AsFilterable().     // 结构化 URL 参数：title、title_neq、title_in、title_prefix……
         AsSearchable().     // 加入全文 q 析取，并解锁子串类操作符
         AsSortable()),      // 进入 {E}SortKeys
@@ -188,7 +188,7 @@ field.String("title").
 func (Post) Edges() []ent.Edge {
     return []ent.Edge{
         edge.From("author", User.Type).Ref("posts").Unique().Field("author_id").
-            Annotations(entdomain.Edge().InResponse().As("writer")),
+            Annotations(entapi.Edge().InResponse().As("writer")),
     }
 }
 ```
@@ -219,8 +219,8 @@ func (Post) Edges() []ent.Edge {
 
 | 文件 | 生成条件 | 声明 |
 |---|---|---|
-| `entdomain_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
-| `entdomain_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | `RegisterSoftDelete`、查询 traverser、删除 hook |
+| `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
+| `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | `RegisterSoftDelete`、查询 traverser、删除 hook |
 
 软删除文件的条件独立于注解：一个**没有任何 domain 字段**的实体只要嵌了 mixin，仍然会被写进
 traverser 的类型开关。
@@ -271,7 +271,7 @@ payload key 记录的。这两者对每一个大小写变体都不一致，且�
 tag、但不精确相等的 key：
 
 ```
-unknown key "Nickname" (did you mean "nickname"?)   // 包装 entdomain.ErrValidation
+unknown key "Nickname" (did you mean "nickname"?)   // 包装 entapi.ErrValidation
 ```
 
 被拒绝的请求不会触碰你的接收者。折叠后**不匹配任何** tag 的 key 仍被忽略——拒绝那些是
@@ -284,7 +284,7 @@ unknown key "Nickname" (did you mean "nickname"?)   // 包装 entdomain.ErrValid
 
 ```go
 valid, err := req.Validate()          // *ValidArticleCreateRequest
-if err != nil { return err }          // 包装 entdomain.ErrValidation
+if err != nil { return err }          // 包装 entapi.ErrValidation
 art, err := ent.CreateArticle(ctx, client, valid)
 ```
 
@@ -329,7 +329,7 @@ art, err := ent.CreateArticle(ctx, client, valid)
 
 ### 具名列表类型
 
-`List{Es}` 返回 `*entdomain.Page[{E}Response]`。`{E}ListResponse` 是同一形状的非泛型具名
+`List{Es}` 返回 `*entapi.Page[{E}Response]`。`{E}ListResponse` 是同一形状的非泛型具名
 版本，因为 OpenAPI / swaggo 一类的工具无法表达泛型实例化：
 
 ```go
@@ -341,7 +341,7 @@ return c.JSON(200, ent.NewArticleListResponse(page))
 ```
 
 转换器的函数体是一次 Go 类型转换（`r := WidgetListResponse(*p)`），这正是要点：一旦
-`{E}ListResponse` 与 `entdomain.Page` 在字段集、类型或顺序上出现分歧，那一行会让**每一个**
+`{E}ListResponse` 与 `entapi.Page` 在字段集、类型或顺序上出现分歧，那一行会让**每一个**
 生成包编译失败。类型转换忽略 struct tag，所以 tag 那一半由一个 golden JSON 测试单独守住。
 
 > **实现：** `runtime/query.go` — `Page[R]`；生成物样例：
@@ -399,7 +399,7 @@ ent 认识而本包没有命名的操作符会被跳过，不会以错误的名�
 ### 排序——`AsSortable()`
 
 `{E}SortKeys` 是白名单，`{E}Order` 是把请求翻译成 ent order option 的函数。白名单之外的
-`sort_by` 是 `entdomain.ErrValidation`，绝不静默回退。通过校验的 key 随后被**丢弃**——进入
+`sort_by` 是 `entapi.ErrValidation`，绝不静默回退。通过校验的 key 随后被**丢弃**——进入
 查询的是 ent 为那一列生成的 order builder，从一张 `map[string]func(...) OrderOption` 里按
 已验证的 key 查出来。没有任何调用方字符串会被拼进 SQL。
 
@@ -420,7 +420,7 @@ ent 认识而本包没有命名的操作符会被跳过，不会以错误的名�
 
 ### 分页
 
-`entdomain.ListRequest{Size, Page, SortBy, Order}`——零值可直接用，四个字段都带 `form:` 与
+`entapi.ListRequest{Size, Page, SortBy, Order}`——零值可直接用，四个字段都带 `form:` 与
 `json:` tag。
 
 - `Limit()`：`Size <= 0` → 20（`DefaultPageSize`）；`Size > 1000` → 1000（`MaxPageSize`）；
@@ -428,7 +428,7 @@ ent 认识而本包没有命名的操作符会被跳过，不会以错误的名�
 - `Offset()`：`Page <= 1` → 0；否则 `(Page-1) * Limit()`，并在乘法溢出时**饱和到
   `math.MaxInt`** 而不是回绕成负数。
 - `Validate()` 对 `Size` 和 `Page` **一个字都不说**——它只检查 `Order`。如果你想让超界的
-  size 变成 4xx，自己和 `entdomain.MaxPageSize` 比较。
+  size 变成 4xx，自己和 `entapi.MaxPageSize` 比较。
 - `Page.Size` 报告的是**实际用掉的** size，所以钳制是可见的。
 
 分页只有 offset 一种，`Page` 携带 `Data`、`Total`、`Page`、`Size`，没有别的。
@@ -450,7 +450,7 @@ ent 认识而本包没有命名的操作符会被跳过，不会以错误的名�
 
 ```go
 func GetArticle(ctx context.Context, db *Client, id uuid.UUID) (*ArticleResponse, error)
-func ListArticles(ctx context.Context, db *Client, f *ArticleFilter, r entdomain.ListRequest) (*entdomain.Page[ArticleResponse], error)
+func ListArticles(ctx context.Context, db *Client, f *ArticleFilter, r entapi.ListRequest) (*entapi.Page[ArticleResponse], error)
 func CreateArticle(ctx context.Context, db *Client, v *ValidArticleCreateRequest) (*ArticleResponse, error)
 func UpdateArticle(ctx context.Context, db *Client, id uuid.UUID, v *ValidArticlePatchRequest) (*ArticleResponse, error)
 func DeleteArticle(ctx context.Context, db *Client, id uuid.UUID) error
@@ -463,13 +463,13 @@ func DeleteBatchArticles(ctx context.Context, db *Client, ids []uuid.UUID) (int,
 每个导出的接线函数都**恰好一次**地经由 `ErrorMap.MapError` 返回。文件里还有一组未导出的
 辅助函数（`{entity}Get`、`{entity}ByID`、`{entity}Reloaded`），它们存在正是为了让一次
 create 或 update 在重新读取时不会映射两次。于是
-`errors.Is(err, entdomain.ErrNotFound)` 在你的 handler 边界上直接可用，无需拆开 ent 的
+`errors.Is(err, entapi.ErrNotFound)` 在你的 handler 边界上直接可用，无需拆开 ent 的
 错误类型。
 
 `ErrorMap` 由模板发射**一行**：
 
 ```go
-var ErrorMap = entdomain.NewErrorMapper(IsNotFound, IsConstraintError)
+var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError)
 ```
 
 两个谓词都**不带限定符**，所以它们绑定到 ent 生成到**同一个包**里的那两个函数。这是必须的：
@@ -506,7 +506,7 @@ func init() {
 基于注解，且在 ent 的层面强制执行，而不是在生成的接线里：
 
 ```go
-func (Doc) Mixin() []ent.Mixin { return []ent.Mixin{entdomain.SoftDeleteMixin{}} }
+func (Doc) Mixin() []ent.Mixin { return []ent.Mixin{entapi.SoftDeleteMixin{}} }
 ```
 
 ```go
@@ -527,8 +527,8 @@ mixin 声明一个 `Optional().Nillable()` 的 `field.Time("deleted_at")`，并�
 两个互相独立的上下文开关让你按调用退出：
 
 ```go
-entdomain.WithSoftDeleted(ctx)   // 读取包含已删除的行
-entdomain.WithHardDelete(ctx)    // 这次删除是真删
+entapi.WithSoftDeleted(ctx)   // 读取包含已删除的行
+entapi.WithHardDelete(ctx)    // 这次删除是真删
 ```
 
 两者互不蕴含——它们用的是两个不同的未导出 context key 类型。
@@ -542,14 +542,14 @@ entdomain.WithHardDelete(ctx)    // 这次删除是真删
 > `softDeleteImports`；`runtime/softdelete_context.go` — `softDeletedKey`、`hardDeleteKey`、
 > `WithSoftDeleted`、`SoftDeletedIncluded`、`WithHardDelete`、`HardDeleteRequested`；
 > `templates/softdelete.tmpl`；生成物样例：
-> `internal/fixtures/softdelete/softdeleteent/entdomain_softdelete.go` —
+> `internal/fixtures/softdelete/softdeleteent/entapi_softdelete.go` —
 > `RegisterSoftDelete`、`softDeleteTraverser`、`softDeleteHook`
 
 ## 生成会失败，而这正是设计
 
 检查在 `next.Generate(g)` **之前**运行，所以一个被拒绝的 schema 不会在磁盘上留下任何东西
 ——连 ent 自己的产物都不会。整张图会被检查，所有问题**一次性全部报告**（错误形如
-`entdomain: N schema problem(s) prevent generation:` 后跟一条一行的清单）。政策是：
+`entapi: N schema problem(s) prevent generation:` 后跟一条一行的清单）。政策是：
 
 > 与 ent schema 相矛盾的注解会让生成失败，并同时报告两个事实和修法。凡是能被正确生成的，
 > 就生成，不拒绝。
@@ -568,7 +568,7 @@ entdomain.WithHardDelete(ctx)    // 这次删除是真删
 | 自引用边只在一端带注解 | ent 把链式的 `edge.To(…).From(…).Annotations(…)` 交给了*反向* builder，于是关联端静默丢失了它的注解 |
 | **实体名与本扩展生成的符号相撞** | 见下 |
 
-一个名为 `ErrorMap` 的实体会让 ent 发射 `type ErrorMap`，而 `entdomain_errors.go` 发射
+一个名为 `ErrorMap` 的实体会让 ent 发射 `type ErrorMap`，而 `entapi_errors.go` 发射
 `var ErrorMap`——Go 每个包只有一个标识符命名空间，于是 `redeclared in this block`，发生在
 两个你从没写过的文件里，且没有任何东西指出原因。`RegisterSoftDelete` 同理，跨实体相撞同理：
 一个字面叫 `ArticleResponse` 的实体会撞上实体 `Article` 生成的响应类型。
@@ -607,7 +607,7 @@ entdomain.WithHardDelete(ctx)    // 这次删除是真删
 ——失败的一轮什么都不删），生成器扫描目标目录，删除任何满足以下**两条**的 `.go` 文件：
 
 1. **首行**（读文件头 4096 字节后按第一个换行截断）包含
-   `Code generated by entdomain extension`，且
+   `Code generated by entapi extension`，且
 2. 不是本轮写入的。
 
 这就是为什么一次 schema 编辑不再弄红你的构建：删掉一个实体，它的
@@ -654,8 +654,8 @@ setter 存在，所以任何独立推导出的形态都会表现为「调用一�
 有一个 `Set<Field>`。（`Immutable` + `ScopeUpdate` 会先被生成期检查拒掉，所以这个交集今天
 一个字段都不丢——拒绝是作者看到的东西，过滤是让产物保持正确的东西。）
 
-在响应一侧，`Optional` 的可比较字段走 `entdomain.PtrOrNil`，`Optional` 的切片与映射
-——**包括**它们之上的具名类型——走 `entdomain.PtrNilSafe`，靠检查 `field.Type.RType.Kind`
+在响应一侧，`Optional` 的可比较字段走 `entapi.PtrOrNil`，`Optional` 的切片与映射
+——**包括**它们之上的具名类型——走 `entapi.PtrNilSafe`，靠检查 `field.Type.RType.Kind`
 而非渲染出来的类型名来选择。
 
 `Apply` 一律发射 `if r.X != nil { b.SetX(*r.X) }`，绝不用 `SetNillableX`：对一个本身就可为
@@ -712,7 +712,7 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
 7. **PATCH body 里出现的 `Immutable()` 字段会被 `encoding/json` 在任何验证器运行之前丢弃。**
    拒绝它需要你的 handler 用 `DisallowUnknownFields`；生成器看不见它。（合法 key 的大小写
    *变体*会被拒绝——真正未知的 key 不会。）
-8. **`entdomain.IsNotFound` 不是 ent 的 `IsNotFound`。** 生成模板以*不限定*的形式调用后者，
+8. **`entapi.IsNotFound` 不是 ent 的 `IsNotFound`。** 生成模板以*不限定*的形式调用后者，
    使其绑定到你包内 ent 生成的谓词。加上限定符照样编译，然后静默地什么都匹配不上。
 9. **每个 metadata 构造器都是 no-op。** `WithFormat("email")` 不验证任何东西。
 10. **`DeleteBatch` 对匹配不到的 id 返回计数而非错误。** 那个 `int` 是你了解「实际存在多少
@@ -746,7 +746,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 |---|---|
 | §1.6 产物移到 `ent/dto` 子包 | **未做，且已被取代**。产物落在消费者的 `ent` 包里，handler 解耦由生成的自由函数达成，而不是由包放置达成 |
 | §8.1 目录里存在「不是我的」文件 → 拒绝生成 | **未做**。清理把这类文件**留下并记日志**。它原本依赖 §1.6 的独占目录 |
-| §8.4 `OutputPackage` 配置项 | **未做**，因 §1.6 未做而无意义。唯一的选项是 `WithEntDomainPackage` |
+| §8.4 `OutputPackage` 配置项 | **未做**，因 §1.6 未做而无意义。唯一的选项是 `WithEntAPIPackage` |
 
 设计文档里明确「延后」的 T2（受众维度）同样没有实现，这与设计一致。
 
@@ -765,7 +765,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 | `DomainField.Sensitive`、`AsSensitive` | 不给字段 `ScopeResponse` |
 | `DomainField.UniqueLookup`、`.RangeLookup`、`.Validation` | `AsFilterable()`（运算符从 ent 的 `$field.Ops` 导出）；`Validate()` |
 | `DomainConfig.EntityName` | 无——没有读者 |
-| 运行时符号住在根包 | 全部搬到 `github.com/githonllc/entdomain/runtime` |
+| 运行时符号住在根包 | 全部搬到 `github.com/githonllc/entapi/runtime` |
 
 ## 还可以读什么
 

@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ import (
 // only works while the formatter does — and the formatter is exactly what fails
 // when a template regresses.
 //
-// Imports the template names itself (fmt, entdomain) are not returned here.
+// Imports the template names itself (fmt, entapi) are not returned here.
 func dtoImports(node *gen.Type) []string {
 	if node == nil {
 		return nil

@@ -8,7 +8,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/enumwidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/enumwidget"
 	"github.com/google/uuid"
 )
 

@@ -3,9 +3,9 @@
 package staleent
 
 import (
-	"github.com/githonllc/entdomain/internal/fixtures/stale/plain/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/sprocket"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/trinket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/plain/schema"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/sprocket"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/trinket"
 	"github.com/google/uuid"
 )
 

@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"encoding/json"
@@ -110,7 +110,7 @@ func softDeleteField(node *gen.Type) *gen.Field {
 }
 
 // softDeleteImports returns the import specs the traverser file needs beyond
-// the ones it names itself (context, time, entdomain): one entity subpackage
+// the ones it names itself (context, time, entapi): one entity subpackage
 // per soft-deletable type, which is where ent puts the DeletedAtIsNil
 // predicate.
 func softDeleteImports(g *gen.Graph) []string {

@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/jsonwidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/jsonwidget"
 	"github.com/google/uuid"
 )
 

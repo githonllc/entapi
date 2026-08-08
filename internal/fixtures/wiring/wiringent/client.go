@@ -9,16 +9,16 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/migrate"
 	"github.com/google/uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/article"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/author"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/note"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/article"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/author"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/note"
 )
 
 // Client is the client that holds all ent builders.

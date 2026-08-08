@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident"
 )
 
 // The CounterFunc type is an adapter to allow the use of ordinary

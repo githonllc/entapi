@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	entdomain "github.com/githonllc/entdomain/runtime"
+	entapi "github.com/githonllc/entapi/runtime"
 	"github.com/google/uuid"
 )
 
@@ -125,8 +125,8 @@ func TestCreateRejectsAMissingRequiredField(t *testing.T) {
 			if err == nil {
 				t.Fatalf("Validate() accepted %s, but %q is required", tc.body, tc.want)
 			}
-			if !errors.Is(err, entdomain.ErrValidation) {
-				t.Errorf("error %v does not wrap entdomain.ErrValidation", err)
+			if !errors.Is(err, entapi.ErrValidation) {
+				t.Errorf("error %v does not wrap entapi.ErrValidation", err)
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("error %q does not name the field %q", err, tc.want)
@@ -187,8 +187,8 @@ func TestPatchRejectsAnExplicitNullOnANonOptionalField(t *testing.T) {
 			t.Errorf("Validate() accepted %s, but %q is not optional and cannot be cleared", tc.body, tc.want)
 			continue
 		}
-		if !errors.Is(err, entdomain.ErrValidation) {
-			t.Errorf("error %v does not wrap entdomain.ErrValidation", err)
+		if !errors.Is(err, entapi.ErrValidation) {
+			t.Errorf("error %v does not wrap entapi.ErrValidation", err)
 		}
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("error %q does not name the field %q", err, tc.want)
@@ -261,8 +261,8 @@ func TestCaseVariantKeysAreRejected(t *testing.T) {
 			if err == nil {
 				t.Fatalf("decoding %s succeeded; %q folds to the tag %q, so the field decodes while presence does not record it", tc.body, tc.variant, tc.canonical)
 			}
-			if !errors.Is(err, entdomain.ErrValidation) {
-				t.Errorf("error %v does not wrap entdomain.ErrValidation", err)
+			if !errors.Is(err, entapi.ErrValidation) {
+				t.Errorf("error %v does not wrap entapi.ErrValidation", err)
 			}
 			if !strings.Contains(err.Error(), tc.variant) {
 				t.Errorf("error %q does not name the offending key %q", err, tc.variant)

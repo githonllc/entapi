@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/dto"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/user"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	"github.com/githonllc/entapi/internal/fixture/spikeent"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/dto"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/user"
+	entapi "github.com/githonllc/entapi/runtime"
 
 	stdsql "database/sql"
 	"entgo.io/ent/dialect"
@@ -73,7 +73,7 @@ func TestFilterSearchSortPaginate(t *testing.T) {
 
 	t.Run("filter by enum", func(t *testing.T) {
 		active := user.StatusActive
-		p, err := dto.ListUsers(ctx, c, &dto.UserFilter{Status: &active}, entdomain.ListRequest{})
+		p, err := dto.ListUsers(ctx, c, &dto.UserFilter{Status: &active}, entapi.ListRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -84,7 +84,7 @@ func TestFilterSearchSortPaginate(t *testing.T) {
 
 	t.Run("free-text q ORs across searchable fields", func(t *testing.T) {
 		// "alice" hits name=alice, name=alicia(no), email=alice@a.io, email=dave-alice@d.io
-		p, err := dto.ListUsers(ctx, c, &dto.UserFilter{Q: ptr("alice")}, entdomain.ListRequest{})
+		p, err := dto.ListUsers(ctx, c, &dto.UserFilter{Q: ptr("alice")}, entapi.ListRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +95,7 @@ func TestFilterSearchSortPaginate(t *testing.T) {
 
 	t.Run("q ANDs with filters", func(t *testing.T) {
 		banned := user.StatusBanned
-		p, err := dto.ListUsers(ctx, c, &dto.UserFilter{Q: ptr("alice"), Status: &banned}, entdomain.ListRequest{})
+		p, err := dto.ListUsers(ctx, c, &dto.UserFilter{Q: ptr("alice"), Status: &banned}, entapi.ListRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +105,7 @@ func TestFilterSearchSortPaginate(t *testing.T) {
 	})
 
 	t.Run("sort by allow-listed field", func(t *testing.T) {
-		p, err := dto.ListUsers(ctx, c, nil, entdomain.ListRequest{SortBy: "name", Order: "desc"})
+		p, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{SortBy: "name", Order: "desc"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,14 +115,14 @@ func TestFilterSearchSortPaginate(t *testing.T) {
 	})
 
 	t.Run("sort by non-allow-listed field is rejected", func(t *testing.T) {
-		_, err := dto.ListUsers(ctx, c, nil, entdomain.ListRequest{SortBy: "password_hash"})
-		if !errors.Is(err, entdomain.ErrValidation) {
+		_, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{SortBy: "password_hash"})
+		if !errors.Is(err, entapi.ErrValidation) {
 			t.Fatalf("want ErrValidation for password_hash sort, got %v", err)
 		}
 	})
 
 	t.Run("pagination", func(t *testing.T) {
-		p, err := dto.ListUsers(ctx, c, nil, entdomain.ListRequest{SortBy: "name", Size: 2, Page: 2})
+		p, err := dto.ListUsers(ctx, c, nil, entapi.ListRequest{SortBy: "name", Size: 2, Page: 2})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,7 +132,7 @@ func TestFilterSearchSortPaginate(t *testing.T) {
 	})
 
 	t.Run("response omits InputOnly field", func(t *testing.T) {
-		p, _ := dto.ListUsers(ctx, c, nil, entdomain.ListRequest{})
+		p, _ := dto.ListUsers(ctx, c, nil, entapi.ListRequest{})
 		b, _ := json.Marshal(p.Data[0])
 		if bytesContains(b, "password") {
 			t.Fatalf("password leaked into response: %s", b)
@@ -223,7 +223,7 @@ func TestPatchThreeStates(t *testing.T) {
 		if err := json.Unmarshal([]byte(`{"name":null}`), &req); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := req.Validate(); !errors.Is(err, entdomain.ErrValidation) {
+		if _, err := req.Validate(); !errors.Is(err, entapi.ErrValidation) {
 			t.Fatalf("want ErrValidation for null name, got %v", err)
 		}
 	})

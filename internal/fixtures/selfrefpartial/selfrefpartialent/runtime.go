@@ -3,8 +3,8 @@
 package selfrefpartialent
 
 import (
-	"github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent/node"
-	"github.com/githonllc/entdomain/internal/fixtures/selfrefpartial/selfrefpartialent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent/node"
+	"github.com/githonllc/entapi/internal/fixtures/selfrefpartial/selfrefpartialent/schema"
 	"github.com/google/uuid"
 )
 

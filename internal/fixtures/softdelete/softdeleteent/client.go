@@ -9,16 +9,16 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/migrate"
 	"github.com/google/uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/doc"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/ledger"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/note"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
 )
 
 // Client is the client that holds all ent builders.

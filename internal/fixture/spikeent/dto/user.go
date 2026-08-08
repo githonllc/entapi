@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/predicate"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/user"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	"github.com/githonllc/entapi/internal/fixture/spikeent"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/predicate"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/user"
+	entapi "github.com/githonllc/entapi/runtime"
 	"github.com/google/uuid"
 )
 
@@ -94,20 +94,20 @@ type ValidUserCreateRequest struct{ r *UserCreateRequest }
 
 func (r *UserCreateRequest) Validate() (*ValidUserCreateRequest, error) {
 	if r == nil {
-		return nil, fmt.Errorf("%w: create request is nil", entdomain.ErrValidation)
+		return nil, fmt.Errorf("%w: create request is nil", entapi.ErrValidation)
 	}
 	if r.Name == "" {
-		return nil, fmt.Errorf("%w: name is required", entdomain.ErrValidation)
+		return nil, fmt.Errorf("%w: name is required", entapi.ErrValidation)
 	}
 	if r.Email == "" {
-		return nil, fmt.Errorf("%w: email is required", entdomain.ErrValidation)
+		return nil, fmt.Errorf("%w: email is required", entapi.ErrValidation)
 	}
 	if r.PasswordHash == "" {
-		return nil, fmt.Errorf("%w: password_hash is required", entdomain.ErrValidation)
+		return nil, fmt.Errorf("%w: password_hash is required", entapi.ErrValidation)
 	}
 	if r.Status != nil {
 		if err := user.StatusValidator(*r.Status); err != nil {
-			return nil, fmt.Errorf("%w: %v", entdomain.ErrValidation, err)
+			return nil, fmt.Errorf("%w: %v", entapi.ErrValidation, err)
 		}
 	}
 	return &ValidUserCreateRequest{r: r}, nil
@@ -181,7 +181,7 @@ type ValidUserPatchRequest struct{ r *UserPatchRequest }
 // fields that are Optional and present in MutableFields.
 func (r *UserPatchRequest) Validate() (*ValidUserPatchRequest, error) {
 	if r == nil {
-		return nil, fmt.Errorf("%w: patch request is nil", entdomain.ErrValidation)
+		return nil, fmt.Errorf("%w: patch request is nil", entapi.ErrValidation)
 	}
 	for _, f := range []struct {
 		name    string
@@ -193,12 +193,12 @@ func (r *UserPatchRequest) Validate() (*ValidUserPatchRequest, error) {
 		{"status", r.HasStatus(), r.Status == nil},
 	} {
 		if f.present && f.isNull {
-			return nil, fmt.Errorf("%w: %s cannot be null", entdomain.ErrValidation, f.name)
+			return nil, fmt.Errorf("%w: %s cannot be null", entapi.ErrValidation, f.name)
 		}
 	}
 	if r.HasStatus() && r.Status != nil {
 		if err := user.StatusValidator(*r.Status); err != nil {
-			return nil, fmt.Errorf("%w: %v", entdomain.ErrValidation, err)
+			return nil, fmt.Errorf("%w: %v", entapi.ErrValidation, err)
 		}
 	}
 	return &ValidUserPatchRequest{r: r}, nil
@@ -412,7 +412,7 @@ var userSortable = map[string]func(...sql.OrderTermOption) user.OrderOption{
 // UserSortKeys is the allow-list handed to the runtime validator.
 var UserSortKeys = []string{"name", "created_at"}
 
-func UserOrder(r entdomain.ListRequest) ([]user.OrderOption, error) {
+func UserOrder(r entapi.ListRequest) ([]user.OrderOption, error) {
 	key, desc, err := r.SortKey(UserSortKeys, "created_at")
 	if err != nil {
 		return nil, err
@@ -436,15 +436,15 @@ func UserOrder(r entdomain.ListRequest) ([]user.OrderOption, error) {
 // behaviour writes their own function and stops calling this one.
 // ════════════════════════════════════════════════════════════════════════════
 
-func ListUsers(ctx context.Context, db *spikeent.Client, f *UserFilter, r entdomain.ListRequest) (*entdomain.Page[UserResponse], error) {
+func ListUsers(ctx context.Context, db *spikeent.Client, f *UserFilter, r entapi.ListRequest) (*entapi.Page[UserResponse], error) {
 	os, err := UserOrder(r)
 	if err != nil {
 		return nil, err
 	}
 	q := UserQueryWithResponseEdges(db.User.Query())
-	return entdomain.ListPage(ctx, q, f.Predicates(), os, r, NewUserResponse)
+	return entapi.ListPage(ctx, q, f.Predicates(), os, r, NewUserResponse)
 }
 
 func GetUser(ctx context.Context, db *spikeent.Client, id uuid.UUID) (*UserResponse, error) {
-	return entdomain.GetOne(ctx, db.User.Get, NewUserResponse, id)
+	return entapi.GetOne(ctx, db.User.Get, NewUserResponse, id)
 }

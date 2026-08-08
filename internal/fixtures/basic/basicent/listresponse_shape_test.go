@@ -19,13 +19,13 @@ import (
 
 // TestListResponseWireFormat pins the JSON {Entity}ListResponse marshals to.
 //
-// #6 removed `PageInfo *entdomain.PageInfo` from it. The field was declared
+// #6 removed `PageInfo *entapi.PageInfo` from it. The field was declared
 // omitempty and nothing generated ever set it, so no payload on the wire ever
 // carried a "pageInfo" key — which is exactly why a marshalling assertion alone
 // cannot see the change.
 //
 // Since #65 the field-set half is pinned at compile time instead: the generated
-// New{Entity}ListResponse converts an entdomain.Page, and a Go conversion is
+// New{Entity}ListResponse converts an entapi.Page, and a Go conversion is
 // legal only while the two structs agree on field set, type and order — but a
 // conversion ignores struct tags, so this test is what guards the JSON-tag half.
 func TestListResponseWireFormat(t *testing.T) {

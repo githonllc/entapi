@@ -19,11 +19,11 @@ import (
 	// written from the consumer's side, so the alias keeps them reading the way
 	// the code they stand in for does. Being spelled out, it is also nothing
 	// goimports has to resolve.
-	ent "github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/doc"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/ledger"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/note"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	ent "github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
+	entapi "github.com/githonllc/entapi/runtime"
 )
 
 // newClient returns a client with the generated soft-delete registration
@@ -160,7 +160,7 @@ func TestEscapeHatchIncludesSoftDeleted(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 
-	withDeleted := entdomain.WithSoftDeleted(ctx)
+	withDeleted := entapi.WithSoftDeleted(ctx)
 	all, err := c.Doc.Query().All(withDeleted)
 	if err != nil {
 		t.Fatalf("query all with soft-deleted: %v", err)
@@ -189,7 +189,7 @@ func TestWithHardDeleteRemovesTheRow(t *testing.T) {
 	c, db, ctx := newClient(t)
 
 	d := newDoc(t, c, ctx, "purge me")
-	if err := c.Doc.DeleteOneID(d.ID).Exec(entdomain.WithHardDelete(ctx)); err != nil {
+	if err := c.Doc.DeleteOneID(d.ID).Exec(entapi.WithHardDelete(ctx)); err != nil {
 		t.Fatalf("hard delete: %v", err)
 	}
 	if n := rowsOnDisk(t, db, doc.Table, d.ID); n != 0 {
@@ -391,7 +391,7 @@ func TestGeneratedWiringRoutesThroughTheHook(t *testing.T) {
 		t.Error("deleting an already soft-deleted row succeeded; want a not-found error")
 	}
 
-	page, err := ent.ListDocs(ctx, c, nil, entdomain.ListRequest{})
+	page, err := ent.ListDocs(ctx, c, nil, entapi.ListRequest{})
 	if err != nil {
 		t.Fatalf("ListDocs: %v", err)
 	}

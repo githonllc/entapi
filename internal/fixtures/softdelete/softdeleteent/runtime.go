@@ -3,10 +3,10 @@
 package softdeleteent
 
 import (
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/doc"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/ledger"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/note"
-	"github.com/githonllc/entdomain/internal/fixtures/softdelete/softdeleteent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/schema"
 	"github.com/google/uuid"
 )
 

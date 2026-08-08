@@ -1,7 +1,7 @@
-# EntDomain
+# EntAPI
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/githonllc/entdomain.svg)](https://pkg.go.dev/github.com/githonllc/entdomain)
-[![Go Report Card](https://goreportcard.com/badge/github.com/githonllc/entdomain)](https://goreportcard.com/report/github.com/githonllc/entdomain)
+[![Go Reference](https://pkg.go.dev/badge/github.com/githonllc/entapi.svg)](https://pkg.go.dev/github.com/githonllc/entapi)
+[![Go Report Card](https://goreportcard.com/badge/github.com/githonllc/entapi)](https://goreportcard.com/report/github.com/githonllc/entapi)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 An [Ent](https://entgo.io) extension. You annotate a schema field with what the
@@ -14,7 +14,7 @@ the query surface and one wiring function per operation — all into your own
 ```go
 // schema/article.go — you write this
 field.String("title").
-    Annotations(entdomain.DefaultField().AsSearchable().AsFilterable().AsSortable()),
+    Annotations(entapi.DefaultField().AsSearchable().AsFilterable().AsSortable()),
 ```
 
 ```go
@@ -67,7 +67,7 @@ error classification.
 ## Install
 
 ```bash
-go get github.com/githonllc/entdomain
+go get github.com/githonllc/entapi
 ```
 
 `go.mod` declares `go 1.23`. The only direct dependencies outside
@@ -78,13 +78,13 @@ go get github.com/githonllc/entdomain
 ## Two import paths
 
 One module, two packages, split by *when the code runs*. Both are named
-`entdomain`, so every call site reads `entdomain.X` whichever one it came from;
+`entapi`, so every call site reads `entapi.X` whichever one it came from;
 a file that needs both imports both and aliases one.
 
 | Import | Imported by | Principal symbols |
 |---|---|---|
-| `github.com/githonllc/entdomain` | your `entc.go` and your **schema** files | `Extension`, `DomainField` and its builders, `Edge()`, `SoftDeleteMixin` |
-| `github.com/githonllc/entdomain/runtime` | **generated code** and your handler / service code | `ListRequest`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, `ErrorMapper`, `AppendIf`, `Ptr`/`PtrOrNil`/`PtrNilSafe`, `WithSoftDeleted`/`WithHardDelete` |
+| `github.com/githonllc/entapi` | your `entc.go` and your **schema** files | `Extension`, `DomainField` and its builders, `Edge()`, `SoftDeleteMixin` |
+| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, `ErrorMapper`, `AppendIf`, `Ptr`/`PtrOrNil`/`PtrNilSafe`, `WithSoftDeleted`/`WithHardDelete` |
 
 The split is load-bearing, not cosmetic. The root package embeds five templates
 with `//go:embed` and reads all five out of the embedded filesystem **at package
@@ -116,11 +116,11 @@ import (
 
     "entgo.io/ent/entc"
     "entgo.io/ent/entc/gen"
-    "github.com/githonllc/entdomain"
+    "github.com/githonllc/entapi"
 )
 
 func main() {
-    ext := entdomain.NewExtensionWithOptions()
+    ext := entapi.NewExtensionWithOptions()
 
     if err := entc.Generate("./schema", &gen.Config{
         Target:  "../ent",
@@ -131,9 +131,9 @@ func main() {
 }
 ```
 
-`WithEntDomainPackage` is the **only** option. It rewrites the runtime path the
+`WithEntAPIPackage` is the **only** option. It rewrites the runtime path the
 generated files import, and its default is already
-`github.com/githonllc/entdomain/runtime`, so it matters only if you vendored a
+`github.com/githonllc/entapi/runtime`, so it matters only if you vendored a
 copy. `NewExtension(cfg)` takes an `*ExtensionConfig` directly and is nil-safe.
 
 The extension installs exactly one `gen.Hook`. `Templates()` returns an **empty
@@ -141,8 +141,8 @@ slice** — this extension does not use Ent's `GraphTemplate` mechanism; it
 renders and writes its own files.
 
 > **Implementation:** `extension.go` — `Extension`, `ExtensionConfig`,
-> `NewExtension`, `NewExtensionWithOptions`, `Option`, `WithEntDomainPackage`,
-> `defaultEntDomainPackage`, `Hooks`, `Templates`, `Annotations`, `Options`,
+> `NewExtension`, `NewExtensionWithOptions`, `Option`, `WithEntAPIPackage`,
+> `defaultEntAPIPackage`, `Hooks`, `Templates`, `Annotations`, `Options`,
 > `ConfigAnnotation`
 
 ## The annotation model
@@ -163,14 +163,14 @@ Two axes. Confusing them is the most common mistake.
 `AsSortable()`.
 
 ```go
-entdomain.DefaultField()                    // create + update + query + response
-entdomain.InputOnlyField()                  // create + update           (passwords)
-entdomain.OutputOnlyField()                 // query + response          (timestamps, computed state)
-entdomain.CreateOnlyField()                 // create + query + response (write-once)
-entdomain.IdField()                         // OutputOnly + a canned description + ReadOnly metadata
-entdomain.AuditLogField()                   // OutputOnly + ReadOnly metadata
-entdomain.NewDomainField()                  // no scopes — ent tracks it, it appears in no HTTP struct
-entdomain.DomainFieldWithScopes(scopes...)  // any other combination
+entapi.DefaultField()                    // create + update + query + response
+entapi.InputOnlyField()                  // create + update           (passwords)
+entapi.OutputOnlyField()                 // query + response          (timestamps, computed state)
+entapi.CreateOnlyField()                 // create + query + response (write-once)
+entapi.IdField()                         // OutputOnly + a canned description + ReadOnly metadata
+entapi.AuditLogField()                   // OutputOnly + ReadOnly metadata
+entapi.NewDomainField()                  // no scopes — ent tracks it, it appears in no HTTP struct
+entapi.DomainFieldWithScopes(scopes...)  // any other combination
 ```
 
 **No preset grants a marker.** All six preset bodies set only `Scopes`; the
@@ -180,7 +180,7 @@ struct and an **empty** sort allow-list:
 
 ```go
 field.String("title").
-    Annotations(entdomain.DefaultField().
+    Annotations(entapi.DefaultField().
         AsFilterable().     // structured URL parameters: title, title_neq, title_in, title_prefix, …
         AsSearchable().     // joins the free-text q disjunction, and unlocks the substring operators
         AsSortable()),      // enters {E}SortKeys
@@ -210,7 +210,7 @@ placement:
 func (Post) Edges() []ent.Edge {
     return []ent.Edge{
         edge.From("author", User.Type).Ref("posts").Unique().Field("author_id").
-            Annotations(entdomain.Edge().InResponse().As("writer")),
+            Annotations(entapi.Edge().InResponse().As("writer")),
     }
 }
 ```
@@ -245,8 +245,8 @@ Plus two files per schema, each with its own emission condition:
 
 | File | Emitted when | Declares |
 |---|---|---|
-| `entdomain_errors.go` | at least one entity produced wiring | `ErrorMap` |
-| `entdomain_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | `RegisterSoftDelete`, the query traverser, the delete hook |
+| `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
+| `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | `RegisterSoftDelete`, the query traverser, the delete hook |
 
 The soft-delete condition is independent of annotations: an entity with **no
 domain fields at all** still enters the traverser's type switch if it embeds
@@ -305,7 +305,7 @@ struct decode** — any key that folds equal to a known tag without being exactl
 equal to it:
 
 ```
-unknown key "Nickname" (did you mean "nickname"?)   // wraps entdomain.ErrValidation
+unknown key "Nickname" (did you mean "nickname"?)   // wraps entapi.ErrValidation
 ```
 
 A rejected request never touches your receiver. Keys that match **no** tag under
@@ -319,7 +319,7 @@ stays your handler's call. Rationale in
 
 ```go
 valid, err := req.Validate()          // *ValidArticleCreateRequest
-if err != nil { return err }          // wraps entdomain.ErrValidation
+if err != nil { return err }          // wraps entapi.ErrValidation
 art, err := ent.CreateArticle(ctx, client, valid)
 ```
 
@@ -373,7 +373,7 @@ all** is a generation error: that entity is skipped, so there is no
 
 ### The named list type
 
-`List{Es}` returns `*entdomain.Page[{E}Response]`. `{E}ListResponse` is a
+`List{Es}` returns `*entapi.Page[{E}Response]`. `{E}ListResponse` is a
 non-generic named version of the same shape, because tooling like OpenAPI /
 swaggo cannot express a generic instantiation:
 
@@ -387,7 +387,7 @@ return c.JSON(200, ent.NewArticleListResponse(page))
 
 The converter's body is a single Go type conversion (`r :=
 WidgetListResponse(*p)`), and that is the point: the moment `{E}ListResponse`
-and `entdomain.Page` disagree on field set, types or order, that line fails to
+and `entapi.Page` disagree on field set, types or order, that line fails to
 compile in **every** generated package. A type conversion ignores struct tags,
 so the tag half is pinned by a separate golden-JSON test.
 
@@ -457,7 +457,7 @@ need them.
 
 `{E}SortKeys` is the allow-list and `{E}Order` is the function that turns a
 request into ent order options. A `sort_by` outside the allow-list is an
-`entdomain.ErrValidation`, never a silent fallback. A key that passes is then
+`entapi.ErrValidation`, never a silent fallback. A key that passes is then
 **thrown away**: what reaches the query is the order builder ent generated for
 that column, looked up in a `map[string]func(...) OrderOption` by an
 already-validated key. No caller-supplied string is ever interpolated into SQL.
@@ -482,7 +482,7 @@ Rationale in
 
 ### Pagination
 
-`entdomain.ListRequest{Size, Page, SortBy, Order}` — usable at its zero value,
+`entapi.ListRequest{Size, Page, SortBy, Order}` — usable at its zero value,
 all four fields carrying `form:` and `json:` tags.
 
 - `Limit()`: `Size <= 0` → 20 (`DefaultPageSize`); `Size > 1000` → 1000
@@ -491,7 +491,7 @@ all four fields carrying `form:` and `json:` tags.
   `math.MaxInt`** on multiplication overflow rather than wrapping negative.
 - `Validate()` says **nothing** about `Size` or `Page` — it checks `Order` only.
   If you want an oversized size to be a 4xx, compare against
-  `entdomain.MaxPageSize` yourself.
+  `entapi.MaxPageSize` yourself.
 - `Page.Size` reports the size **actually used**, so clamping is visible.
 
 Pagination is offset-only. `Page` carries `Data`, `Total`, `Page`, `Size` and
@@ -514,7 +514,7 @@ behaviour, write your own function and stop calling the generated one.
 
 ```go
 func GetArticle(ctx context.Context, db *Client, id uuid.UUID) (*ArticleResponse, error)
-func ListArticles(ctx context.Context, db *Client, f *ArticleFilter, r entdomain.ListRequest) (*entdomain.Page[ArticleResponse], error)
+func ListArticles(ctx context.Context, db *Client, f *ArticleFilter, r entapi.ListRequest) (*entapi.Page[ArticleResponse], error)
 func CreateArticle(ctx context.Context, db *Client, v *ValidArticleCreateRequest) (*ArticleResponse, error)
 func UpdateArticle(ctx context.Context, db *Client, id uuid.UUID, v *ValidArticlePatchRequest) (*ArticleResponse, error)
 func DeleteArticle(ctx context.Context, db *Client, id uuid.UUID) error
@@ -529,13 +529,13 @@ Every exported wiring function returns through `ErrorMap.MapError` **exactly
 once**. The file also holds unexported helpers (`{entity}Get`,
 `{entity}ByID`, `{entity}Reloaded`) which exist precisely so a create or update
 that re-reads through the eager-load plan does not map twice. The result is that
-`errors.Is(err, entdomain.ErrNotFound)` works at your handler boundary without
+`errors.Is(err, entapi.ErrNotFound)` works at your handler boundary without
 unwrapping ent's error types.
 
 `ErrorMap` is emitted by the template as **one line**:
 
 ```go
-var ErrorMap = entdomain.NewErrorMapper(IsNotFound, IsConstraintError)
+var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError)
 ```
 
 Both predicates are **unqualified**, so they bind to the two functions ent
@@ -578,7 +578,7 @@ Annotation-based, and enforced at ent's layer rather than in the generated
 wiring:
 
 ```go
-func (Doc) Mixin() []ent.Mixin { return []ent.Mixin{entdomain.SoftDeleteMixin{}} }
+func (Doc) Mixin() []ent.Mixin { return []ent.Mixin{entapi.SoftDeleteMixin{}} }
 ```
 
 ```go
@@ -602,8 +602,8 @@ rewrites both.
 Two independent context switches let you opt out per call:
 
 ```go
-entdomain.WithSoftDeleted(ctx)   // reads include deleted rows
-entdomain.WithHardDelete(ctx)    // this delete is a real delete
+entapi.WithSoftDeleted(ctx)   // reads include deleted rows
+entapi.WithHardDelete(ctx)    // this delete is a real delete
 ```
 
 Neither implies the other — they use two distinct unexported context key types.
@@ -618,14 +618,14 @@ deletes hard — including in your tests.**
 > `softDeletedKey`, `hardDeleteKey`, `WithSoftDeleted`, `SoftDeletedIncluded`,
 > `WithHardDelete`, `HardDeleteRequested`; `templates/softdelete.tmpl`;
 > generated example:
-> `internal/fixtures/softdelete/softdeleteent/entdomain_softdelete.go` —
+> `internal/fixtures/softdelete/softdeleteent/entapi_softdelete.go` —
 > `RegisterSoftDelete`, `softDeleteTraverser`, `softDeleteHook`
 
 ## Generation can fail, and that is the design
 
 The checks run **before** `next.Generate(g)`, so a rejected schema leaves
 nothing on disk — not even ent's own output. The whole graph is checked and
-every problem is reported **at once** (the error reads `entdomain: N schema
+every problem is reported **at once** (the error reads `entapi: N schema
 problem(s) prevent generation:` followed by a one-line-per-problem list). The
 policy:
 
@@ -648,7 +648,7 @@ Nine situations are detected today:
 | **An entity name colliding with a symbol this extension generates** | see below |
 
 An entity called `ErrorMap` makes ent emit `type ErrorMap` while
-`entdomain_errors.go` emits `var ErrorMap` — and Go gives types, variables and
+`entapi_errors.go` emits `var ErrorMap` — and Go gives types, variables and
 functions **one** identifier namespace per package. The result is `redeclared in
 this block`, in two files the author never wrote, with nothing naming the cause.
 The same holds for `RegisterSoftDelete`, and across entities: an entity literally
@@ -702,7 +702,7 @@ deletes nothing — the generator scans the target directory and deletes any `.g
 file meeting **both**:
 
 1. its **first line** (the head 4096 bytes, cut at the first newline) contains
-   `Code generated by entdomain extension`, and
+   `Code generated by entapi extension`, and
 2. it was not written by this run.
 
 This is why a schema edit no longer breaks your build: delete an entity and its
@@ -761,8 +761,8 @@ the refusal is what the author sees, the filter is what keeps the output
 correct.)
 
 On the response side, `Optional` comparable fields go through
-`entdomain.PtrOrNil` and `Optional` slices and maps — **including** named types
-over them — go through `entdomain.PtrNilSafe`, chosen by inspecting
+`entapi.PtrOrNil` and `Optional` slices and maps — **including** named types
+over them — go through `entapi.PtrNilSafe`, chosen by inspecting
 `field.Type.RType.Kind` rather than the rendered type name.
 
 `Apply` always emits `if r.X != nil { b.SetX(*r.X) }`, never `SetNillableX`: ent
@@ -829,7 +829,7 @@ Ordered by how quietly they hurt you.
    before any validator runs.** Rejecting it needs `DisallowUnknownFields` in
    your handler; the generator cannot see it. (Case *variants* of legitimate keys
    are rejected — genuinely unknown keys are not.)
-8. **`entdomain.IsNotFound` is not ent's `IsNotFound`.** The templates call the
+8. **`entapi.IsNotFound` is not ent's `IsNotFound`.** The templates call the
    latter *unqualified* so it binds to ent's generated predicate in your package.
    Qualifying it still compiles and then silently matches nothing.
 9. **Every metadata builder is a no-op.** `WithFormat("email")` validates
@@ -876,7 +876,7 @@ deviations remain, all deliberate:
 |---|---|
 | §1.6 move output into an `ent/dto` subpackage | **Not done, and superseded.** Output lands in the consumer's `ent` package; handler decoupling is achieved by the generated free functions rather than by package placement |
 | §8.1 refuse generation when the directory holds files that are not ours | **Not done.** Cleanup **leaves such files in place and logs them**. It depended on §1.6's exclusive directory |
-| §8.4 an `OutputPackage` config option | **Not done**, and moot without §1.6. The only option is `WithEntDomainPackage` |
+| §8.4 an `OutputPackage` config option | **Not done**, and moot without §1.6. The only option is `WithEntAPIPackage` |
 
 T2 (the audience dimension), which the design itself deferred, is likewise
 unimplemented — consistent with the design.
@@ -897,7 +897,7 @@ exists to remove is worse than the break.
 | `DomainField.Sensitive`, `AsSensitive` | withhold `ScopeResponse` from the field |
 | `DomainField.UniqueLookup`, `.RangeLookup`, `.Validation` | `AsFilterable()` (operators are derived from ent's `$field.Ops`); `Validate()` |
 | `DomainConfig.EntityName` | nothing — it had no readers |
-| runtime symbols living in the root package | all moved to `github.com/githonllc/entdomain/runtime` |
+| runtime symbols living in the root package | all moved to `github.com/githonllc/entapi/runtime` |
 
 ## Further reading
 

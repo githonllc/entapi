@@ -1,6 +1,6 @@
-# Contributing to EntDomain
+# Contributing to EntAPI
 
-Thank you for your interest in contributing to EntDomain!
+Thank you for your interest in contributing to EntAPI!
 
 ## Prerequisites
 

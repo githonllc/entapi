@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent"
 )
 
 // The CategoryFunc type is an adapter to allow the use of ordinary

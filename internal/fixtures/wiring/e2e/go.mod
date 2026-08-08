@@ -1,10 +1,10 @@
-module github.com/githonllc/entdomain/internal/fixtures/wiring/e2e
+module github.com/githonllc/entapi/internal/fixtures/wiring/e2e
 
 go 1.25.0
 
 require (
 	entgo.io/ent v0.14.4
-	github.com/githonllc/entdomain v0.0.0
+	github.com/githonllc/entapi v0.0.0
 	github.com/google/uuid v1.6.0
 	modernc.org/sqlite v1.55.0
 )
@@ -35,4 +35,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/githonllc/entdomain => ../../../..
+replace github.com/githonllc/entapi => ../../../..

@@ -1,6 +1,6 @@
 // Package schema holds the hand-written ent schema for the "selfrefpartial"
 // codegen fixture: a self-referential pair where only ONE end is exposed, on
-// purpose, and the other end says so with a bare entdomain.Edge().
+// purpose, and the other end says so with a bare entapi.Edge().
 //
 // This is the escape hatch the #30 refusal points at. It exists as a fixture
 // rather than as a unit test because the thing at risk is not the check's
@@ -16,7 +16,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Node is self-referential and exposes the upward direction only.
@@ -29,14 +29,14 @@ func (Node) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("label").
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		field.UUID("parent_id", uuid.UUID{}).
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 	}
 }
 
@@ -48,12 +48,12 @@ func (Node) Edges() []ent.Edge {
 		// decision is written down, which is what tells it apart from the end
 		// the chained declaration forgets.
 		edge.To("children", Node.Type).
-			Annotations(entdomain.Edge()),
+			Annotations(entapi.Edge()),
 
 		edge.From("parent", Node.Type).
 			Ref("children").
 			Unique().
 			Field("parent_id").
-			Annotations(entdomain.Edge().InResponse()),
+			Annotations(entapi.Edge().InResponse()),
 	}
 }

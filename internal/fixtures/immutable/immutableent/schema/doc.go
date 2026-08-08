@@ -1,6 +1,6 @@
 // Package schema holds the hand-written ent schema for the "immutable" codegen
 // fixture: fields that ent marks Immutable while carrying ScopeUpdate, which
-// entdomain.DefaultField() grants by default.
+// entapi.DefaultField() grants by default.
 //
 // ent generates no update setter for an immutable field (Update/UpdateOne
 // iterate MutableFields), so no template can emit compiling code for this
@@ -16,7 +16,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Doc carries two immutable fields annotated for update — one required, one
@@ -30,27 +30,27 @@ func (Doc) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("title").
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 
 		// Immutable + required, carrying the default annotation, which includes
 		// ScopeUpdate.
 		field.String("origin").
 			Immutable().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		// Immutable + optional, same annotation.
 		field.String("source").
 			Optional().
 			Immutable().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		// Immutable but only ever an output — no conflict, must not be reported.
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
-			Annotations(entdomain.OutputOnlyField()),
+			Annotations(entapi.OutputOnlyField()),
 	}
 }

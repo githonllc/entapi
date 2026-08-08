@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent"
 	// required by schema hooks.
-	_ "github.com/githonllc/entdomain/internal/fixtures/query/queryent/runtime"
+	_ "github.com/githonllc/entapi/internal/fixtures/query/queryent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/migrate"
 )
 
 type (

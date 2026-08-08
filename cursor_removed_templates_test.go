@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"io/fs"
@@ -24,9 +24,9 @@ var removedCursorSymbols = []string{
 
 // TestNoTemplateEmitsCursorMetadata is the generation half of #6.
 //
-// dto.tmpl emitting `PageInfo *entdomain.PageInfo` into {Entity}ListResponse was
+// dto.tmpl emitting `PageInfo *entapi.PageInfo` into {Entity}ListResponse was
 // the single blocker that kept the codec alive: the type had no consumer — the
-// generated wiring returns entdomain.Page[…] — but deleting it would have broken
+// generated wiring returns entapi.Page[…] — but deleting it would have broken
 // a live template. This asserts the template side directly, so the two can never
 // drift back apart.
 func TestNoTemplateEmitsCursorMetadata(t *testing.T) {
@@ -43,8 +43,8 @@ func TestNoTemplateEmitsCursorMetadata(t *testing.T) {
 			t.Fatalf("reading templates/%s: %v", entry.Name(), err)
 		}
 		for _, symbol := range removedCursorSymbols {
-			if strings.Contains(string(body), "entdomain."+symbol) {
-				t.Errorf("templates/%s emits entdomain.%s, which no longer exists", entry.Name(), symbol)
+			if strings.Contains(string(body), "entapi."+symbol) {
+				t.Errorf("templates/%s emits entapi.%s, which no longer exists", entry.Name(), symbol)
 			}
 		}
 	}

@@ -9,14 +9,14 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/migrate"
 	"github.com/google/uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/plain"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/record"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/plain"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/record"
 )
 
 // Client is the client that holds all ent builders.

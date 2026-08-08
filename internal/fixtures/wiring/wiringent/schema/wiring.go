@@ -22,7 +22,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Author is the far end of a to-many response edge.
@@ -35,7 +35,7 @@ func (Author) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		// Unique, so a duplicate create is a UNIQUE constraint failure rather
 		// than a second row. Together with Article's required author edge —
@@ -45,7 +45,7 @@ func (Author) Fields() []ent.Field {
 		// as *ent.ConstraintError.
 		field.String("name").
 			Unique().
-			Annotations(entdomain.DefaultField().AsFilterable().AsSearchable().AsSortable()),
+			Annotations(entapi.DefaultField().AsFilterable().AsSearchable().AsSortable()),
 	}
 }
 
@@ -53,7 +53,7 @@ func (Author) Fields() []ent.Field {
 func (Author) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("articles", Article.Type).
-			Annotations(entdomain.Edge().InResponse()),
+			Annotations(entapi.Edge().InResponse()),
 	}
 }
 
@@ -67,24 +67,24 @@ func (Article) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("title").
-			Annotations(entdomain.DefaultField().AsFilterable().AsSearchable().AsSortable()),
+			Annotations(entapi.DefaultField().AsFilterable().AsSearchable().AsSortable()),
 
 		// Optional numeric: filterable, and the field a patch can clear.
 		field.Int("rank").
 			Optional().
 			Nillable().
-			Annotations(entdomain.DefaultField().AsFilterable()),
+			Annotations(entapi.DefaultField().AsFilterable()),
 
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
-			Annotations(entdomain.OutputOnlyField().AsFilterable().AsSortable()),
+			Annotations(entapi.OutputOnlyField().AsFilterable().AsSortable()),
 
 		field.UUID("author_id", uuid.UUID{}).
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 	}
 }
 
@@ -96,7 +96,7 @@ func (Article) Edges() []ent.Edge {
 			Unique().
 			Required().
 			Field("author_id").
-			Annotations(entdomain.Edge().InResponse()),
+			Annotations(entapi.Edge().InResponse()),
 	}
 }
 
@@ -111,9 +111,9 @@ func (Note) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("body").
-			Annotations(entdomain.DefaultField().AsFilterable().AsSortable()),
+			Annotations(entapi.DefaultField().AsFilterable().AsSortable()),
 	}
 }

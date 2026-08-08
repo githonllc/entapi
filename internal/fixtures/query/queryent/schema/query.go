@@ -27,7 +27,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Record is the entity with a full query surface.
@@ -40,51 +40,51 @@ func (Record) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		// string: the full operator set, and all three dimensions at once.
 		field.String("title").
-			Annotations(entdomain.DefaultField().AsFilterable().AsSearchable().AsSortable()),
+			Annotations(entapi.DefaultField().AsFilterable().AsSearchable().AsSortable()),
 
 		// Searchable but NOT filterable: the free-text disjunction spans more
 		// than one field, and search is not a synonym for filter.
 		field.String("body").
-			Annotations(entdomain.DefaultField().AsSearchable()),
+			Annotations(entapi.DefaultField().AsSearchable()),
 
 		// Filterable WITHOUT Searchable: the cheap operator class only — no
 		// substring parameter exists for this column (ADR-0005).
 		field.String("ref").
 			Optional().
-			Annotations(entdomain.DefaultField().AsFilterable()),
+			Annotations(entapi.DefaultField().AsFilterable()),
 
 		// enum: four operators, and no substring predicate to generate.
 		field.Enum("status").
 			Values("draft", "live").
 			Default("draft").
-			Annotations(entdomain.DefaultField().AsFilterable()),
+			Annotations(entapi.DefaultField().AsFilterable()),
 
 		// Optional numeric: numericOps plus IsNil/NotNil, which collapse into
 		// one boolean parameter rather than two contradictable ones.
 		field.Int("score").
 			Optional().
 			Nillable().
-			Annotations(entdomain.DefaultField().AsFilterable()),
+			Annotations(entapi.DefaultField().AsFilterable()),
 
 		// time: numericOps, and orderable — the paging key.
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
-			Annotations(entdomain.OutputOnlyField().AsFilterable().AsSortable()),
+			Annotations(entapi.OutputOnlyField().AsFilterable().AsSortable()),
 
 		// Query-scoped, but no marker: absent from every query artifact.
 		field.String("note").
 			Optional().
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 
 		// Input only: no query scope and no marker. The sort rejection test
 		// asks for this column by name.
 		field.String("secret").
-			Annotations(entdomain.InputOnlyField()),
+			Annotations(entapi.InputOnlyField()),
 	}
 }
 
@@ -100,9 +100,9 @@ func (Plain) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("label").
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 	}
 }

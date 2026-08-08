@@ -3,8 +3,8 @@
 package presenceent
 
 import (
-	"github.com/githonllc/entdomain/internal/fixtures/presence/presenceent/account"
-	"github.com/githonllc/entdomain/internal/fixtures/presence/presenceent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/presence/presenceent/account"
+	"github.com/githonllc/entapi/internal/fixtures/presence/presenceent/schema"
 	"github.com/google/uuid"
 )
 

@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"fmt"
@@ -242,7 +242,7 @@ type surfaceProbe struct {
 	// graph is the one-node graph the graph-level functions take. It exists so
 	// argSets can supply *gen.Graph; no annotation knob reads it today, and the
 	// soft-delete marker is not a knob on any of the four annotation types this
-	// file enumerates — it is attached by entdomain.SoftDeleteMixin, not written
+	// file enumerates — it is attached by entapi.SoftDeleteMixin, not written
 	// by a schema author.
 	graph *gen.Graph
 	// field is ent-mandatory: not Optional, no Default.

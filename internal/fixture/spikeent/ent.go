@@ -12,10 +12,10 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/category"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/post"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/tag"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/user"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/category"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/post"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/tag"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/user"
 )
 
 // ent aliases to avoid import conflicts in user's code.

@@ -1,5 +1,5 @@
 // Package schema is the FIRST of the two schemas behind the "stale" fixture:
-// Sprocket carries entdomain annotations, so generation writes DTO, base
+// Sprocket carries entapi annotations, so generation writes DTO, base
 // service and base handler files for it.
 //
 // The sibling package internal/fixtures/stale/plain/schema declares the same
@@ -13,7 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Sprocket is the entity that loses its annotations between the two runs.
@@ -26,14 +26,14 @@ func (Sprocket) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("name").
-			Annotations(entdomain.DefaultField().WithRequired(entdomain.ScopeCreate)),
+			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
 	}
 }
 
-// Trinket never carries annotations in either schema, so entdomain never
+// Trinket never carries annotations in either schema, so entapi never
 // generates anything for it. The fixture keeps a hand-written trinket_dto.go
 // next to the generated output to prove cleanup does not touch it.
 type Trinket struct {

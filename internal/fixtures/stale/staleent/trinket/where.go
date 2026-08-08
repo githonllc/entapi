@@ -4,7 +4,7 @@ package trinket
 
 import (
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent/predicate"
 	"github.com/google/uuid"
 )
 

@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 
 func TestExtension_NewExtension(t *testing.T) {
 	config := &ExtensionConfig{
-		EntDomainPackage: "example.com/entdomain",
+		EntAPIPackage: "example.com/entapi",
 	}
 
 	ext := NewExtension(config)
@@ -16,8 +16,8 @@ func TestExtension_NewExtension(t *testing.T) {
 	if ext.Config != config {
 		t.Error("NewExtension should keep the config it was given")
 	}
-	if ext.Config.EntDomainPackage != "example.com/entdomain" {
-		t.Errorf("EntDomainPackage = %q, want %q", ext.Config.EntDomainPackage, "example.com/entdomain")
+	if ext.Config.EntAPIPackage != "example.com/entapi" {
+		t.Errorf("EntAPIPackage = %q, want %q", ext.Config.EntAPIPackage, "example.com/entapi")
 	}
 }
 
@@ -43,7 +43,7 @@ func TestExtension_Options(t *testing.T) {
 
 func TestExtension_Annotations(t *testing.T) {
 	config := &ExtensionConfig{
-		EntDomainPackage: "example.com/entdomain",
+		EntAPIPackage: "example.com/entapi",
 	}
 	ext := NewExtension(config)
 	annotations := ext.Annotations()
@@ -57,8 +57,8 @@ func TestExtension_Annotations(t *testing.T) {
 		t.Fatalf("Expected *ConfigAnnotation, got %T", annotations[0])
 	}
 
-	if configAnnotation.Config.EntDomainPackage != "example.com/entdomain" {
-		t.Errorf("annotation carries EntDomainPackage %q, want %q", configAnnotation.Config.EntDomainPackage, "example.com/entdomain")
+	if configAnnotation.Config.EntAPIPackage != "example.com/entapi" {
+		t.Errorf("annotation carries EntAPIPackage %q, want %q", configAnnotation.Config.EntAPIPackage, "example.com/entapi")
 	}
 }
 
@@ -70,7 +70,7 @@ func TestConfigAnnotation_Name(t *testing.T) {
 }
 
 // TestNewExtensionWithOptions_NoOptions pins what is left of the option set:
-// WithEntDomainPackage alone. WithBaseService and WithBaseHandler went with the
+// WithEntAPIPackage alone. WithBaseService and WithBaseHandler went with the
 // templates they selected (#29), so calling NewExtensionWithOptions with
 // nothing is the ordinary case rather than a degenerate one, and it must still
 // produce a usable default configuration.
@@ -80,34 +80,34 @@ func TestNewExtensionWithOptions_NoOptions(t *testing.T) {
 	if ext.Config == nil {
 		t.Fatal("NewExtensionWithOptions() returned a nil config")
 	}
-	if ext.Config.EntDomainPackage != defaultEntDomainPackage {
-		t.Errorf("EntDomainPackage = %q, want the default %q", ext.Config.EntDomainPackage, defaultEntDomainPackage)
+	if ext.Config.EntAPIPackage != defaultEntAPIPackage {
+		t.Errorf("EntAPIPackage = %q, want the default %q", ext.Config.EntAPIPackage, defaultEntAPIPackage)
 	}
 }
 
-func TestWithEntDomainPackage(t *testing.T) {
+func TestWithEntAPIPackage(t *testing.T) {
 	// The default is the RUNTIME package, not this one (#15). Spelled as a
-	// literal rather than as defaultEntDomainPackage, because comparing a
+	// literal rather than as defaultEntAPIPackage, because comparing a
 	// constant to itself would agree with any future edit — including one that
 	// pointed generated code back at the generator, which is the regression
 	// this pins.
 	t.Run("default value is the runtime package", func(t *testing.T) {
 		ext := NewExtension(nil)
-		want := "github.com/githonllc/entdomain/runtime"
-		if ext.Config.EntDomainPackage != want {
-			t.Errorf("default EntDomainPackage = %q, want %q — generated code that imports the "+
+		want := "github.com/githonllc/entapi/runtime"
+		if ext.Config.EntAPIPackage != want {
+			t.Errorf("default EntAPIPackage = %q, want %q — generated code that imports the "+
 				"generator links the templates and the loader's init",
-				ext.Config.EntDomainPackage, want)
+				ext.Config.EntAPIPackage, want)
 		}
 	})
 
-	t.Run("custom value via WithEntDomainPackage", func(t *testing.T) {
+	t.Run("custom value via WithEntAPIPackage", func(t *testing.T) {
 		config := &ExtensionConfig{}
-		opt := WithEntDomainPackage("custom/path")
+		opt := WithEntAPIPackage("custom/path")
 		opt(config)
 
-		if config.EntDomainPackage != "custom/path" {
-			t.Errorf("EntDomainPackage = %q, want %q", config.EntDomainPackage, "custom/path")
+		if config.EntAPIPackage != "custom/path" {
+			t.Errorf("EntAPIPackage = %q, want %q", config.EntAPIPackage, "custom/path")
 		}
 	})
 }
@@ -115,9 +115,9 @@ func TestWithEntDomainPackage(t *testing.T) {
 func TestNewExtension_Defaults(t *testing.T) {
 	ext := NewExtension(nil)
 
-	if ext.Config.EntDomainPackage != "github.com/githonllc/entdomain/runtime" {
-		t.Errorf("EntDomainPackage = %q, want %q",
-			ext.Config.EntDomainPackage, "github.com/githonllc/entdomain/runtime")
+	if ext.Config.EntAPIPackage != "github.com/githonllc/entapi/runtime" {
+		t.Errorf("EntAPIPackage = %q, want %q",
+			ext.Config.EntAPIPackage, "github.com/githonllc/entapi/runtime")
 	}
 }
 
@@ -131,9 +131,9 @@ func TestExtension_Hooks(t *testing.T) {
 }
 
 func TestExtension_TemplateFuncMap(t *testing.T) {
-	customPkg := "my/custom/entdomain"
+	customPkg := "my/custom/entapi"
 	ext := NewExtension(&ExtensionConfig{
-		EntDomainPackage: customPkg,
+		EntAPIPackage: customPkg,
 	})
 
 	funcMap := ext.templateFuncMap()
@@ -153,19 +153,19 @@ func TestExtension_TemplateFuncMap(t *testing.T) {
 		}
 	}
 
-	// Verify "entdomainPkg" function exists and returns correct value
-	entdomainPkgFn, ok := funcMap["entdomainPkg"]
+	// Verify "entapiPkg" function exists and returns correct value
+	entapiPkgFn, ok := funcMap["entapiPkg"]
 	if !ok {
-		t.Fatal("templateFuncMap() is missing the 'entdomainPkg' function")
+		t.Fatal("templateFuncMap() is missing the 'entapiPkg' function")
 	}
 
-	fn, ok := entdomainPkgFn.(func() string)
+	fn, ok := entapiPkgFn.(func() string)
 	if !ok {
-		t.Fatalf("entdomainPkg has unexpected type %T, want func() string", entdomainPkgFn)
+		t.Fatalf("entapiPkg has unexpected type %T, want func() string", entapiPkgFn)
 	}
 	got := fn()
 	if got != customPkg {
-		t.Errorf("entdomainPkg() = %q, want %q", got, customPkg)
+		t.Errorf("entapiPkg() = %q, want %q", got, customPkg)
 	}
 
 	// Verify it does not mutate the global gen.Funcs map
@@ -177,8 +177,8 @@ func TestExtension_TemplateFuncMap(t *testing.T) {
 	_ = ext.templateFuncMap()
 	_ = ext.templateFuncMap()
 
-	if _, exists := gen.Funcs["entdomainPkg"]; exists {
-		t.Error("templateFuncMap() mutated global gen.Funcs: found 'entdomainPkg' key")
+	if _, exists := gen.Funcs["entapiPkg"]; exists {
+		t.Error("templateFuncMap() mutated global gen.Funcs: found 'entapiPkg' key")
 	}
 
 	for k := range gen.Funcs {
@@ -197,13 +197,13 @@ func TestConfigAnnotation_NameRenamed(t *testing.T) {
 	}
 }
 
-func TestNewExtensionWithOptions_EntDomainPackage(t *testing.T) {
-	customPkg := "github.com/myorg/myentdomain"
+func TestNewExtensionWithOptions_EntAPIPackage(t *testing.T) {
+	customPkg := "github.com/myorg/myentapi"
 	ext := NewExtensionWithOptions(
-		WithEntDomainPackage(customPkg),
+		WithEntAPIPackage(customPkg),
 	)
 
-	if ext.Config.EntDomainPackage != customPkg {
-		t.Errorf("EntDomainPackage = %q, want %q", ext.Config.EntDomainPackage, customPkg)
+	if ext.Config.EntAPIPackage != customPkg {
+		t.Errorf("EntAPIPackage = %q, want %q", ext.Config.EntAPIPackage, customPkg)
 	}
 }

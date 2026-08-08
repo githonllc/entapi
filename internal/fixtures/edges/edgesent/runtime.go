@@ -3,11 +3,11 @@
 package edgesent
 
 import (
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/category"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/post"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/secret"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/user"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/category"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/post"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/secret"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/user"
 	"github.com/google/uuid"
 )
 

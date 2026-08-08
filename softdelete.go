@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"entgo.io/ent"
@@ -43,7 +43,7 @@ func (DomainSoftDelete) Name() string { return SoftDeleteAnnotationName }
 // entity for the generated traverser.
 //
 //	func (Doc) Mixin() []ent.Mixin {
-//		return []ent.Mixin{entdomain.SoftDeleteMixin{}}
+//		return []ent.Mixin{entapi.SoftDeleteMixin{}}
 //	}
 //
 // It carries the field and the marker, and deliberately carries NO hooks and no

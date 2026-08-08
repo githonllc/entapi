@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"go/parser"
@@ -98,8 +98,8 @@ func TestRemovedTemplatesStayRemoved(t *testing.T) {
 
 	dir := t.TempDir()
 	legacy := []string{
-		seed(t, dir, "widget_base_service.go", entdomainHeader),
-		seed(t, dir, "widget_base_handler.go", entdomainHeader),
+		seed(t, dir, "widget_base_service.go", entapiHeader),
+		seed(t, dir, "widget_base_handler.go", entapiHeader),
 	}
 
 	if err := removeStaleArtifacts(dir, map[string]bool{}); err != nil {

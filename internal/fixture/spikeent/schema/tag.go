@@ -3,7 +3,7 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 )
 
 // Tag exists for one reason: its primary key is not a UUID.
@@ -22,6 +22,6 @@ func (Tag) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("name").
 			Unique().
-			Annotations(entdomain.DefaultField().AsFilterable().AsSortable()),
+			Annotations(entapi.DefaultField().AsFilterable().AsSortable()),
 	}
 }

@@ -5,7 +5,7 @@ package post
 import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/predicate"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/predicate"
 	"github.com/google/uuid"
 )
 

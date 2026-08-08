@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"io/fs"
@@ -98,7 +98,7 @@ func TestTemplateInvocationsAreRegistered(t *testing.T) {
 	}
 
 	// The map the generator actually parses templates with: Ent's gen.Funcs,
-	// overlaid with templateFuncs(), plus the entdomainPkg closure.
+	// overlaid with templateFuncs(), plus the entapiPkg closure.
 	available := NewExtension(nil).templateFuncMap()
 
 	used := make(map[string]bool)

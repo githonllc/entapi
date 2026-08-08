@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 // This file is Layer 2, like query.go: hand-written once, generic, and free of
 // any ent import. Generated filter code supplies the entity-specific parts —

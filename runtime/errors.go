@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import "errors"
 
@@ -25,12 +25,12 @@ var (
 // The two predicates are complementary, not interchangeable:
 //
 //	generated code:  Ent's IsNotFound(err)   →  an absent related row
-//	consumer code:   entdomain.IsNotFound(err)  →  this package's sentinel
+//	consumer code:   entapi.IsNotFound(err)  →  this package's sentinel
 //
 // Nothing generated wraps an Ent error into ErrNotFound any more — that was the
 // base service, and error classification now belongs to ErrorMapper (#13).
 //
-// Qualifying the template's call as `{{ entdomainPkg }}.IsNotFound` would still
+// Qualifying the template's call as `{{ entapiPkg }}.IsNotFound` would still
 // compile and would silently stop matching Ent's not-found error.
 // TestGeneratedErrorPredicatesResolveUnambiguously guards against that.
 func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }

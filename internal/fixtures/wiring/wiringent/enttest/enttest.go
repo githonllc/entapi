@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent"
 	// required by schema hooks.
-	_ "github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/runtime"
+	_ "github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/migrate"
 )
 
 type (

@@ -11,9 +11,9 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/namedtypewidget"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/predicate"
-	"github.com/githonllc/entdomain/internal/fixtures/fieldshapes/fieldshapesent/schema"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/namedtypewidget"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/fieldshapes/fieldshapesent/schema"
 )
 
 // NamedTypeWidgetUpdate is the builder for updating NamedTypeWidget entities.

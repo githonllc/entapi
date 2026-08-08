@@ -9,13 +9,13 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixtures/basic/basicent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/basic/basicent/migrate"
 	"github.com/google/uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/basic/basicent/widget"
+	"github.com/githonllc/entapi/internal/fixtures/basic/basicent/widget"
 )
 
 // Client is the client that holds all ent builders.

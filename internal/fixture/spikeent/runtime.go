@@ -5,10 +5,10 @@ package spikeent
 import (
 	"time"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/category"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/post"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/schema"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/user"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/category"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/post"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/schema"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/user"
 	"github.com/google/uuid"
 )
 

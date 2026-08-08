@@ -3,10 +3,10 @@ package dto
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixture/spikeent"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/category"
-	"github.com/githonllc/entdomain/internal/fixture/spikeent/user"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	"github.com/githonllc/entapi/internal/fixture/spikeent"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/category"
+	"github.com/githonllc/entapi/internal/fixture/spikeent/user"
+	entapi "github.com/githonllc/entapi/runtime"
 	"github.com/google/uuid"
 )
 
@@ -168,8 +168,8 @@ func GetUserWithEdges(ctx context.Context, db *spikeent.Client, id uuid.UUID) (*
 	return NewUserResponse(e)
 }
 
-func ListPosts(ctx context.Context, db *spikeent.Client, r entdomain.ListRequest) (*entdomain.Page[PostResponse], error) {
-	return entdomain.ListPage(ctx, PostQueryWithResponseEdges(db.Post.Query()), nil, nil, r, NewPostResponse)
+func ListPosts(ctx context.Context, db *spikeent.Client, r entapi.ListRequest) (*entapi.Page[PostResponse], error) {
+	return entapi.ListPage(ctx, PostQueryWithResponseEdges(db.Post.Query()), nil, nil, r, NewPostResponse)
 }
 
 func GetCategory(ctx context.Context, db *spikeent.Client, id uuid.UUID) (*CategoryResponse, error) {

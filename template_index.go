@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 // dtoTemplate is the request/response DTO template.
 var dtoTemplate = mustLoadTemplate("dto")
@@ -21,6 +21,6 @@ var errorMapTemplate = mustLoadTemplate("errors")
 // softDeleteTemplate is the soft-delete traverser and delete-rewriting hook.
 // Unlike every other template here it is rendered once per GRAPH, not once per
 // type: it is a single type switch over the entities embedding
-// entdomain.SoftDeleteMixin, plus the one registration function a consumer
+// entapi.SoftDeleteMixin, plus the one registration function a consumer
 // calls.
 var softDeleteTemplate = mustLoadTemplate("softdelete")

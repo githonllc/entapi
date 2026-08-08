@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 // FieldScope defines the usage scope of a field at the handler layer.
 // Key principles:

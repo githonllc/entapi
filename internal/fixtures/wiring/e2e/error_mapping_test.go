@@ -13,8 +13,8 @@ import (
 	// written from the consumer's side, so the alias keeps them reading the way
 	// the code they stand in for does. Being spelled out, it is also nothing
 	// goimports has to resolve.
-	ent "github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	ent "github.com/githonllc/entapi/internal/fixtures/wiring/wiringent"
+	entapi "github.com/githonllc/entapi/runtime"
 )
 
 // This file is the behavioural proof for #13: error classification in the
@@ -29,8 +29,8 @@ import (
 //
 // Three axes, and the third is the whole point of the issue:
 //
-//	a missing row          -> entdomain.ErrNotFound, through every operation
-//	a UNIQUE violation     -> entdomain.ErrAlreadyExists
+//	a missing row          -> entapi.ErrNotFound, through every operation
+//	a UNIQUE violation     -> entapi.ErrAlreadyExists
 //	a FOREIGN KEY violation-> NOT already-exists, NOT not-found, not swallowed
 //
 // ent reports the last two identically, as *ent.ConstraintError.
@@ -95,7 +95,7 @@ func validNotePatch(t *testing.T, body string) *ent.ValidNotePatchRequest {
 
 // TestMissingRowMapsToNotFoundEverywhere is acceptance criteria 1 and 3: every
 // generated operation that takes an identifier maps a missing row to the same
-// sentinel, so a caller can branch on entdomain.IsNotFound without knowing
+// sentinel, so a caller can branch on entapi.IsNotFound without knowing
 // which operation produced the error.
 //
 // Three entities, because the wiring has three shapes: Author re-reads through
@@ -139,10 +139,10 @@ func TestMissingRowMapsToNotFoundEverywhere(t *testing.T) {
 			if err == nil {
 				t.Fatalf("%s on a missing row returned no error", op.name)
 			}
-			if !entdomain.IsNotFound(err) {
-				t.Errorf("%s: err = %v, want entdomain.ErrNotFound in the chain", op.name, err)
+			if !entapi.IsNotFound(err) {
+				t.Errorf("%s: err = %v, want entapi.ErrNotFound in the chain", op.name, err)
 			}
-			if entdomain.IsAlreadyExists(err) {
+			if entapi.IsAlreadyExists(err) {
 				t.Errorf("%s: a missing row must not read as already-exists: %v", op.name, err)
 			}
 			// The sentinel is added to the chain, not substituted for it: a
@@ -174,7 +174,7 @@ func TestOperationsThatCannotSeeAMissingRow(t *testing.T) {
 	})
 
 	t.Run("ListNotes returns an empty page", func(t *testing.T) {
-		p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: ptr("absent")}, entdomain.ListRequest{})
+		p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: ptr("absent")}, entapi.ListRequest{})
 		if err != nil {
 			t.Fatalf("ListNotes: %v", err)
 		}
@@ -210,10 +210,10 @@ func TestUniqueViolationMapsToAlreadyExists(t *testing.T) {
 		if err == nil {
 			t.Fatal("a duplicate name was accepted; the fixture's unique constraint is missing")
 		}
-		if !entdomain.IsAlreadyExists(err) {
-			t.Errorf("err = %v, want entdomain.ErrAlreadyExists in the chain", err)
+		if !entapi.IsAlreadyExists(err) {
+			t.Errorf("err = %v, want entapi.ErrAlreadyExists in the chain", err)
 		}
-		if entdomain.IsNotFound(err) {
+		if entapi.IsNotFound(err) {
 			t.Errorf("a duplicate must not read as not-found: %v", err)
 		}
 		if !ent.IsConstraintError(err) {
@@ -227,10 +227,10 @@ func TestUniqueViolationMapsToAlreadyExists(t *testing.T) {
 		if err == nil {
 			t.Fatal("renaming onto an existing name was accepted")
 		}
-		if !entdomain.IsAlreadyExists(err) {
-			t.Errorf("err = %v, want entdomain.ErrAlreadyExists in the chain", err)
+		if !entapi.IsAlreadyExists(err) {
+			t.Errorf("err = %v, want entapi.ErrAlreadyExists in the chain", err)
 		}
-		if entdomain.IsNotFound(err) {
+		if entapi.IsNotFound(err) {
 			t.Errorf("a duplicate must not read as not-found: %v", err)
 		}
 	})
@@ -257,10 +257,10 @@ func TestForeignKeyViolationIsNeverADuplicate(t *testing.T) {
 		if !ent.IsConstraintError(err) {
 			t.Fatalf("%s: precondition — ent must call this a constraint error, got %v", op, err)
 		}
-		if entdomain.IsAlreadyExists(err) {
+		if entapi.IsAlreadyExists(err) {
 			t.Errorf("#13: %s reported a foreign-key violation as a duplicate: %v", op, err)
 		}
-		if entdomain.IsNotFound(err) {
+		if entapi.IsNotFound(err) {
 			t.Errorf("%s: a foreign-key violation must not read as not-found: %v", op, err)
 		}
 	}
@@ -313,15 +313,15 @@ func TestWithoutTheUniquenessPredicateNothingClaimsAlreadyExists(t *testing.T) {
 	if !ent.IsConstraintError(err) {
 		t.Fatalf("the ent error was replaced rather than passed through: %v", err)
 	}
-	if entdomain.IsAlreadyExists(err) {
+	if entapi.IsAlreadyExists(err) {
 		t.Errorf("without a uniqueness predicate the wiring must not claim already-exists: %v", err)
 	}
-	if entdomain.IsNotFound(err) {
+	if entapi.IsNotFound(err) {
 		t.Errorf("a duplicate must not read as not-found: %v", err)
 	}
 	// Not-found still works with the default mapper: the two-predicate form
 	// classifies it, and only already-exists is given up.
-	if _, err := ent.GetAuthor(ctx, c, uuid.New()); !entdomain.IsNotFound(err) {
-		t.Errorf("GetAuthor on a missing row = %v, want entdomain.ErrNotFound", err)
+	if _, err := ent.GetAuthor(ctx, c, uuid.New()); !entapi.IsNotFound(err) {
+		t.Errorf("GetAuthor on a missing row = %v, want entapi.ErrNotFound", err)
 	}
 }

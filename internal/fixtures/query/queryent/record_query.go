@@ -11,8 +11,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/predicate"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/record"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/record"
 	"github.com/google/uuid"
 )
 

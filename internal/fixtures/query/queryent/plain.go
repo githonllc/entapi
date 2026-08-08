@@ -8,7 +8,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent/plain"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent/plain"
 	"github.com/google/uuid"
 )
 

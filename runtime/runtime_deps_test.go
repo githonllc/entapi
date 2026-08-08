@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"go/parser"
@@ -15,7 +15,7 @@ import (
 //
 // Until #15 this was a list of FILE names inside a package that also held the
 // generator, because a file list was the only boundary that existed —
-// `go list -deps github.com/githonllc/entdomain` reported 15 entgo.io packages
+// `go list -deps github.com/githonllc/entapi` reported 15 entgo.io packages
 // however ent-free those five files were. The boundary is now a package, so the
 // check reads the directory instead of a hand-maintained list, and a file
 // dropped into the runtime is covered the moment it lands rather than the

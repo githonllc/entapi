@@ -10,8 +10,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain/internal/fixtures/presence/presenceent/account"
-	"github.com/githonllc/entdomain/internal/fixtures/presence/presenceent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/presence/presenceent/account"
+	"github.com/githonllc/entapi/internal/fixtures/presence/presenceent/predicate"
 )
 
 // AccountUpdate is the builder for updating Account entities.

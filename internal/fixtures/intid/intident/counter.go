@@ -8,7 +8,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/counter"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/counter"
 )
 
 // Counter is the model entity for the Counter schema.

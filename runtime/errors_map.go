@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import "fmt"
 
@@ -13,7 +13,7 @@ import "fmt"
 //
 // The generated wiring supplies the predicates in one line:
 //
-//	var mapper = entdomain.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
+//	var mapper = entapi.NewErrorMapper(ent.IsNotFound, ent.IsConstraintError)
 //
 // # Why uniqueness is a separate predicate
 //

@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/stale/staleent"
+	"github.com/githonllc/entapi/internal/fixtures/stale/staleent"
 )
 
 // The SprocketFunc type is an adapter to allow the use of ordinary

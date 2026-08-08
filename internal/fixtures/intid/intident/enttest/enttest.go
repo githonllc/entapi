@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident"
 	// required by schema hooks.
-	_ "github.com/githonllc/entdomain/internal/fixtures/intid/intident/runtime"
+	_ "github.com/githonllc/entapi/internal/fixtures/intid/intident/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/githonllc/entdomain/internal/fixtures/intid/intident/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/intid/intident/migrate"
 )
 
 type (

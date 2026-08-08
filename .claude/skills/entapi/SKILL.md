@@ -1,11 +1,11 @@
 ---
-name: entdomain
-description: Work with EntDomain — the Ent code generation extension. Use when creating Ent schemas with domain annotations, understanding generated code, debugging codegen issues, or asking about EntDomain annotation builders, field scopes, generated DTOs, the query surface, or the generated wiring functions.
+name: entapi
+description: Work with EntAPI — the Ent code generation extension. Use when creating Ent schemas with domain annotations, understanding generated code, debugging codegen issues, or asking about EntAPI annotation builders, field scopes, generated DTOs, the query surface, or the generated wiring functions.
 ---
 
-# EntDomain — Ent Code Generation Extension
+# EntAPI — Ent Code Generation Extension
 
-You are assisting a developer working with EntDomain, an Ent Framework extension that generates HTTP DTOs, a query surface, and one wiring function per operation from annotated schemas.
+You are assisting a developer working with EntAPI, an Ent Framework extension that generates HTTP DTOs, a query surface, and one wiring function per operation from annotated schemas.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ You are assisting a developer working with EntDomain, an Ent Framework extension
 your handler / service (hand-written)
      │  calls, and may stop calling, any of:
      ▼
-{entity}_wiring.go (generated, ent/)   ────→  entdomain runtime  ────→  ent.Client
+{entity}_wiring.go (generated, ent/)   ────→  entapi runtime  ────→  ent.Client
      │  GetX · ListXs · CreateX · UpdateX          GetOne · ListPage
      │  DeleteX · DeleteBatchXs                    SaveOne
      │  one call each; no struct, nothing to embed
@@ -116,14 +116,14 @@ For entity `Courier`, three files are generated in `ent/`:
     absent leaves the field alone, `null` clears it, a value sets it
 - `CourierResponse` — fields with `ScopeResponse`, plus nested edge responses
 - `CourierListResponse` — paginated response wrapper: `data`, `total`, `page`, `size`.
-  The same four fields as `entdomain.Page`, which is what the wiring returns.
+  The same four fields as `entapi.Page`, which is what the wiring returns.
   It carried a fifth, `PageInfo`, until #6 removed the cursor surface
 
 ### `ent/courier_wiring.go`
 
 ```go
 func GetCourier(ctx, db *Client, id uuid.UUID) (*CourierResponse, error)
-func ListCouriers(ctx, db *Client, f *CourierFilter, r entdomain.ListRequest) (*entdomain.Page[CourierResponse], error)
+func ListCouriers(ctx, db *Client, f *CourierFilter, r entapi.ListRequest) (*entapi.Page[CourierResponse], error)
 func CreateCourier(ctx, db *Client, v *ValidCourierCreateRequest) (*CourierResponse, error)
 func UpdateCourier(ctx, db *Client, id uuid.UUID, v *ValidCourierPatchRequest) (*CourierResponse, error)
 func DeleteCourier(ctx, db *Client, id uuid.UUID) error
@@ -142,7 +142,7 @@ generated eager-load plan. `ent.Client.Courier.Get` applies no plan and therefor
 cannot serve a response type that declares edges.
 
 Every one of them returns its error through `ent.ErrorMap`, generated once per
-package into `ent/entdomain_errors.go`. A missing row is `entdomain.ErrNotFound`
+package into `ent/entapi_errors.go`. A missing row is `entapi.ErrNotFound`
 whichever operation produced it, and the ent error stays in the chain.
 
 `ErrAlreadyExists` needs one line from you, because `ent.IsConstraintError` is
@@ -183,14 +183,14 @@ func (s *CourierService) Create(ctx context.Context, req *ent.CourierCreateReque
 }
 
 // a list operation with a policy predicate the schema cannot express
-func (s *CourierService) ListMine(ctx context.Context, f *ent.CourierFilter, r entdomain.ListRequest) (*entdomain.Page[ent.CourierResponse], error) {
+func (s *CourierService) ListMine(ctx context.Context, f *ent.CourierFilter, r entapi.ListRequest) (*entapi.Page[ent.CourierResponse], error) {
     os, err := ent.CourierOrder(r)
     if err != nil {
         return nil, err
     }
     q := ent.CourierQueryWithResponseEdges(s.db.Courier.Query())
     ps := append(f.Predicates(), courier.OrganizationIDEQ(tenantFrom(ctx)))
-    return entdomain.ListPage(ctx, q, ps, os, r, ent.NewCourierResponse)
+    return entapi.ListPage(ctx, q, ps, os, r, ent.NewCourierResponse)
 }
 ```
 
@@ -253,18 +253,18 @@ wiring directly                                                  wiring where it
 ## Typed Errors
 
 ```go
-entdomain.ErrNotFound      // entity not found
-entdomain.ErrAlreadyExists // uniqueness constraint violation
-entdomain.ErrValidation    // validation failed
+entapi.ErrNotFound      // entity not found
+entapi.ErrAlreadyExists // uniqueness constraint violation
+entapi.ErrValidation    // validation failed
 ```
 
 ## Extension Setup (`entc.go`)
 
 ```go
-ext := entdomain.NewExtensionWithOptions(
+ext := entapi.NewExtensionWithOptions(
     // The RUNTIME path, and the default (#15). Generated files import this,
     // not the generator, so nothing embeds templates in a production binary.
-    entdomain.WithEntDomainPackage("github.com/githonllc/entdomain/runtime"),
+    entapi.WithEntAPIPackage("github.com/githonllc/entapi/runtime"),
 )
 // WithBaseService / WithBaseHandler were removed with the templates they
 // selected (#29). Every artifact is generated unconditionally now.
@@ -284,7 +284,7 @@ ext := entdomain.NewExtensionWithOptions(
 
 Two packages, and which one a file belongs to is decided by when it runs (#15).
 
-**`github.com/githonllc/entdomain` — generation time.** Imported by `entc.go`
+**`github.com/githonllc/entapi` — generation time.** Imported by `entc.go`
 and by schema files.
 
 | File | Purpose |
@@ -297,8 +297,8 @@ and by schema files.
 | `funcs_fields.go` | Field filtering (createFields, updateFields, etc.) |
 | `funcs_codegen.go` | Code generation helpers |
 
-**`github.com/githonllc/entdomain/runtime` — run time.** Package name is still
-`entdomain`. Imported by generated code and by consumer service/handler code.
+**`github.com/githonllc/entapi/runtime` — run time.** Package name is still
+`entapi`. Imported by generated code and by consumer service/handler code.
 Standard library only: it embeds no template and reaches neither ent nor the
 formatter.
 

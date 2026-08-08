@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"encoding/json"
@@ -22,12 +22,12 @@ import (
 // but could not stop mustLoadTemplate from running in a binary that only wanted
 // a sentinel error, because the sentinel and the loader shared a package.
 //
-// runtimePackage must stay equal to defaultEntDomainPackage: that constant is
+// runtimePackage must stay equal to defaultEntAPIPackage: that constant is
 // what generated code imports, so a test pointed anywhere else would prove
 // isolation for a package nobody links.
 const (
-	runtimePackage   = defaultEntDomainPackage
-	generatorPackage = "github.com/githonllc/entdomain"
+	runtimePackage   = defaultEntAPIPackage
+	generatorPackage = "github.com/githonllc/entapi"
 )
 
 // forbiddenRuntimeDeps are the packages whose reachability from runtimePackage

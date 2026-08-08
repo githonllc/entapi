@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"go/parser"
@@ -150,7 +150,7 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 //
 // It is the template with the most to get wrong here: its entity-subpackage
 // imports are one per soft-deletable type, computed by softDeleteImports, while
-// "context", "time" and entdomain are named unconditionally — and are correct
+// "context", "time" and entapi are named unconditionally — and are correct
 // only because the file is not written at all when the type switch would be
 // empty.
 func TestSoftDeleteTemplateDeclaresItsImports(t *testing.T) {

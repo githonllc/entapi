@@ -4,7 +4,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
-	"github.com/githonllc/entdomain"
+	"github.com/githonllc/entapi"
 	"github.com/google/uuid"
 )
 
@@ -16,15 +16,15 @@ func (Post) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Annotations(entdomain.IdField()),
+			Annotations(entapi.IdField()),
 
 		field.String("title").
-			Annotations(entdomain.DefaultField().AsFilterable().AsSortable()),
+			Annotations(entapi.DefaultField().AsFilterable().AsSortable()),
 
 		// The foreign key is exposed as a scalar. Whether the nested author
 		// object is also exposed is a separate decision, made on the edge.
 		field.UUID("author_id", uuid.UUID{}).
-			Annotations(entdomain.DefaultField()),
+			Annotations(entapi.DefaultField()),
 	}
 }
 
@@ -35,6 +35,6 @@ func (Post) Edges() []ent.Edge {
 			Unique().
 			Required().
 			Field("author_id").
-			Annotations(entdomain.Edge().InResponse()),
+			Annotations(entapi.Edge().InResponse()),
 	}
 }

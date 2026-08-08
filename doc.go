@@ -1,43 +1,43 @@
-// Package entdomain provides an [entgo.io/ent] extension that generates
+// Package entapi provides an [entgo.io/ent] extension that generates
 // request/response DTOs, a query surface and operation wiring from annotated
 // Ent schemas.
 //
 // This package is the code-generation half only. It is loaded by ent at
 // `go generate` time and produces request/response DTOs, filter structs with a
 // sort allow-list, and one free function per operation, for each Ent schema
-// annotated with EntDomain markers. It also carries the annotation types and
+// annotated with EntAPI markers. It also carries the annotation types and
 // [SoftDeleteMixin], which consumer SCHEMAS embed — also generation-time code.
 //
 // The runtime half — the generic CRUD operations, ListRequest, the error
 // sentinels, the error mapper and the pointer helpers — lives in
-// [github.com/githonllc/entdomain/runtime], which imports no ent package and
+// [github.com/githonllc/entapi/runtime], which imports no ent package and
 // embeds no templates.
 //
 // # Migration: the runtime moved (#15)
 //
 // The two halves used to share this package, so importing it for
-// entdomain.ErrValidation also embedded five templates into the consumer's
+// entapi.ErrValidation also embedded five templates into the consumer's
 // binary and ran the template loader during package initialisation. The runtime
 // symbols are GONE from this package; there are no deprecation aliases.
 //
-//	was: import "github.com/githonllc/entdomain"
-//	now: import "github.com/githonllc/entdomain/runtime"
+//	was: import "github.com/githonllc/entapi"
+//	now: import "github.com/githonllc/entapi/runtime"
 //
-// The runtime package is still named entdomain, so every `entdomain.X` call
+// The runtime package is still named entapi, so every `entapi.X` call
 // site is unchanged — only the import path moves. Schema files, which use the
 // annotation builders and [SoftDeleteMixin], keep importing this package and
 // need no edit. A file that needs both imports both, aliasing one.
 //
 // Regenerating picks the new path up automatically:
-// [WithEntDomainPackage]'s default is now the runtime path.
+// [WithEntAPIPackage]'s default is now the runtime path.
 //
 // # Quick Start
 //
 // Annotate fields in your Ent schema:
 //
 //	field.String("name").
-//	    Annotations(entdomain.DefaultField().
-//	        WithRequired(entdomain.ScopeCreate))
+//	    Annotations(entapi.DefaultField().
+//	        WithRequired(entapi.ScopeCreate))
 //
 // Annotate edges with [Edge]. An edge's exposure is its own decision, not one
 // derived from its foreign-key field: "put author_id in the response" and "put
@@ -45,7 +45,7 @@
 // edge has no field on this entity to derive anything from.
 //
 //	edge.To("posts", Post.Type).
-//	    Annotations(entdomain.Edge().InResponse())
+//	    Annotations(entapi.Edge().InResponse())
 //
 // A field stays out of responses by not carrying [ScopeResponse] — that is the
 // only mechanism, so use [InputOnlyField] or a custom scope list for passwords
@@ -56,8 +56,8 @@
 // Wire the extension in your entc.go:
 //
 //	func main() {
-//	    ext := entdomain.NewExtensionWithOptions(
-//	        entdomain.WithEntDomainPackage("github.com/githonllc/entdomain/runtime"),
+//	    ext := entapi.NewExtensionWithOptions(
+//	        entapi.WithEntAPIPackage("github.com/githonllc/entapi/runtime"),
 //	    )
 //	    if err := entc.Generate("./schema", &gen.Config{}, entc.Extensions(ext)); err != nil {
 //	        log.Fatal(err)
@@ -111,6 +111,6 @@
 // cannot drift from the code in either direction.
 //
 // See the README for the full annotation reference and generated code examples,
-// and [github.com/githonllc/entdomain/runtime] for what the generated code
+// and [github.com/githonllc/entapi/runtime] for what the generated code
 // calls at run time.
-package entdomain
+package entapi

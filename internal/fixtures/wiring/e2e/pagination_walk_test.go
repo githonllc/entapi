@@ -27,8 +27,8 @@ import (
 
 	"github.com/google/uuid"
 
-	ent "github.com/githonllc/entdomain/internal/fixtures/wiring/wiringent"
-	entdomain "github.com/githonllc/entdomain/runtime"
+	ent "github.com/githonllc/entapi/internal/fixtures/wiring/wiringent"
+	entapi "github.com/githonllc/entapi/runtime"
 )
 
 // walkPages drives the generated list wiring page by page until it runs out of
@@ -36,7 +36,7 @@ import (
 // generated entry point rather than a hand-built query: the defect lived in
 // what {Entity}Order handed ListPage, so anything that bypasses it proves
 // nothing.
-func walkPages(t *testing.T, ctx context.Context, c *ent.Client, r entdomain.ListRequest) []uuid.UUID {
+func walkPages(t *testing.T, ctx context.Context, c *ent.Client, r entapi.ListRequest) []uuid.UUID {
 	t.Helper()
 
 	var served []uuid.UUID
@@ -103,7 +103,7 @@ func TestPaginationWalkServesEveryRowExactlyOnce(t *testing.T) {
 	c, ctx := newClient(t)
 	author := createAuthor(t, ctx, c, "ada")
 
-	const rows = 2*entdomain.DefaultPageSize + 1
+	const rows = 2*entapi.DefaultPageSize + 1
 	inserted := make(map[uuid.UUID]bool, rows)
 	for i := 0; i < rows; i++ {
 		// One title for every row: the sort key below is then a pure prefix
@@ -116,13 +116,13 @@ func TestPaginationWalkServesEveryRowExactlyOnce(t *testing.T) {
 	}
 
 	t.Run("no sort requested", func(t *testing.T) {
-		assertWalkIsTotal(t, "unsorted walk", walkPages(t, ctx, c, entdomain.ListRequest{}), inserted)
+		assertWalkIsTotal(t, "unsorted walk", walkPages(t, ctx, c, entapi.ListRequest{}), inserted)
 	})
 
 	t.Run("sorted by a non-unique column", func(t *testing.T) {
 		for _, order := range []string{"asc", "desc"} {
 			t.Run(order, func(t *testing.T) {
-				served := walkPages(t, ctx, c, entdomain.ListRequest{SortBy: "title", Order: order})
+				served := walkPages(t, ctx, c, entapi.ListRequest{SortBy: "title", Order: order})
 				if order == "desc" {
 					// The tiebreak follows the requested direction, so reverse
 					// before asserting the same ascending invariant.

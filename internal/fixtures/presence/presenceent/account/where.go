@@ -4,7 +4,7 @@ package account
 
 import (
 	"entgo.io/ent/dialect/sql"
-	"github.com/githonllc/entdomain/internal/fixtures/presence/presenceent/predicate"
+	"github.com/githonllc/entapi/internal/fixtures/presence/presenceent/predicate"
 	"github.com/google/uuid"
 )
 

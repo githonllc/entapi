@@ -12,7 +12,7 @@ import (
 
 func main() {
 	g, err := entc.LoadGraph("./schema", &gen.Config{
-		Package: "github.com/githonllc/entdomain/internal/fixture/spikeent",
+		Package: "github.com/githonllc/entapi/internal/fixture/spikeent",
 	})
 	if err != nil {
 		log.Fatal(err)

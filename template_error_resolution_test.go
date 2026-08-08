@@ -1,4 +1,4 @@
-package entdomain
+package entapi
 
 import (
 	"go/ast"
@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// entdomainSymbols are this package's sentinels, which have no counterpart in
-// `package ent` and must therefore always carry the entdomain qualifier.
-var entdomainSymbols = []string{"ErrNotFound", "ErrAlreadyExists", "ErrValidation"}
+// entapiSymbols are this package's sentinels, which have no counterpart in
+// `package ent` and must therefore always carry the entapi qualifier.
+var entapiSymbols = []string{"ErrNotFound", "ErrAlreadyExists", "ErrValidation"}
 
 // templateComment matches a {{/* ... */}} block. Comments are stripped before
 // the scan below: the assertion is about the Go source the template emits, and
@@ -25,7 +25,7 @@ var templateComment = regexp.MustCompile(`(?s)\{\{/\*.*?\*/\}\}`)
 // exact rather than approximate.
 var goLineComment = regexp.MustCompile(`(?m)//.*$`)
 
-// TestTemplatesQualifyEntdomainSentinels is the half of the resolution rule
+// TestTemplatesQualifyEntapiSentinels is the half of the resolution rule
 // that applies to every template rather than to one call.
 //
 // The emitted files land in the consumer's `package ent`, which has no
@@ -40,7 +40,7 @@ var goLineComment = regexp.MustCompile(`(?m)//.*$`)
 // IsConstraintError to the runtime's mapper, and both must stay unqualified.
 // The two unqualified-Ent-predicate rules — dto.tmpl's IsNotFound and
 // errors.tmpl's pair — are pinned below.
-func TestTemplatesQualifyEntdomainSentinels(t *testing.T) {
+func TestTemplatesQualifyEntapiSentinels(t *testing.T) {
 	entries, err := templateFS.ReadDir("templates")
 	if err != nil {
 		t.Fatalf("reading embedded templates failed: %v", err)
@@ -58,10 +58,10 @@ func TestTemplatesQualifyEntdomainSentinels(t *testing.T) {
 		scanned++
 		text := templateComment.ReplaceAllString(string(src), "")
 
-		for _, name := range entdomainSymbols {
+		for _, name := range entapiSymbols {
 			bare := regexp.MustCompile(`([^.\w])` + name + `\b`)
 			for _, m := range bare.FindAllStringSubmatch(text, -1) {
-				t.Errorf("templates/%s references %s without the entdomain qualifier (matched %q); package ent has no such symbol", entry.Name(), name, m[0])
+				t.Errorf("templates/%s references %s without the entapi qualifier (matched %q); package ent has no such symbol", entry.Name(), name, m[0])
 			}
 		}
 	}
@@ -75,7 +75,7 @@ func TestTemplatesQualifyEntdomainSentinels(t *testing.T) {
 // which acquired an IsNotFound call with the response constructors: a to-one
 // edge that was loaded but matched no row comes back from <Edge>OrErr() as
 // Ent's *NotFoundError, and telling that apart from a not-loaded edge is the
-// whole contract. entdomain.IsNotFound tests this package's sentinels instead,
+// whole contract. entapi.IsNotFound tests this package's sentinels instead,
 // so qualifying the call would compile and silently route every loaded-but-
 // absent edge into the error branch.
 func TestDTOTemplateResolvesIsNotFoundToEnt(t *testing.T) {
@@ -99,16 +99,16 @@ func TestDTOTemplateResolvesIsNotFoundToEnt(t *testing.T) {
 //
 // errors.tmpl emits
 //
-//	var ErrorMap = entdomain.NewErrorMapper(IsNotFound, IsConstraintError)
+//	var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError)
 //
 // into the consumer's `package ent`, so both names bind to Ent's own generated
-// predicates. Qualifying either as entdomain.* still COMPILES — this package
+// predicates. Qualifying either as entapi.* still COMPILES — this package
 // exports an IsNotFound of its own, testing its sentinels — and the result is a
 // mapper whose not-found predicate can only ever be true for an error the
 // mapper itself produced. Every missing row would come back unclassified, and
 // no test that only reads the template would notice.
 //
-// entdomain.NewErrorMapper is the one qualified reference the file is allowed,
+// entapi.NewErrorMapper is the one qualified reference the file is allowed,
 // because the runtime type genuinely lives in this package.
 func TestErrorMapTemplateResolvesEntPredicates(t *testing.T) {
 	src, err := templateFS.ReadFile("templates/errors.tmpl")
@@ -121,7 +121,7 @@ func TestErrorMapTemplateResolvesEntPredicates(t *testing.T) {
 	// line of emitted code.
 	text := goLineComment.ReplaceAllString(templateComment.ReplaceAllString(string(src), ""), "")
 
-	if !strings.Contains(text, "entdomain.NewErrorMapper(IsNotFound, IsConstraintError)") {
+	if !strings.Contains(text, "entapi.NewErrorMapper(IsNotFound, IsConstraintError)") {
 		t.Error("errors.tmpl no longer constructs the mapper from Ent's unqualified IsNotFound and IsConstraintError; if the wiring changed, update this test")
 	}
 	for _, name := range []string{"IsNotFound", "IsConstraintError"} {
@@ -177,7 +177,7 @@ func TestWiringMapsEveryExportedOperation(t *testing.T) {
 						t.Fatalf("printing %s: %v", fn.Name.Name, err)
 					}
 					if !strings.Contains(body.String(), "ErrorMap.MapError") {
-						t.Errorf("%s.%s does not return through ErrorMap.MapError; a caller cannot then use entdomain.IsNotFound uniformly across operations\n%s",
+						t.Errorf("%s.%s does not return through ErrorMap.MapError; a caller cannot then use entapi.IsNotFound uniformly across operations\n%s",
 							node.Name, fn.Name.Name, body.String())
 					}
 				}

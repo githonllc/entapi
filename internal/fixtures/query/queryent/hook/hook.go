@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/githonllc/entdomain/internal/fixtures/query/queryent"
+	"github.com/githonllc/entapi/internal/fixtures/query/queryent"
 )
 
 // The PlainFunc type is an adapter to allow the use of ordinary

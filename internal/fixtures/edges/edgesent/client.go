@@ -9,17 +9,17 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/migrate"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/migrate"
 	"github.com/google/uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/category"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/post"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/secret"
-	"github.com/githonllc/entdomain/internal/fixtures/edges/edgesent/user"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/category"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/post"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/secret"
+	"github.com/githonllc/entapi/internal/fixtures/edges/edgesent/user"
 )
 
 // Client is the client that holds all ent builders.

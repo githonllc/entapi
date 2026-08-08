@@ -12,24 +12,6 @@ import (
 	entapi "github.com/githonllc/entapi/runtime"
 )
 
-// RegisterSoftDelete installs soft delete on c. It is the one line a consumer
-// writes, and it is the whole wiring:
-//
-//	client := ent.NewClient(ent.Driver(drv))
-//	ent.RegisterSoftDelete(client)
-//
-// Both halves are installed on the client rather than on the schema, so
-// adopting soft delete does not change which runtime format ent generates for
-// this project and adds no empty import to the consumer's main package.
-//
-// The cost, stated rather than hidden: a client built WITHOUT this line
-// filters nothing, and a delete on it removes the row. Call it wherever the
-// client is constructed, including in tests.
-func RegisterSoftDelete(c *Client) {
-	c.Intercept(softDeleteTraverser())
-	c.Use(softDeleteHook())
-}
-
 // softDeleteTraverser excludes soft-deleted rows from every query, including
 // one built by hand off the client and one built for an eager-loaded edge:
 // both reach prepareQuery, which is where interceptors run.

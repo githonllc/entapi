@@ -82,7 +82,9 @@ func (dc *DocCreate) Mutation() *DocMutation {
 
 // Save creates the Doc in the database.
 func (dc *DocCreate) Save(ctx context.Context) (*Doc, error) {
-	dc.defaults()
+	if err := dc.defaults(); err != nil {
+		return nil, err
+	}
 	return withHooks(ctx, dc.sqlSave, dc.mutation, dc.hooks)
 }
 
@@ -109,11 +111,15 @@ func (dc *DocCreate) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (dc *DocCreate) defaults() {
+func (dc *DocCreate) defaults() error {
 	if _, ok := dc.mutation.ID(); !ok {
+		if doc.DefaultID == nil {
+			return fmt.Errorf("softdeleteent: uninitialized doc.DefaultID (forgotten import softdeleteent/runtime?)")
+		}
 		v := doc.DefaultID()
 		dc.mutation.SetID(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.

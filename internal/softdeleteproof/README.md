@@ -16,12 +16,13 @@ does not have: a SQL driver.
 That split is the whole point. The claim #18 rests on is that soft delete is
 only enforceable at ent's interceptor layer, because one line of ordinary
 consumer code — `client.Doc.Query().All(ctx)` — reaches the database with
-nothing this project generated in the call path. That was true when a generated
-service held an exported `*Client`, and it stays true now that #29 has removed
-the service and the wiring takes the `*Client` as a parameter: whatever layer
-owns the filter, it cannot be one the caller can simply route around. A compile-only proof cannot distinguish "the
-predicate is generated" from "the predicate reaches the SQL", so the assertions
-here are all *read a row back and look at it*, against real ent and real SQLite.
+nothing entapi-generated in that query call path. #70 injects the interceptor
+and hook into Ent's own `newConfig`, so the consumer writes no registration
+call. This module proves that placement through plain `NewClient`, `Open`,
+`enttest.Open`, two simultaneous clients, and a deny-by-default privacy policy.
+A compile-only proof cannot distinguish "the predicate is generated" from
+"the predicate reaches the SQL", so the assertions here read rows back against
+real ent and real SQLite.
 
 `modernc.org/sqlite` stays out of `github.com/githonllc/entdomain`'s dependency
 graph: this module's `go.mod` is its own, and the root one is untouched.

@@ -69,6 +69,10 @@ type (
 // newConfig creates a new config for the client.
 func newConfig(opts ...Option) config {
 	cfg := config{log: log.Println, hooks: &hooks{}, inters: &inters{}}
+	// entapi: soft-delete hooks and interceptors installed by newConfig.
+	cfg.hooks.Doc = append(cfg.hooks.Doc, softDeleteHook())
+	cfg.inters.Doc = append(cfg.inters.Doc, softDeleteTraverser())
+
 	cfg.options(opts...)
 	return cfg
 }
@@ -344,7 +348,8 @@ func (c *DocClient) QueryNote(d *Doc) *NoteQuery {
 
 // Hooks returns the client hooks.
 func (c *DocClient) Hooks() []Hook {
-	return c.hooks.Doc
+	hooks := c.hooks.Doc
+	return append(hooks[:len(hooks):len(hooks)], doc.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.

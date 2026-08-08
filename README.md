@@ -246,11 +246,14 @@ Plus two files per schema, each with its own emission condition:
 | File | Emitted when | Declares |
 |---|---|---|
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
-| `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | `RegisterSoftDelete`, the query traverser, the delete hook |
+| `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
 
 The soft-delete condition is independent of annotations: an entity with **no
 domain fields at all** still enters the traverser's type switch if it embeds
-the mixin.
+the mixin. The extension also supplies a `config/init/fields/*` partial that
+extends Ent's own `client.go`: for each such entity, `newConfig` initializes its
+hook and interceptor slices. This partial creates no standalone output file and
+renders no bytes for a graph without the mixin.
 
 Output lands in **your** `ent` package (`gen.Config.Target`), so it reads as
 `ent.CreateArticle`, `ent.ArticleFilter`, `ent.ErrorMap`. That is also why an
@@ -583,7 +586,6 @@ func (Doc) Mixin() []ent.Mixin { return []ent.Mixin{entapi.SoftDeleteMixin{}} }
 
 ```go
 client := ent.NewClient(ent.Driver(drv))
-ent.RegisterSoftDelete(client)          // exactly once, at construction
 ```
 
 The mixin declares an `Optional().Nillable()` `field.Time("deleted_at")` and
@@ -591,7 +593,9 @@ attaches the `DomainSoftDelete` marker; ent merges mixin annotations onto the
 type, so the marker — not a column-name convention — is what says "this entity
 opted in".
 
-`RegisterSoftDelete` installs one interceptor and one hook. From then on deleted
+The generated `newConfig` installs one interceptor and one hook for every
+soft-deletable entity. There is no registration call and no construction-order
+dependency: `NewClient`, `Open` and `enttest.Open` all use that config. Deleted
 rows disappear from **every** read, including `client.Doc.Query()` calls that
 touch nothing this package generated, and `Delete` becomes an update of the
 tombstone column. There is no second write, and nothing in the generated wiring
@@ -608,18 +612,19 @@ entapi.WithHardDelete(ctx)    // this delete is a real delete
 
 Neither implies the other — they use two distinct unexported context key types.
 
-**A client constructed without calling `RegisterSoftDelete` filters nothing and
-deletes hard — including in your tests.**
+The injected hook occupies index 0 and Ent applies it outermost. Hooks added
+later with `client.Use` therefore run inside the soft-delete hook.
 
 > **Implementation:** `softdelete.go` — `SoftDeleteMixin`, `SoftDeleteField`
 > (`"deleted_at"`), `DomainSoftDelete`, `SoftDeleteAnnotationName`;
 > `funcs_softdelete.go` — `isSoftDeletable`, `softDeleteTypes`,
 > `softDeleteField`, `softDeleteImports`; `runtime/softdelete_context.go` —
 > `softDeletedKey`, `hardDeleteKey`, `WithSoftDeleted`, `SoftDeletedIncluded`,
-> `WithHardDelete`, `HardDeleteRequested`; `templates/softdelete.tmpl`;
+> `WithHardDelete`, `HardDeleteRequested`; `templates/softdelete.tmpl`,
+> `templates/softdelete_config_init.tmpl`;
 > generated example:
 > `internal/fixtures/softdelete/softdeleteent/entapi_softdelete.go` —
-> `RegisterSoftDelete`, `softDeleteTraverser`, `softDeleteHook`
+> `softDeleteTraverser`, `softDeleteHook`; and its `client.go` `newConfig`
 
 ## Generation can fail, and that is the design
 
@@ -651,9 +656,8 @@ An entity called `ErrorMap` makes ent emit `type ErrorMap` while
 `entapi_errors.go` emits `var ErrorMap` — and Go gives types, variables and
 functions **one** identifier namespace per package. The result is `redeclared in
 this block`, in two files the author never wrote, with nothing naming the cause.
-The same holds for `RegisterSoftDelete`, and across entities: an entity literally
-named `ArticleResponse` collides with the response type generated for entity
-`Article`.
+The same holds across entities: an entity literally named `ArticleResponse`
+collides with the response type generated for entity `Article`.
 
 The reserved-name check runs at graph level rather than inside the node loop,
 because **the colliding entity does not have to be annotated** — ent generates a
@@ -810,39 +814,37 @@ that is neither consumed nor declared pending all break CI.
 
 Ordered by how quietly they hurt you.
 
-1. **A client that never called `ent.RegisterSoftDelete(client)` filters nothing
-   and deletes hard.** Including in tests.
-2. **`ErrorMap` never returns `ErrAlreadyExists` until you call
+1. **`ErrorMap` never returns `ErrAlreadyExists` until you call
    `WithUniqueViolation`.** A duplicate key passes through `MapError` unchanged
    and surfaces as a 500.
-3. **`New{E}Response(nil)` returns `(nil, nil)`.** Not an error. Feed it a query
+2. **`New{E}Response(nil)` returns `(nil, nil)`.** Not an error. Feed it a query
    that matched nothing and you get a pair of nils, not a not-found.
-4. **`_contains` requires `AsSearchable()`.** A string field marked filterable
+3. **`_contains` requires `AsSearchable()`.** A string field marked filterable
    only emits none of its four substring parameters; form and JSON binders drop
    unknown keys without complaint, so `?name_contains=x` becomes an *unfiltered*
    query rather than a 400.
-5. **No preset grants a query marker.** `DefaultField()` alone gives you an empty
+4. **No preset grants a query marker.** `DefaultField()` alone gives you an empty
    filter struct and an empty sort allow-list.
-6. **`DefaultField()` on an `Immutable()` field always fails generation** — it
+5. **`DefaultField()` on an `Immutable()` field always fails generation** — it
    grants `ScopeUpdate`. Use `CreateOnlyField()` or `OutputOnlyField()`.
-7. **An `Immutable()` field in a PATCH body is discarded by `encoding/json`
+6. **An `Immutable()` field in a PATCH body is discarded by `encoding/json`
    before any validator runs.** Rejecting it needs `DisallowUnknownFields` in
    your handler; the generator cannot see it. (Case *variants* of legitimate keys
    are rejected — genuinely unknown keys are not.)
-8. **`entapi.IsNotFound` is not ent's `IsNotFound`.** The templates call the
+7. **`entapi.IsNotFound` is not ent's `IsNotFound`.** The templates call the
    latter *unqualified* so it binds to ent's generated predicate in your package.
    Qualifying it still compiles and then silently matches nothing.
-9. **Every metadata builder is a no-op.** `WithFormat("email")` validates
+8. **Every metadata builder is a no-op.** `WithFormat("email")` validates
    nothing.
-10. **`DeleteBatch` returns a count, not an error, for ids that matched
+9. **`DeleteBatch` returns a count, not an error, for ids that matched
     nothing.** That `int` is your only way to learn how many existed; an empty
     list deletes zero rows, which is ent's own reading of `IDIn` with no
     arguments rather than a guard written here.
-11. **`Page.Size` is the clamped size**, and an oversized request is never an
+10. **`Page.Size` is the clamped size**, and an oversized request is never an
     error — `ListRequest.Validate()` says nothing about `Size` or `Page`.
-12. **`ErrorMap` is a plain package-level variable with no synchronisation.**
+11. **`ErrorMap` is a plain package-level variable with no synchronisation.**
     Assign it where the client is built, not while serving.
-13. **A generated file you copied and edited still carries the marker** —
+12. **A generated file you copied and edited still carries the marker** —
     cleanup will delete it. Strip the first line.
 
 ## Limits
@@ -883,6 +885,13 @@ unimplemented — consistent with the design.
 
 ## Migration notes
 
+**Breaking and behaviour change (#70):** generated `RegisterSoftDelete` has
+been removed. Regenerate, then delete every `ent.RegisterSoftDelete(client)`
+call; embedding `SoftDeleteMixin` now configures `NewClient`, `Open` and
+`enttest.Open` automatically. The hook also moves from its former registration
+position to `hooks[0]`, which Ent applies outermost, ahead of hooks added later
+with `client.Use`.
+
 **Behaviour change:** an Ent field marked `Sensitive()` no longer appears in
 `{Entity}Response` or `{Entity}Summary`. This closes the response-serialization
 leak where a response-scoped sensitive field was emitted; create and patch
@@ -894,6 +903,7 @@ exists to remove is worse than the break.
 
 | Removed | Use instead |
 |---|---|
+| generated `RegisterSoftDelete` | nothing at client construction — embed `SoftDeleteMixin` in the schema and regenerate |
 | `Base{Entity}Service`, `Base{Entity}Handler`, `SetSelf`, generated hooks | the generated free functions (`Get{E}`, `List{Es}`, …); write your own function if you need different behaviour |
 | `ExtensionConfig.GenerateBaseService`, `.GenerateBaseHandler`, `WithBaseService`, `WithBaseHandler` | nothing — the base classes are gone |
 | `{Entity}EntToResponse` | `New{Entity}Response`, which returns an error rather than nil on failure |

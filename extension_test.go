@@ -26,9 +26,11 @@ func TestExtension_Templates(t *testing.T) {
 
 	templates := ext.Templates()
 
-	// Extension uses Hook-based generation, Templates() should return empty slice
-	if len(templates) != 0 {
-		t.Errorf("Expected 0 templates (Hook-based generation), got %d", len(templates))
+	if len(templates) != 1 {
+		t.Fatalf("Templates() returned %d templates, want the newConfig partial", len(templates))
+	}
+	if templates[0].Lookup("config/init/fields/entapi_softdelete") == nil {
+		t.Error("Templates() does not define config/init/fields/entapi_softdelete")
 	}
 }
 

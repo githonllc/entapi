@@ -300,24 +300,13 @@ func fieldHasOp(f *gen.Field, want gen.Op) bool {
 	return false
 }
 
-// errorMapSymbol and registerSoftDeleteSymbol are the two EXPORTED names this
-// extension declares once per graph, spelled exactly as templates/errors.tmpl
-// and templates/softdelete.tmpl spell them.
+// errorMapSymbol is the only EXPORTED name this extension declares once per
+// graph, spelled exactly as templates/errors.tmpl spells it.
 //
-// The other two names softdelete.tmpl declares — softDeleteTraverser and
-// softDeleteHook — are deliberately absent. An ent schema type is a Go type
-// declared in the schema package, so its name is always exported; an unexported
-// generated name cannot be collided with by any entity, and listing one here
-// would refuse a schema that compiles.
-//
-// They are string literals because the templates spell them as string literals;
-// there is nothing to derive them from. TestDerivedEntityNamesMatchTheTemplates
-// is what keeps the two spellings the same — it renders the templates and reads
-// the declarations back out.
-const (
-	errorMapSymbol           = "ErrorMap"
-	registerSoftDeleteSymbol = "RegisterSoftDelete"
-)
+// softdelete.tmpl declares only softDeleteTraverser and softDeleteHook. An ent
+// schema type is always exported, so those names cannot collide with one and
+// do not belong in the reserved set.
+const errorMapSymbol = "ErrorMap"
 
 // reservedNameConflicts reports every entity whose NAME is also a name this
 // extension declares in the package it generates into.
@@ -332,9 +321,8 @@ const (
 // It is a graph-level check for two reasons, and both are why it runs outside
 // checkGraphConflicts' per-node loop:
 //
-//   - whether a graph-level file is emitted at all is a property of the graph
-//     (any annotated entity; any soft-deletable entity), not of the node being
-//     examined;
+//   - whether the graph-level error file is emitted at all is a property of the
+//     graph (any annotated entity), not of the node being examined;
 //   - the colliding entity does NOT have to be annotated. ent generates a type
 //     for every entity in the schema, annotated or not, so a bare `type
 //     ErrorMap struct{ ent.Schema }` collides just as hard — and the per-node
@@ -356,17 +344,12 @@ func reservedNameConflicts(g *gen.Graph) []string {
 
 	var out []string
 
-	// The two graph-level names, each gated on the condition its file is
-	// actually written under (see generatePerTypeFiles): the error classifier is
-	// emitted when anything is annotated, the soft-delete wiring when anything
-	// embeds the mixin.
+	// The graph-level name is gated on the condition its file is actually
+	// written under (see generatePerTypeFiles): the error classifier is emitted
+	// when anything is annotated.
 	if len(annotated) > 0 {
 		out = append(out, graphSymbolConflicts(g, errorMapSymbol, "var", errorMapFileName,
 			annotated, "carries entapi annotations, so the error classifier is generated for this schema")...)
-	}
-	if sd := softDeleteTypes(g); len(sd) > 0 {
-		out = append(out, graphSymbolConflicts(g, registerSoftDeleteSymbol, "func", softDeleteFileName,
-			sd, "embeds entapi.SoftDeleteMixin, so the soft-delete wiring is generated for this schema")...)
 	}
 
 	// The derived half: every pair of (annotated entity, any entity) where the
@@ -384,8 +367,8 @@ func reservedNameConflicts(g *gen.Graph) []string {
 	return out
 }
 
-// graphSymbolConflicts describes an entity named after one of the two symbols
-// this extension declares once per graph.
+// graphSymbolConflicts describes an entity named after a symbol this extension
+// declares once per graph.
 //
 // causes are the entities that make the file be generated at all, and one of
 // them is named in the message, because that is the fact the author cannot see:
@@ -431,10 +414,10 @@ type derivedName struct {
 // This is the list #62 turns on, and it is the one thing here that rots: a
 // template gains a declaration and this list does not, and the collision it was
 // written to refuse walks straight through. That is why
-// TestDerivedEntityNamesMatchTheTemplates renders all five templates over a
-// probe entity, reads the exported declarations back out with go/parser, and
-// compares the two sets in BOTH directions. Add to a template, and that test
-// tells you to add here — no reading required.
+// TestDerivedEntityNamesMatchTheTemplates renders all five standalone output
+// templates over a probe entity, reads the exported declarations back out with
+// go/parser, and compares the two sets in BOTH directions. Add to a template,
+// and that test tells you to add here — no reading required.
 //
 // Unexported declarations (<name>SortOptions, <name>ByID, <name>Get, the
 // presence tag slices) are deliberately absent: an ent schema type's name is

@@ -2,34 +2,4 @@
 
 package softdeleteent
 
-import (
-	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
-	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
-	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
-	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/schema"
-	"github.com/google/uuid"
-)
-
-// The init function reads all schema descriptors with runtime code
-// (default values, validators, hooks and policies) and stitches it
-// to their package variables.
-func init() {
-	docFields := schema.Doc{}.Fields()
-	_ = docFields
-	// docDescID is the schema descriptor for id field.
-	docDescID := docFields[0].Descriptor()
-	// doc.DefaultID holds the default value on creation for the id field.
-	doc.DefaultID = docDescID.Default.(func() uuid.UUID)
-	ledgerFields := schema.Ledger{}.Fields()
-	_ = ledgerFields
-	// ledgerDescID is the schema descriptor for id field.
-	ledgerDescID := ledgerFields[0].Descriptor()
-	// ledger.DefaultID holds the default value on creation for the id field.
-	ledger.DefaultID = ledgerDescID.Default.(func() uuid.UUID)
-	noteFields := schema.Note{}.Fields()
-	_ = noteFields
-	// noteDescID is the schema descriptor for id field.
-	noteDescID := noteFields[0].Descriptor()
-	// note.DefaultID holds the default value on creation for the id field.
-	note.DefaultID = noteDescID.Default.(func() uuid.UUID)
-}
+// The schema-stitching logic is generated in github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/runtime/runtime.go

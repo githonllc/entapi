@@ -4,6 +4,7 @@ package softdeleteent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -364,6 +365,12 @@ func (dq *DocQuery) prepareQuery(ctx context.Context) error {
 			return err
 		}
 		dq.sql = prev
+	}
+	if doc.Policy == nil {
+		return errors.New("softdeleteent: uninitialized doc.Policy (forgotten import softdeleteent/runtime?)")
+	}
+	if err := doc.Policy.EvalQuery(ctx, dq); err != nil {
+		return err
 	}
 	return nil
 }

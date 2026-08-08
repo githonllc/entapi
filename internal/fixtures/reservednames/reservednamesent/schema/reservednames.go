@@ -14,17 +14,16 @@
 //	          so an ErrorMap entity alone would prove nothing.
 //
 // Probe does double duty. It is also the probe entity of
-// TestDerivedEntityNamesMatchTheTemplates, which renders all five templates
-// over this graph and compares the exported declarations they emit against
+// TestDerivedEntityNamesMatchTheTemplates, which renders all five output
+// templates over this graph and compares the exported declarations they emit against
 // derivedEntityNames. That is why it carries a create-scoped field, an
 // update-scoped field, an output-only field, all three query markers AND the
-// soft-delete mixin: every conditional emission in the five templates has to
-// fire, or the guard's reverse direction would pass vacuously. Keep it that
+// soft-delete mixin: every conditional emission in the five output templates
+// has to fire, or the guard's reverse direction would pass vacuously. Keep it that
 // way — a field removed here silently narrows that guard.
 //
-// The mixin has a second job in this fixture: it is what makes softDeleteTypes
-// non-empty, which is the condition under which RegisterSoftDelete — the other
-// reserved graph-level name — is generated.
+// The mixin has a second job in this fixture: it makes the soft-delete helper
+// template render, so the exported-declaration guard checks that file too.
 package schema
 
 import (
@@ -63,8 +62,7 @@ type Probe struct {
 	ent.Schema
 }
 
-// Mixin of the Probe: what makes the graph soft-deletable, and so what makes
-// RegisterSoftDelete a generated name in this graph.
+// Mixin of the Probe makes the graph soft-deletable.
 func (Probe) Mixin() []ent.Mixin {
 	return []ent.Mixin{
 		entapi.SoftDeleteMixin{},

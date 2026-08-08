@@ -37,7 +37,7 @@ There is no `main`, no example app, and no downstream ent project in this repo. 
 
 `extension.go` is the whole entry point:
 
-- `Hooks()` returns one `gen.Hook` (`generatePerTypeFiles`). **`Templates()` deliberately returns an empty slice** — this extension does not use Ent's `GraphTemplate` mechanism. Do not "fix" that by adding templates there.
+- `Hooks()` returns one `gen.Hook` (`generatePerTypeFiles`). `Templates()` returns exactly one exception: `softdelete_config_init`, a `config/init/fields/*` **partial** that extends Ent's own `client.tmpl` inside `newConfig`. It is not a standalone `GraphTemplate` output and creates no new file; it renders no bytes when the graph has no `SoftDeleteMixin`, so those clients remain byte-identical to plain Ent output. All standalone entapi files still go through the hook below.
 - The hook runs *after* `next.Generate(g)`, then loops `g.Nodes`. **A node with zero `domainFields` is skipped entirely** — that's how unannotated entities avoid producing empty files. Files an earlier run wrote for a node that is now skipped are deleted afterwards; see "Stale artifact removal" below.
 - Generation is **two-phase** (#61). Phase 1 renders every file with `text/template` and formats it through `golang.org/x/tools/imports` in `formatFile`, collecting `[]pendingFile` in memory; phase 2 writes them with `writeFormatted` (temp file in the target directory, renamed into place). **Formatting failure aborts generation and writes nothing** — `imports.Process` only fails on source it cannot parse, so its failure is a template bug, and because it is a pure function of the bytes it lands in phase 1, before anything is on disk. That is what makes the run atomic rather than merely each file: a failure at entity B can no longer leave entity A's files already replaced. The residue, stated honestly in `generatePerTypeFiles`, is a hard kill inside the phase-2 rename loop. `writeFile` no longer exists.
 - Templates declare the imports their output uses (`dtoImports` in `funcs_imports.go` computes the field-type ones). goimports stays in the pipeline as a safety net, not as the mechanism — it cannot be the mechanism now that its failure is fatal. `TestTemplatesDeclareTheirImports` fails if goimports has to add or remove anything.
@@ -61,13 +61,13 @@ Candidates that fail fence 2 are left alone and logged. Cleanup never runs on a 
 
 ### Templates
 
-Five live templates, all embedded and all bound: `dto`, `filter`, `wiring` (rendered per `*gen.Type`) and `errors`, `softdelete` (rendered once per `*gen.Graph`). `TestEveryEmbeddedTemplateIsLoaded` requires every embedded `.tmpl` to be bound in `template_index.go`, so there is no such thing as an embedded-but-unused template here.
+Six live templates, all embedded and all bound: `dto`, `filter`, `wiring` (rendered per `*gen.Type`); `errors`, `softdelete` (rendered once per `*gen.Graph`); and `softdelete_config_init`, the partial Ent executes inside `newConfig`. `TestEveryEmbeddedTemplateIsLoaded` requires every embedded `.tmpl` to be bound in `template_index.go`, so there is no such thing as an embedded-but-unused template here.
 
 `templates/*.tmpl` are embedded via `//go:embed` (`template_loader.go`) and loaded into package-level vars by `template_index.go` using `mustLoadTemplate`, i.e. **at package init — renaming or deleting a template panics on import**, not at generation time. That init is exactly what `runtime/` exists to stay out of; keep the embed directive and `templates/` in the generator package.
 
-Per-type templates receive a `*gen.Type` as `.`, so `$.Config.Package`, `$.Package`, `$.Name`, `$.ID` and the standard Ent template funcs are all available. The two graph-level ones receive a `*gen.Graph`, so they see `$.Nodes` instead.
+Per-type templates receive a `*gen.Type` as `.`, so `$.Config.Package`, `$.Package`, `$.Name`, `$.ID` and the standard Ent template funcs are all available. The two graph-level output templates and the config partial receive a `*gen.Graph`, so they see `$.Nodes` instead.
 
-**Every template imports the runtime under an explicit `entapi` alias**, and the alias is required rather than decorative: the path's last element is `runtime`, so goimports would read an unaliased import as package `runtime`, find no use of that name, and delete it — and a formatter failure aborts the whole run in phase 1.
+**Every standalone-output template imports the runtime under an explicit `entapi` alias**, and the alias is required rather than decorative: the path's last element is `runtime`, so goimports would read an unaliased import as package `runtime`, find no use of that name, and delete it — and a formatter failure aborts the whole run in phase 1. The config partial declares no imports; it names only helpers in the generated package.
 
 ### Template functions
 
@@ -207,13 +207,19 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
   `Apply{Entity}CreateRequest`/`Apply{Entity}UpdateRequest` free functions are
   gone, because taking a raw request is exactly the escape hatch that made
   validation optional (#26).
-- **Soft delete is annotation-based and lives at ent's layer** (#18). A consumer
-  embeds `entapi.SoftDeleteMixin` (field + `DomainSoftDelete` marker; ent
-  merges mixin annotations onto the type) and calls the generated
-  `ent.RegisterSoftDelete(client)` once. Nothing in the generated wiring knows
-  about it: `Delete{Entity}` issues `DeleteOneID(...).Exec` (`OpDeleteOne`) and
-  `DeleteBatch{Entities}` issues `Delete().Where(IDIn(...)).Exec` (`OpDelete`),
-  and the hook rewrites both. There is no second tombstone write. The old
+- **Soft delete is annotation-based and lives at ent's layer** (#18, #70). A
+  consumer only embeds `entapi.SoftDeleteMixin` (field + `DomainSoftDelete`
+  marker; ent merges mixin annotations onto the type). The
+  `config/init/fields/*` partial writes the hook and interceptor directly into
+  each soft-deletable type's fresh `cfg.hooks` / `cfg.inters` slices inside
+  `newConfig`, before `cfg.options(opts...)`; `NewClient`, `Open`, `enttest.Open`
+  and every later config copy therefore carry them with no registration call
+  or initialization-order dependency. Injection makes the soft-delete hook
+  `hooks[0]`; Ent applies index 0 outermost, ahead of later consumer `Use`
+  hooks. Nothing in the generated wiring knows about it: `Delete{Entity}`
+  issues `DeleteOneID(...).Exec` (`OpDeleteOne`) and `DeleteBatch{Entities}`
+  issues `Delete().Where(IDIn(...)).Exec` (`OpDelete`), and the hook rewrites
+  both. There is no second tombstone write. The old
   `deleted_at`/`Nillable` naming convention is gone: #18 retired it (it could not
   tell an entity that opted in from one that merely owns a column with that
   name, and it only ever reached the write path), and #29 removed the last

@@ -66,9 +66,18 @@ func (e *Extension) Hooks() []gen.Hook {
 	}
 }
 
-// Templates returns an empty template list — the old GraphTemplate approach is no longer used.
+// Templates returns the partial that extends ent's own newConfig body.
+//
+// It is not a standalone GraphTemplate output: its config/init/fields/* name
+// makes ent splice it into client.go. The partial renders nothing for a graph
+// without SoftDeleteMixin, leaving that graph's client.go byte-identical to
+// ordinary ent output.
 func (e *Extension) Templates() []*gen.Template {
-	return []*gen.Template{} // removed legacy GraphTemplate generation
+	return []*gen.Template{
+		gen.MustParse(gen.NewTemplate("entapi_softdelete_config_init").
+			Funcs(e.templateFuncMap()).
+			Parse(softDeleteConfigInitTemplate)),
+	}
 }
 
 // perTypeFileName is the file one per-type template's output for node lands in:
@@ -334,16 +343,15 @@ func (e *Extension) renderErrorMapFile(g *gen.Graph) (pendingFile, error) {
 	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
-// renderSoftDeleteFile renders and formats the soft-delete traverser, the
-// delete-rewriting hook and the single registration function, for the whole
-// graph at once.
+// renderSoftDeleteFile renders and formats the soft-delete traverser and the
+// delete-rewriting hook for the whole graph at once.
 // Output: ent/entapi_softdelete.go
 //
 // It returns the zero pendingFile — an empty path — when no entity embeds
 // entapi.SoftDeleteMixin, in which case nothing is written and
 // removeStaleArtifacts deletes any file an earlier run left. A file holding an
-// empty type switch would compile, but it would also publish a
-// RegisterSoftDelete that quietly does nothing.
+// empty type switch would compile, but it would also leave unexplained dead
+// helpers in the consumer's package.
 func (e *Extension) renderSoftDeleteFile(g *gen.Graph) (pendingFile, error) {
 	if len(softDeleteTypes(g)) == 0 {
 		return pendingFile{}, nil

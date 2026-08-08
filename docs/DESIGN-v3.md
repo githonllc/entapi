@@ -630,6 +630,17 @@ runtime 装配机制，不是 Mount。
    stdlib 模式语法），适配器在消费者侧把自家参数经 `r.SetPathValue`（Go
    1.22+）注入后调 Handler。整树挂载仍是默认；清单是纯数据导出，不是行为
    扩展点。形状见 `DESIGN-v3-final.md` §2.5。
+3. **竞对对比评审的增补**（独立上下文 Opus 对比 lrstanley/entrest，报告存
+   `docs/COMPARISON-entrest.md`）。入档四组：① §4.4 边界从三条扩到六条
+   （非请求路径旁路契约、privacy×软删除 spike 共存场景、privacy 下
+   `ListPage.total` 待验证）；② **实现前必决**：事务边界（槽位/wiring
+   收 `*Client` 不收 `*Tx`，跨实体事务无法纳入生成步）；`With` 组合语义
+   同日由 owner 裁决为 Functional Options（变参≡链式、last-wins、nil 拒绝，
+   见 final §2.2），不再悬置；
+   ③ §2.2 说破"换脑不是中间件"——横切走 `http.Handler` 洋葱组合或
+   `Routes()` 逐路由包裹，身份经 context 传递；④ 偷师清单七项进 §5
+   backlog，其中 ErrorHandler 观测钩子（第 3 步、已分类结果、观测/替换
+   两档、全局+op）形态定稿。
 
 ## 附录 A：样例——账号系统的 User
 

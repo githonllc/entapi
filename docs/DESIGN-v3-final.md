@@ -106,8 +106,24 @@ ent.API(client).With(ent.CreateArticleFn(myCreate))
 // myCreate: func(ctx, *ent.Client, *ent.ValidArticleCreateRequest) (*ent.ArticleResponse, error)
 ```
 
+`With` 的组合语义 = Go **Functional Options**（owner 裁决，2026-08-08）：
+变参且链式等价（`With(a,b).With(c)` ≡ `With(a,b,c)`）；重复设置同一槽位
+**后写覆盖**（last-wins，支撑"先默认后条件覆写"的惯用组装）；唯一例外：
+**nil 函数值构造期拒绝**——nil 换脑不可能是有意的，静默落回默认是被
+ADR-0001 判死的那类沉默。
+
 **external 门零机制**：非 CRUD 端点由消费者直接注册在自己的 mux 上
 （stdlib mux 最长匹配）。框架永不生成 Service 骨架。
+
+**换脑不是中间件，横切有自己的门。** 换脑是逐操作的整单元替换；要对**所有**
+端点统一加身份认证、header 检查、审计、租户注入这类横切关注，用 Go 的标准
+AOP 形态——`http.Handler` 洋葱组合：整树包裹 `auth(ent.API(client))`，或经
+`Routes()` 清单按 `Method`/`Path` 元数据**选择性逐路由包裹**。身份经
+`context.Context` 向内传递（middleware 写入 → 槽位/wiring/ent privacy 读取），
+context 就是这里的 IoC 容器。框架不提供注解式拦截器链——显式组合优于容器
+魔法，且三步体内部没有注入点是规则不是缺口（第 3 步的 ErrorHandler 观测钩子
+见 §5 backlog）。service 接入同理零机制：槽位签名里没有 receiver 位置，
+依赖注入靠闭包捕获——先构造你的 service，再用匿名函数包成槽位类型。
 
 ### 2.3 错误与状态码
 
@@ -229,26 +245,64 @@ description 枚举前缀集。
 
 框架把注册代码生成进消费者 ent 包（生成代码可命名 `*Client` 与实体 hook 槽），
 `init()` 自动挂接——消费者零仪式，对**所有**持 client 的进程生效（HTTP、
-cron、测试一视同仁）。spike 验证挂接时机与多 client 场景；失败回落显式
+cron、测试一视同仁）。spike 验证三个场景：挂接时机、多 client、
+**与 ent privacy 共存**（deny-by-default 的 privacy 规则不得拒掉软删除 hook
+自己的读写——竞对对比评审点名的最易踩的坑）。失败回落显式
 `RegisterSoftDelete(client)`。注册永不放进 `API()`/Mount：软删除语义不得
 取决于建没建 HTTP 面。
 
 ### 4.4 行级授权（OwnedBy）：出界，只立边界
 
-本版不设计。三条约束性边界：落点必须是 ent 扩展点（interceptor/privacy）；
-"当前用户"契约走 runtime 的 stdlib context 取值函数；永不生成进
-wiring/handler。
+本版不设计。约束性边界六条（后三条来自 2026-08-08 竞对对比评审，与 entrest
+的 ent-privacy 实践对齐——它与前三条方向相同，差别只在有可跑示例）：
+
+1. 落点必须是 ent 扩展点（interceptor/privacy）;
+2. "当前用户"契约走 runtime 的 stdlib context 取值函数（认证 middleware
+   写入 context，在 Mount 外面）;
+3. 永不生成进 wiring/handler;
+4. **非请求路径的旁路契约必须显式规定**：cron/migration/测试持 client 无
+   身份，privacy deny-by-default 会全线报错——旁路写法（ent 的
+   `privacy.DecisionContext(ctx, privacy.Allow)` 或等价物）是契约的一部分;
+5. 与 §4.3 软删除生成 init 的**共存**列入软删除 spike 验证场景;
+6. privacy 过滤行之后 `ListPage` 的 `total` 是否仍正确——**待测试证据**，
+   不推断（理论上 count 与 data 同源）。
 
 ---
 
-## 5. 落地顺序与显式 defer
+## 5. 落地顺序、实现前必决、backlog 与显式 defer
 
 **第一片**：`Sensitive()` 从响应消失——最小可证伪推导切片，纯收窄。
-**第二片**：软删除生成 init spike（同时为 OwnedBy arc 前置验证）。
+**第二片**：软删除生成 init spike（同时为 OwnedBy arc 前置验证，场景含
+privacy 共存，§4.3）。
+
+**实现前必决**（2026-08-08 竞对/service 接入评审暴露，未决会冻进契约）：
+
+- **事务边界**：槽位与 wiring 收 `*Client` 不收 `*Tx`——跨实体事务性逻辑
+  无法把生成的那一步纳入自己的事务。需定：提供 `*Tx` 变体、或统一走 ent
+  的 tx-from-context 惯例、或如实入档"生成面不参与外部事务"。
+  （原并列的第二项"`With` 组合语义"已裁决为 Functional Options，见 §2.2。）
+
+**backlog**（源自 entrest 对比评审的偷师清单，`docs/COMPARISON-entrest.md`；
+按采纳态度排序，均为增量、不阻塞第一片）：
+
+1. **ErrorHandler 观测钩子**（倾向采纳，形态已定稿）：挂第 3 步（写）不动
+   第 2 步；收**已分类结果 + 原始 error**（分类留在消费者包，runtime 不认识
+   ent）；**观测/替换两档**（观测档不可改响应；替换档自负 RFC 9457 合规）；
+   默认写出器公开可回调；连带 `MaskErrors` 等价物（500 的 `detail` 防泄漏）；
+   **全局一个 + op 参数**，不做逐操作（避免与换脑槽并行两套逐操作机制）;
+2. **边端点** `GET /users/{id}/pets`（倾向采纳：不与"Summary 不带边"深度
+   上限冲突）;
+3. **spec 精修**：基础 spec 合并 + example/schema 覆写——比"全生成 vs 删
+   marker 接管"柔和一档的中间态;
+4. **生成测试包**（entrest `WithTesting`/`resttest` 同类）;
+5. **内置 docs UI**（yaml 已 embed，边际成本低）;
+6. **字段组 OR 过滤**（`WithFilterGroup` 同类，仍是生成期白名单）;
+7. **"生成但不挂载"第三档逃生舱**（`Routes()` 清单已覆盖大半需求，优先级最低）。
 
 显式 defer：`json:` 算子；软删除 HTTP 语义（restore/include_deleted）；
 反向表第 5 行专用词；重复同名过滤参数语义（实现时定）；挂载前缀与 spec
-`info` 元数据（实现时定）；迁移说明落点（#23 收口时定）。
+`info` 元数据（实现时定）；迁移说明落点（#23 收口时定）；跨边过滤与
+OwnedBy（出界，§4.4）。
 
 ---
 

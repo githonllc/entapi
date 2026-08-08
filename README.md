@@ -883,6 +883,11 @@ unimplemented — consistent with the design.
 
 ## Migration notes
 
+**Behaviour change:** an Ent field marked `Sensitive()` no longer appears in
+`{Entity}Response` or `{Entity}Summary`. This closes the response-serialization
+leak where a response-scoped sensitive field was emitted; create and patch
+requests are unchanged.
+
 The following symbols once existed in this module and have been removed, with
 **no compatibility aliases** — an alias that preserves the coupling a change
 exists to remove is worse than the break.
@@ -894,7 +899,7 @@ exists to remove is worse than the break.
 | `{Entity}EntToResponse` | `New{Entity}Response`, which returns an error rather than nil on failure |
 | `Apply{Entity}CreateRequest`, `Apply{Entity}UpdateRequest` (free functions) | `Valid{Entity}…Request.Apply` |
 | `Cursor`, `PageInfo`, `EncodeCursor`, `DecodeCursor`, `ListRequest.Cursor` | nothing — pagination is offset-only |
-| `DomainField.Sensitive`, `AsSensitive` | withhold `ScopeResponse` from the field |
+| `DomainField.Sensitive`, `AsSensitive` | mark the field `Sensitive()` in the ent schema — it is then dropped from both response tiers regardless of scope; or withhold `ScopeResponse` |
 | `DomainField.UniqueLookup`, `.RangeLookup`, `.Validation` | `AsFilterable()` (operators are derived from ent's `$field.Ops`); `Validate()` |
 | `DomainConfig.EntityName` | nothing — it had no readers |
 | runtime symbols living in the root package | all moved to `github.com/githonllc/entapi/runtime` |

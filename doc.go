@@ -47,11 +47,15 @@
 //	edge.To("posts", Post.Type).
 //	    Annotations(entapi.Edge().InResponse())
 //
-// A field stays out of responses by not carrying [ScopeResponse] — that is the
-// only mechanism, so use [InputOnlyField] or a custom scope list for passwords
-// and secrets. DomainField.Sensitive and AsSensitive have been removed; they
-// were never read by anything, so a field marked sensitive was emitted into the
-// response struct regardless. See the README for the migration note.
+// A field stays out of responses two ways: by not carrying [ScopeResponse], or
+// by being marked Sensitive() in the ent schema. The second is unconditional —
+// ent's fact overrides a response scope the annotation granted, for both
+// {Entity}Response and {Entity}Summary — so passwords and secrets need no scope
+// bookkeeping. [InputOnlyField] and custom scope lists remain the mechanism for
+// withholding a field ent says nothing about. DomainField.Sensitive and
+// AsSensitive have been removed; they were never read by anything, so a field
+// marked sensitive was emitted into the response struct regardless, and that is
+// the leak the ent fact closes. See the README for the migration note.
 //
 // Wire the extension in your entc.go:
 //

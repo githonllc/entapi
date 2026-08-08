@@ -175,7 +175,20 @@ func TestCheckGraphConflicts_NonResourceIsSilent(t *testing.T) {
 
 func TestCheckGraphConflicts_ReservedNamesUseResources(t *testing.T) {
 	resource := newTestType("Widget", newStringField("name", nil))
-	collision := &gen.Type{Name: "ErrorMap", ID: newIntField("id", nil)}
+	for _, name := range []string{"ErrorMap", "API", "APIHandler"} {
+		t.Run(name, func(t *testing.T) {
+			collision := &gen.Type{Name: name, ID: newIntField("id", nil)}
+			got := conflictText(t, resource, collision)
+			requireConflict(t, got, name, "rename")
+		})
+	}
+}
+
+func TestCheckGraphConflicts_HandlerFnNamesUseMaximumBreadth(t *testing.T) {
+	resource := newTestType("Widget", newStringField("name", nil))
+	resource.Annotations[resourceAnnotationName] = resourcePtr(api.Resource().Except(api.OpDelete))
+	collision := &gen.Type{Name: "DeleteWidgetFn", ID: newIntField("id", nil)}
+
 	got := conflictText(t, resource, collision)
-	requireConflict(t, got, "ErrorMap", "entapi_errors.go", "rename")
+	requireConflict(t, got, "DeleteWidgetFn", "widget_handler.go", "reserved even if")
 }

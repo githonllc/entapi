@@ -50,6 +50,9 @@ const softDeleteFileName = "entapi_softdelete.go"
 // Same prefix rule as above: entapi_ cannot collide with ent's own output.
 const errorMapFileName = "entapi_errors.go"
 
+// httpFileName holds the graph-level APIHandler and route manifest.
+const httpFileName = "entapi_http.go"
+
 // removeStaleArtifacts deletes files this extension wrote on an earlier run and
 // did not write on this one — the entity lost its annotations, was deleted from
 // the schema outright, or the template that produced the file was removed from

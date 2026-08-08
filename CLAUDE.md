@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 make check                  # fmt + vet + test + test-modules (run before committing)
 make test                   # go test -count=1 -v ./...  (this module only)
-make test-modules           # the three nested modules; NOT covered by make test
+make test-modules           # the four nested modules; NOT covered by make test
 make cover                  # coverage summary (CONTRIBUTING targets >85%)
 make lint                   # golangci-lint run ./...   (v1; v2 rejects .golangci.yml)
 make fmt                    # gofmt + goimports -local github.com/githonllc/entapi
@@ -26,13 +26,13 @@ One Go module, **three packages**, split by *when the code runs* (#15, #71).
 
 1. **`github.com/githonllc/entapi` — code-generation time.** The Ent extension and `SoftDeleteMixin`. It writes `{entity}_dto.go`, `{entity}_filter.go`, `{entity}_wiring.go` per `api.Resource()`, plus graph files, into the consumer's `ent/` package.
 2. **`github.com/githonllc/entapi/api` — schema time only.** The three mergeable annotations and their builders. It may import only `entgo.io/ent/schema` and stdlib; `TestSchemaAPIPackageIsGeneratorFree` guards the transitive closure.
-3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`/`SortSpec`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendEach`/`AppendEachSlice`, the lexical URL-query helpers, error sentinels and mapper, pointer helpers, and soft-delete context switches.
+3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`/`SortSpec`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendEach`/`AppendEachSlice`, lexical URL-query helpers, error sentinels and mapper, `WriteProblem`/`FieldError`/`Route`, actor context, pointer helpers, and soft-delete context switches.
 
 **The split is load-bearing, not cosmetic.** `template_index.go` declares package-level vars calling `mustLoadTemplate`, so while the two halves shared a package, a consumer's production binary that wanted `ErrValidation` embedded five templates and ran the template loader at init. Measured, and asserted by `TestRuntimePackageIsGeneratorFree`: `go list -deps ./runtime` reports **0** `entgo.io` packages out of 62 (all standard library) and `EmbedFiles` is empty, against **15** for the generator — which is correct there, since generating genuinely needs ent.
 
 Keep new code on the right side of that line. Anything the generated output calls at run time belongs in `runtime/` and must import stdlib only; anything ent loads belongs in the root. `softdelete.go` is the worked example of the seam: the mixin (schema-time, imports `entgo.io/ent/schema`) stayed, while `WithSoftDeleted`/`WithHardDelete` and their predicates moved to `runtime/softdelete_context.go` because the generated traverser and hook call them on every query and every delete.
 
-There is no `main`, no example app, and no downstream ent project in this repo. Anything about *generated* code can only be verified by generating into a real ent project — which `TestCodegenFixtures` and the three nested modules do.
+There is no `main` or example app. Anything about *generated* code can only be verified by generating into a real ent project — which `TestCodegenFixtures` and the four nested modules do.
 
 ## Generation pipeline
 
@@ -62,11 +62,11 @@ Candidates that fail fence 2 are left alone and logged. Cleanup never runs on a 
 
 ### Templates
 
-Six live templates, all embedded and all bound: `dto`, `filter`, `wiring` (rendered per `*gen.Type`); `errors`, `softdelete` (rendered once per `*gen.Graph`); and `softdelete_config_init`, the partial Ent executes inside `newConfig`. `TestEveryEmbeddedTemplateIsLoaded` requires every embedded `.tmpl` to be bound in `template_index.go`, so there is no such thing as an embedded-but-unused template here.
+Eight live templates, all embedded and all bound: `dto`, `filter`, `wiring`, `handler` (rendered per `*gen.Type`); `errors`, `http`, `softdelete` (rendered once per `*gen.Graph`); and `softdelete_config_init`, the partial Ent executes inside `newConfig`. `TestEveryEmbeddedTemplateIsLoaded` requires every embedded `.tmpl` to be bound in `template_index.go`, so there is no such thing as an embedded-but-unused template here.
 
 `templates/*.tmpl` are embedded via `//go:embed` (`template_loader.go`) and loaded into package-level vars by `template_index.go` using `mustLoadTemplate`, i.e. **at package init — renaming or deleting a template panics on import**, not at generation time. That init is exactly what `runtime/` exists to stay out of; keep the embed directive and `templates/` in the generator package.
 
-Per-type templates receive a `*gen.Type` as `.`, so `$.Config.Package`, `$.Package`, `$.Name`, `$.ID` and the standard Ent template funcs are all available. The two graph-level output templates and the config partial receive a `*gen.Graph`, so they see `$.Nodes` instead.
+Per-type templates receive a `*gen.Type` as `.`, so `$.Config.Package`, `$.Package`, `$.Name`, `$.ID` and the standard Ent template funcs are all available. The three graph-level output templates and the config partial receive a `*gen.Graph`, so they see `$.Nodes` instead.
 
 **Every standalone-output template imports the runtime under an explicit `entapi` alias**, and the alias is required rather than decorative: the path's last element is `runtime`, so goimports would read an unaliased import as package `runtime`, find no use of that name, and delete it — and a formatter failure aborts the whole run in phase 1. The config partial declares no imports; it names only helpers in the generated package.
 
@@ -85,6 +85,7 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 | `funcs_codegen.go` | `fieldValueExpr` — the response constructor's per-field expression, and the only caller of `isComplexFieldType` |
 | `funcs_strings.go` | `camelCase`, and nothing else — Ent's `gen.Funcs` already supplies `contains`, `hasPrefix`, `lower`, `snake`, `plural`, … |
 | `funcs_filter.go` | the query surface: `queryFields`, `parseFields` (ID plus Filterable fields), `searchFields`, `isSortable`, per-field wire operator sets and conversion expressions, `filterImports` |
+| `funcs_http.go` | reachable operations, route paths, path-ID parsing and handler imports |
 | `annotations_edge.go` | `responseEdgeSet` and `edgeJSONKey`, reading `api.Expand()` through the normalized edge reader |
 | `api/annotations.go` | schema-time `ResourceAnnotation`, `FieldAnnotation`, `EdgeAnnotation`; every type implements `schema.Merger` |
 
@@ -145,9 +146,10 @@ and `Apply` on the validated types only. Five rules are load-bearing:
   `ReadOnly`.** A surviving field provably has a `Set<Field>`. It is clearable
   exactly when Ent marks it `Optional`.
 
-The one case that cannot be closed here: an `Immutable()` field named in a PATCH
-body is discarded by `encoding/json` before any validator runs. Rejecting it
-needs `DisallowUnknownFields` in the consumer's handler.
+An `Immutable()` field is absent from the PATCH DTO. The generated HTTP handler
+closes the resulting silent-drop case by comparing raw keys against the
+generated patch-tag data before calling the DTO's custom unmarshaller; à la
+carte DTO decoding remains permissive for unrelated keys.
 
 ### Response, summary and edge generation (#25)
 
@@ -246,21 +248,26 @@ family may disappear when `OpCreate` is explicitly excepted.
   tell an entity that opted in from one that merely owns a column with that
   name, and it only ever reached the write path), and #29 removed the last
   caller of `hasSoftDelete`/`isTimeField` along with `base_service.tmpl`.
-- **Two graph-level templates** are rendered once over `*gen.Graph` rather than
+- **Three graph-level templates** are rendered once over `*gen.Graph` rather than
   per `*gen.Type`; their output files are cleaned up by the same marker scan as
   everything else (#63), with no per-name enumeration:
   `templates/softdelete.tmpl` -> `entapi_softdelete.go`, generated for a
   soft-deletable entity even when that entity is not an API Resource; and
   `templates/errors.tmpl` -> `entapi_errors.go`, generated when any entity is
-  annotated, holding the package's `ErrorMap` (#13).
+  annotated, holding the package's `ErrorMap` (#13); and
+  `templates/http.tmpl` -> `entapi_http.go`, holding `APIHandler`, `API(client)`,
+  `ServeHTTP`, `Mount`, the route manifest and request-time function fields.
 - **Every exported wiring function returns through `ErrorMap.MapError`, exactly
   once** (#13). The unexported `{entity}Get` exists precisely so a create or
   update that re-reads through the eager-load plan does not map twice. The two
   predicates in `errors.tmpl` must stay UNQUALIFIED — `entapi.IsNotFound`
   also exists and would still compile, silently classifying nothing.
-- **There are no generated hooks and nothing to embed.** The wiring is free
-  functions; a consumer who needs different behaviour writes their own function
-  and stops calling the generated one. `SetSelf` dispatch is gone (#16, #29).
+- **HTTP handlers are bind → call → write.** Their middle step reads the
+  unexported function field through `h` at request time; capturing a default
+  wiring function while `API()` builds the route would create a dead
+  customization point for #75. There is no override point inside a handler and
+  no generated hook/interceptor chain; cross-cutting concerns wrap the returned
+  `http.Handler`.
 - Handler code should not import `ent` for conversion. That is a property of
   where the DTO package sits, not of a base type — `Base{Entity}Handler`
   required an `ent` import to embed it, so it never achieved the goal. Today the
@@ -306,12 +313,13 @@ Every row has a fixture. A fixture whose generation must fail carries
 - **The generated directory is `<dir>ent`, never `ent` (#49).** A Go package is named after the last element of its import path, so `internal/fixtures/basic/basicent` declares `package basicent`. That is deliberate and load-bearing: goimports resolves a bare `ent.` reference by **package name**, and when thirteen fixtures all declared `package ent` the winner depended on its module index cache — which is how one run rewrote `entgo.io/ent` in `softdelete`'s `client.go` to `basic`'s package. The harness derives every path from `entDirName`/`fixtureEntPkgPath` in `codegen_fixtures_test.go`, and `TestNoAmbiguousEntPackages` fails the run if any package under `internal/fixtures` is named `ent`.
 - `TestCodegenFixtures` **writes into the repository tree** on purpose: generated ent code has to sit inside this module to resolve `github.com/githonllc/entapi` without a replace directive, and `t.TempDir()` is outside any module. The output is committed, so a clean checkout plus a test run leaves `git status` clean. **A dirty tree after `make check` means generation changed** — regenerate, never hand-edit anything under `internal/fixtures/<dir>/<dir>ent/`.
 - **`internal/fixtures` (plural) is the generator's output; `internal/fixture` (singular) is its target.** The singular one is a separate Go module holding the #22 spike: `ent/dto/` there is hand-written, compiled and exercised against SQLite, and it is the specification. Read it; never edit it — except for a mechanical migration every consumer also has to make, which is how #15 changed exactly one import line in six of its files.
-- **Three nested modules run under `make test-modules`, and each exists because a compile proof cannot answer its question.** They are separate modules because they need a SQL driver and this library must not have one.
+- **Four nested modules run under `make test-modules`, and each exists because a compile proof cannot answer its question.** They are separate modules because they need a SQL driver and this library must not have one.
   - `internal/fixture` — the #22 spike. It breaking is the signal that generated output has drifted from the hand-written target.
   - `internal/fixtures/wiring/e2e` — the behavioural half of the wiring fixture. Compiling proves the wiring type-checks; only this proves it returns the right page, and it carries #13's three-way missing-row / `UNIQUE` / `FOREIGN KEY` mapping proof against real SQLite.
+  - `internal/fixtures/httpdemo/e2e` — the HTTP tracer bullet: all five endpoints, problem+json statuses, direct/Mount/StripPrefix composition, actor context, middleware short-circuiting and Excepted routes against real SQLite.
   - `internal/softdeleteproof` — the only evidence for #18's load-bearing claim: a direct `client.Doc.Query()`, with nothing generated in the call path, does not return deleted rows. A compile proof cannot tell "the predicate is generated" from "the predicate reaches the SQL".
-- `internal/fixtures/edges/edgesent/orerr_contract_test.go` is one of the few hand-written files under a generated `<dir>ent/` directory. It must be in `package edgesent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database. The others are `basic/basicent/listresponse_shape_test.go`, `createexcepted/createexceptedent/create_family_test.go`, `presence/presenceent/account_presence_test.go`, `query/queryent/filter_contract_test.go`, `sensitive/sensitiveent/sensitive_wire_test.go` and `stale/staleent/trinket_dto.go`; `go build` ignores `_test.go` files, so only the last of those is visible to the codegen harness — and it is there precisely to prove cleanup leaves files it did not write alone.
-- The two nested modules that import a fixture package (`internal/fixtures/wiring/e2e`, `internal/softdeleteproof`) alias it back to `ent` in their imports. They are hand-written and read from the consumer's side, where the generated package really is named `ent`; the alias is spelled out, so goimports has nothing to resolve.
+- `internal/fixtures/edges/edgesent/orerr_contract_test.go` is one of the few hand-written files under a generated `<dir>ent/` directory. It must be in `package edgesent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database. The others include `basic/basicent/listresponse_shape_test.go`, `createexcepted/createexceptedent/create_family_test.go`, the two `httpdemo/httpdemoent/*_test.go` contract proofs, `presence/presenceent/account_presence_test.go`, `query/queryent/filter_contract_test.go`, `sensitive/sensitiveent/sensitive_wire_test.go` and `stale/staleent/trinket_dto.go`; `go build` ignores `_test.go` files, so only the last of those is visible to the codegen harness — and it is there precisely to prove cleanup leaves files it did not write alone.
+- The three nested modules that import a fixture package (`internal/fixtures/wiring/e2e`, `internal/fixtures/httpdemo/e2e`, `internal/softdeleteproof`) alias it back to `ent` in their imports. They are hand-written and read from the consumer's side, where the generated package really is named `ent`; the alias is spelled out, so goimports has nothing to resolve.
 
 ## Dead code is now a test failure, not a convention (#7)
 

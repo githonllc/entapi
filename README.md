@@ -5,10 +5,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 An [Ent](https://entgo.io) extension. Mark an entity with `api.Resource()` and
-it writes request types, response types, a query surface and one wiring function
-per operation — all into your own `ent` package, against a runtime that imports
-nothing but the standard library. Field shape comes from Ent; annotations name
-only deviations.
+it writes request types, response types, a query surface, one wiring function
+per operation, and a stdlib HTTP route tree — all into your own `ent` package,
+against a runtime that imports nothing but the standard library. Field shape
+comes from Ent; annotations name only deviations.
 
 *[中文](README_zh.md)*
 
@@ -23,16 +23,15 @@ func (Article) Annotations() []schema.Annotation {
 ```
 
 ```go
-// handler.go — you get this
-filter, req, err := ent.ParseArticleQuery(r.URL.Query()) // GET /articles?title=like:go&_sort=title
-page, err := ent.ListArticles(ctx, client, filter, req)
-art,  err := ent.CreateArticle(ctx, client, validReq)     // POST /articles
+// main.go — you get this entry point
+http.ListenAndServe(":8080", ent.API(client))
 ```
 
-Between those two lines the generator wrote `ArticleCreateRequest` with
+Between those two declarations the generator wrote `ArticleCreateRequest` with
 three-state presence, `ParseArticleQuery` with a typed `ArticleFilter`, a
 multi-key sort allow-list, `ArticleResponse` with its eager-load plan, and error
-classification.
+classification, five three-step handlers, and the route manifest behind
+`ent.API(client)`.
 
 > ### Status: v0, never released
 >
@@ -58,6 +57,7 @@ classification.
 - [Install](#install) · [Three import paths](#three-import-paths) · [Wiring it in](#wiring-it-in)
 - [The annotation model](#the-annotation-model) — Ent facts plus five deviation words
 - [What gets generated](#what-gets-generated)
+- [Generated HTTP](#generated-http)
 - [Requests: three-state presence](#requests-three-state-presence)
 - [Response, summary and edges](#response-summary-and-edges)
 - [The query surface](#the-query-surface) — filtering, free text, sorting, pagination
@@ -90,10 +90,10 @@ packages are named `entapi`; the schema package is named `api`.
 |---|---|---|
 | `github.com/githonllc/entapi` | your `entc.go`; schemas that embed soft delete | `Extension`, `SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | your **schema** files | `Resource`, `Hidden`, `ReadOnly`, `Searchable`, `Filterable`, `Sortable`, `Expand` |
-| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, `ErrorMapper`, `AppendEach`, `Ptr`/`PtrOrNil`/`PtrNilSafe`, `WithSoftDeleted`/`WithHardDelete` |
+| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `WriteProblem`, `FieldError`, `Route`, `WithActor`/`ActorFrom`, error sentinels and mapper, filter/pointer/soft-delete helpers |
 
-The split is load-bearing, not cosmetic. The root package embeds five templates
-with `//go:embed` and reads all five out of the embedded filesystem **at package
+The split is load-bearing, not cosmetic. The root package embeds eight templates
+with `//go:embed` and reads all eight out of the embedded filesystem **at package
 init**, panicking if one is missing — importing the root package runs that
 whether or not you generate anything, and drags in `embed`, ent's codegen
 packages and `golang.org/x/tools/imports` behind it. (Parsing happens later, per
@@ -104,7 +104,8 @@ while the root package stays out.
 > **Implementation:** `template_loader.go` — `//go:embed templates/*.tmpl`,
 > `templateFS`, `loadTemplate`, `mustLoadTemplate` (returns `string`);
 > `template_index.go` — `dtoTemplate`, `filterTemplate`, `wiringTemplate`,
-> `errorMapTemplate`, `softDeleteTemplate` (five package-level `var`s, all
+> `handlerTemplate`, `errorMapTemplate`, `httpTemplate`, `softDeleteTemplate`,
+> `softDeleteConfigInitTemplate` (eight package-level `var`s, all
 > evaluated at init); `extension.go` — `renderDTOFile` and its siblings, where
 > `template.New(…).Funcs(…).Parse(…)` actually runs; `runtime/types.go`,
 > `runtime/query.go`, `runtime/errors.go`, `runtime/errors_map.go`,
@@ -142,9 +143,9 @@ generated files import, and its default is already
 `github.com/githonllc/entapi/runtime`, so it matters only if you vendored a
 copy. `NewExtension(cfg)` takes an `*ExtensionConfig` directly and is nil-safe.
 
-The extension installs exactly one `gen.Hook`. `Templates()` returns an **empty
-slice** — this extension does not use Ent's `GraphTemplate` mechanism; it
-renders and writes its own files.
+The extension installs exactly one `gen.Hook`. `Templates()` returns only the
+soft-delete `config/init/fields/*` partial; every standalone output is rendered
+and written by the hook.
 
 > **Implementation:** `extension.go` — `Extension`, `ExtensionConfig`,
 > `NewExtension`, `NewExtensionWithOptions`, `Option`, `WithEntAPIPackage`,
@@ -232,7 +233,7 @@ through one JSON normalisation.
 
 ## What gets generated
 
-Three files per entity carrying **`api.Resource()`**. An entity without that
+Four files per entity carrying **`api.Resource()`**. An entity without that
 single switch is skipped entirely and produces no EntAPI files.
 
 | File | Declares |
@@ -240,12 +241,14 @@ single switch is skipped entirely and produces no EntAPI files.
 | `{entity}_dto.go` | `{E}CreateRequest`, `{E}PatchRequest`, a `Valid…` counterpart and `Apply` for each; `{E}Response`, `{E}Summary` and their constructors; `{E}QueryWithResponseEdges`; `{E}ListResponse` and `New{E}ListResponse` |
 | `{entity}_filter.go` | `{E}Filter`, `Parse{E}Query`, `Predicates()`, `{E}SortKeys`, `{E}Order` |
 | `{entity}_wiring.go` | `Get{E}`, `List{Es}`, `Create{E}`, `Patch{E}`, `Delete{E}`, `DeleteBatch{Es}` |
+| `{entity}_handler.go` | reachable `{Op}{E}Fn` types and three-step bind → call → write handlers |
 
-Plus two files per schema, each with its own emission condition:
+Plus three files per schema, each with its own emission condition:
 
 | File | Emitted when | Declares |
 |---|---|---|
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
+| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIHandler`, `API(client)`, `ServeHTTP`, `Mount` and the unexported route manifest |
 | `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
 
 The soft-delete condition is independent of `api.Resource()`: an entity that is
@@ -261,11 +264,56 @@ entity name can collide with one — see
 [reserved names](#generation-can-fail-and-that-is-the-design).
 
 > **Implementation:** `extension.go` — `generatePerTypeFiles`, `perTypeFileName`,
-> `renderDTOFile`, `renderFilterFile`, `renderWiringFile`, `renderErrorMapFile`,
-> `renderSoftDeleteFile`, `pendingFile`; `cleanup.go` — `errorMapFileName`,
-> `softDeleteFileName`; `funcs_scope.go` — `isResource`;
+> `renderDTOFile`, `renderFilterFile`, `renderWiringFile`, `renderHandlerFile`,
+> `renderErrorMapFile`, `renderHTTPFile`, `renderSoftDeleteFile`, `pendingFile`;
+> `cleanup.go` — `errorMapFileName`, `httpFileName`, `softDeleteFileName`;
+> `funcs_scope.go` — `isResource`;
 > `funcs_softdelete.go` — `softDeleteTypes`; authoritative symbol list:
 > `schema_conflicts.go` — `derivedEntityDecls`
+
+## Generated HTTP
+
+`ent.API(client)` returns `*ent.APIHandler`, which is also an `http.Handler`.
+Use it directly, mount its routes into a consumer mux, or compose it with
+ordinary stdlib middleware:
+
+```go
+api := ent.API(client)
+api.Mount(mux)
+mux.Handle("/v1/", http.StripPrefix("/v1", api))
+```
+
+Each non-Excepted Resource gets exactly these Go 1.22 patterns:
+
+| Pattern | Result |
+|---|---|
+| `GET /articles` | bare `{"data","total","page","size"}` page, 200 |
+| `POST /articles` | bare resource, 201; no `Location` header |
+| `GET /articles/{id}` | bare resource, 200 |
+| `PATCH /articles/{id}` | bare resource, 200 |
+| `DELETE /articles/{id}` | empty body, 204 |
+
+Errors are RFC 9457 `application/problem+json`; `WriteProblem` emits
+`type: "about:blank"`, title, status and detail, plus `field` when the chain
+contains `*FieldError`. Bind failures are 400 except generated `Validate`
+failures (422), unsupported media types are 415, oversized bodies are 413, and
+middle-step sentinels map to 404/409/400. Unclassified errors are 500. Save-time
+Ent `ValidationError` classification is deliberately deferred to #74 and is
+therefore still a 500 in this slice.
+
+POST and PATCH accept only `application/json`; media-type parameters are
+allowed. Their body is capped at **1 MiB before reading, with no configuration
+knob**. Unknown keys are compared against the generated create/patch tag data,
+so an immutable PATCH key is rejected by name rather than silently discarded.
+
+`WithActor` and `ActorFrom` carry authentication state through middleware.
+`Route` is the stdlib-only manifest row used internally by `Mount`; exporting a
+route accessor and the `With(...)` function replacements belongs to #75.
+
+Router-level unmatched paths and methods remain the stdlib mux's plain-text
+404/405 responses (including `Allow` on 405), not problem+json. This residue is
+intentional: installing catch-alls would make mounting into a consumer mux
+behave differently from serving the generated tree directly.
 
 ## Requests: three-state presence
 
@@ -311,9 +359,11 @@ equal to it:
 unknown key "Nickname" (did you mean "nickname"?)   // wraps entapi.ErrValidation
 ```
 
-A rejected request never touches your receiver. Keys that match **no** tag under
-folding are still ignored — rejecting those is `DisallowUnknownFields`, and it
-stays your handler's call. Rationale in
+A rejected request never touches your receiver. Used à la carte, the DTO still
+ignores keys that match **no** tag under folding. The generated HTTP handler is
+stricter: before calling this custom unmarshaller it compares raw keys with the
+generated tag slice and returns a 400 naming any unknown or immutable field.
+Rationale for the DTO's case rule is in
 [ADR-0001](docs/adr/0001-presence-follows-encoding-json-key-matching.md).
 
 ### Validation is not optional
@@ -637,12 +687,13 @@ The refusal matrix covers these contradictions:
 | A self-referential edge pair annotated on one end only | ent hands chained `edge.To(…).From(…).Annotations(…)` to the *inverse* builder, so the assoc end silently loses its annotation |
 | **An entity name colliding with a symbol this extension generates** | see below |
 
-An entity called `ErrorMap` makes ent emit `type ErrorMap` while
+Graph-level `API`, `APIHandler` and `ErrorMap` are reserved. An entity called `ErrorMap` makes ent emit `type ErrorMap` while
 `entapi_errors.go` emits `var ErrorMap` — and Go gives types, variables and
 functions **one** identifier namespace per package. The result is `redeclared in
 this block`, in two files the author never wrote, with nothing naming the cause.
-The same holds across entities: an entity literally named `ArticleResponse`
-collides with the response type generated for entity `Article`.
+The same holds across entities: an entity literally named `ArticleResponse` or
+`DeleteArticleFn` collides with a type generated for entity `Article`. The five
+Fn names are reserved at maximum breadth even when that operation is Excepted.
 
 The reserved-name check runs at graph level rather than inside the node loop,
 because **the colliding entity does not have to be annotated** — ent generates a
@@ -694,7 +745,7 @@ file meeting **both**:
 2. it was not written by this run.
 
 This is why a schema edit no longer breaks your build: delete an entity and its
-`_dto.go`/`_filter.go`/`_wiring.go` go with it, instead of lingering as a
+`_dto.go`/`_filter.go`/`_wiring.go`/`_handler.go` go with it, instead of lingering as a
 reference to a builder ent no longer generates. For anyone upgrading past the
 removal of the base classes, it also removes `_base_service.go` /
 `_base_handler.go` — those names are in no list; they simply carry the same
@@ -786,10 +837,9 @@ Ordered by how quietly they hurt you.
    Filterable and Sortable; every non-ID field still requires its own query word.
 5. **An all-immutable PATCH is refused** unless the resource writes
    `Except(api.OpPatch)`; the request type and wiring function still exist.
-6. **An `Immutable()` field in a PATCH body is discarded by `encoding/json`
-   before any validator runs.** Rejecting it needs `DisallowUnknownFields` in
-   your handler; the generator cannot see it. (Case *variants* of legitimate keys
-   are rejected — genuinely unknown keys are not.)
+6. **An `Immutable()` field in a PATCH body is absent from the DTO.** The
+   generated HTTP handler rejects it by comparing raw keys with the generated
+   patch-tag data. À la carte DTO decoding still ignores unrelated keys.
 7. **`entapi.IsNotFound` is not ent's `IsNotFound`.** The templates call the
    latter *unqualified* so it binds to ent's generated predicate in your package.
    Qualifying it still compiles and then silently matches nothing.

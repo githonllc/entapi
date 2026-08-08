@@ -9,8 +9,8 @@
 
 **一句话**：一个 [Ent](https://entgo.io) 扩展——`api.Resource()` 选择需要 HTTP 表面的实体，字段形状
 默认由 Ent 的 `Optional`、`Default`、`Nillable`、`Immutable`、`Sensitive` 和类型派生，只有五个字段词与
-`api.Expand()` 表达偏离。生成器把请求类型、响应类型、查询面（filter/search/sort）和每个操作一个的
-wiring 函数生成进消费者自己的 `ent/` 包，运行期只依赖标准库。
+`api.Expand()` 表达偏离。生成器把请求类型、响应类型、查询面（filter/search/sort）、每个操作一个的
+wiring 函数、三段式 HTTP handler 与 `APIHandler` 路由树生成进消费者自己的 `ent/` 包，运行期只依赖标准库。
 
 | 维度 | 事实 | 证据 |
 |---|---|---|
@@ -18,10 +18,10 @@ wiring 函数生成进消费者自己的 `ent/` 包，运行期只依赖标准�
 | 核心依赖 | `entgo.io/ent v0.14.4`、`golang.org/x/tools v0.30.0`（goimports）、`github.com/google/uuid` | `go.mod` |
 | 存储 / 中间件 | **无**。本库不含 SQL driver，也不含 HTTP 框架 | `go.mod` 无 driver 依赖；`Makefile` — `test-modules` 注释 |
 | 部署形态 | 库（`go get`）。无 `main`、无示例 app、无下游 ent 项目 | 仓库无 `main` 包 |
-| 包数 | **3 个手写产品包**（`entapi`、`api`、`runtime`）+ 6 个模板 + 3 个嵌套模块 | `extension.go` / `api/` / `runtime/` / `templates/` |
-| 手写非测试代码量 | 生成器 2545 行、api 173 行、runtime 623 行、模板 981 行 | `wc -l`（实测） |
-| 测试规模 | 全仓 200 个 `Test*` 函数（根包 90、api 6、runtime 29、fixtures 75） | `rg '^func Test'`（实测） |
-| 测试基线 | PR2 要求的根模块与三个嵌套模块测试均退出 0 | 实测 |
+| 包数 | **3 个手写产品包**（`entapi`、`api`、`runtime`）+ 8 个模板 + 4 个嵌套模块 | `extension.go` / `api/` / `runtime/` / `templates/` / `internal/**/go.mod` |
+| 手写非测试代码量 | 生成器 2977 行、api 173 行、runtime 726 行、模板 1511 行 | `wc -l`（实测） |
+| 测试规模 | 全仓 246 个 `Test*` 函数（根包 102、api 6、runtime 38、fixtures 100） | `rg '^func Test'`（实测） |
+| 测试基线 | 根模块与四个嵌套模块测试均退出 0 | `Makefile` — `test-modules`；实测 |
 | 覆盖目标 | `CONTRIBUTING` 定 >85%，由 `make cover` 报告 | `Makefile` — `cover` |
 
 **三个产品包是按代码何时运行切的，不是按层次切的**：`api` 只在 schema 描述期出现，根包只在
@@ -39,18 +39,18 @@ skinparam shadowing false
 package "本仓库 (github.com/githonllc/entapi)" #EEF6FF {
   component "api/annotations.go\nResourceAnnotation / FieldAnnotation / EdgeAnnotation" as API
   component "Extension\nextension.go" as EXT
-  component "templates/*.tmpl\n(6 个, go:embed)" as TMPL
+  component "templates/*.tmpl\n(8 个, go:embed)" as TMPL
   component "funcs_*.go\n模板函数注册表" as FUNCS
   component "schema_conflicts.go\n生成前拒绝" as CONF
   component "cleanup.go\n按 marker 回收" as CLEAN
-  component "runtime/\nListPage / ErrorMapper / Page" as RT
+  component "runtime/\nListPage / ErrorMapper / HTTP helpers" as RT
 }
 
 package "消费者项目" #FFF7E6 {
   component "ent/schema/*.go\n(手写, 带注解)" as SCHEMA
   component "entc.go\nentc.Generate(...)" as ENTC
-  component "ent/ (生成包)" as ENTPKG
-  component "handler.go\nHTTP 层" as HANDLER
+  component "ent/ (生成包)\nDTO / filter / wiring / handler / APIHandler" as ENTPKG
+  component "consumer mux / middleware\n(http.Handler 洋葱组合)" as MUX
 }
 
 component "entgo.io/ent/entc/gen\n(*gen.Graph)" as ENTGEN
@@ -65,23 +65,23 @@ ENTGEN --> EXT : *gen.Graph
 EXT --> CONF
 EXT --> TMPL
 TMPL --> FUNCS
-EXT --> ENTPKG : 写 5 类文件
+EXT --> ENTPKG : 写 per-type 与 graph-level 产物
 EXT --> CLEAN
-ENTPKG ..> RT : 生成代码 import (别名 entapi)
-HANDLER --> ENTPKG : Get/List/Create/Patch/Delete
-HANDLER ..> RT : ListRequest / IsNotFound
+MUX --> ENTPKG : ServeHTTP / Mount
+ENTPKG ..> RT : 生成代码 import (显式别名 entapi)
 ENTPKG --> DB
 
 note bottom of RT
-  运行期闭包：62 个包，
+  运行期闭包：186 个包，
   **0 个 entgo.io**（实测 go list -deps ./runtime）
 end note
 @enduml
 ```
 
-**风格**：不是分层框架，而是**一次性代码生成 + 一个泛型运行时**。没有 service 基类、没有可嵌入的
-handler、没有 hook 契约——生成的 wiring 全是自由函数（`templates/wiring.tmpl` 把理由写死在
-生成物的注释里：能被覆写的三十行方法体，是三十行「生成器可能猜错而调用方无法干预」的代码）。
+**风格**：不是分层框架，而是**一次性代码生成 + 一个泛型运行时**。没有 service 基类、handler 内
+override point 或注解式 interceptor chain。生成的 handler 固定为「绑定 → 调一个函数 → 写出」；中间函数
+保存在 `APIHandler` 的未导出字段里并在请求到达时读取。生成的 wiring 仍全是自由函数
+（`templates/wiring.tmpl` — 文件头设计说明），所以默认实现与定制实现具有同一份编译期签名。
 
 **三条承重不变式**：
 
@@ -101,12 +101,12 @@ handler、没有 hook 契约——生成的 wiring 全是自由函数（`templat
 |---|---|---|---|---|
 | schema API | `api/*.go` | schema 期选择资源、声明字段偏离与边展开 | `ResourceAnnotation` / `FieldAnnotation` / `EdgeAnnotation` / `Op` 及 builders | `ent/schema` |
 | 生成器 | `./*.go` | ent 扩展本体：读取注解、冲突检查、渲染、落盘、回收 | `NewExtension` / `NewExtensionWithOptions` / `SoftDeleteMixin` | `api`、`entc/gen`、`x/tools/imports`、`embed` |
-| 模板 | `templates/*.tmpl` | 生成物的形状（6 个） | 经 `//go:embed` 由 `template_loader.go` 读入 | — |
+| 模板 | `templates/*.tmpl` | 生成物的形状（8 个） | 经 `//go:embed` 由 `template_loader.go` — `templateFS` 读入 | — |
 | 模板函数 | `funcs_*.go`、`annotations_edge.go` | 模板能问的所有问题 | `templateFuncs()`（`funcs.go`）**唯一注册处** | `entc/gen` |
-| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / soft-delete 上下文开关 | **仅标准库** |
+| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `WriteProblem` / `FieldError` / `Route` / `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
 | codegen fixtures | `internal/fixtures/<dir>/<dir>ent/` | 生成 + 编译的证明 | — | 本模块 |
 | spike 规格 | `internal/fixture/`（**单数**） | #22 手写目标，是生成物的规格 | 独立 go.mod | ent + SQLite |
-| 行为证明 | `internal/fixtures/wiring/e2e`、`internal/softdeleteproof` | 编译证明答不了的问题 | 独立 go.mod | ent + SQLite |
+| 行为证明 | `internal/fixtures/wiring/e2e`、`internal/fixtures/httpdemo/e2e`、`internal/softdeleteproof` | wiring、HTTP 与软删除的行为证明 | 独立 go.mod | ent + SQLite |
 
 ```plantuml
 @startuml
@@ -128,6 +128,7 @@ package "entapi/runtime" as RT #E8FFE8 {
   [types.go]
   [errors_map.go]
   [filter.go]
+  [http.go]
   [softdelete_context.go]
 }
 package "entgo.io/ent/entc/gen" as ENT #FFECEC
@@ -274,6 +275,7 @@ return []derivedName{
 	{"New" + n + "ListResponse", dto},
 	// templates/filter.tmpl
 	{n + "Filter", filter},
+	{"Parse" + n + "Query", filter},
 	{n + "SortKeys", filter},
 	{n + "Order", filter},
 	// templates/wiring.tmpl
@@ -281,12 +283,20 @@ return []derivedName{
 	{"List" + p, wiring},
 	// ... Create<n>, Patch<n>, Delete<n> ...
 	{"DeleteBatch" + p, wiring},
+	// templates/handler.tmpl — maximum breadth, independent of Except
+	{"List" + p + "Fn", handler},
+	{"Create" + n + "Fn", handler},
+	{"Get" + n + "Fn", handler},
+	{"Patch" + n + "Fn", handler},
+	{"Delete" + n + "Fn", handler},
 }
 ```
 
-这张表是 #62 的开关：实体名撞上其中任何一个 → 生成被拒绝（`reservedNameConflicts`）。
-它会腐烂，所以 `derived_names_consistency_test.go` — `TestDerivedEntityNamesMatchTheTemplates`
-渲染全部五个模板、用 `go/parser` 读回导出声明、**双向**比对。
+这张表是 #62 的实体派生名开关：实体名撞上其中任何一个 → 生成被拒绝。图级名字
+`ErrorMap`、`API`、`APIHandler` 则由 `schema_conflicts.go` — `reservedNameConflicts` 单独保留。
+两张表都会腐烂，所以 `derived_names_consistency_test.go` — `TestDerivedEntityNamesMatchTheTemplates`
+渲染全部七个独立输出模板（四个 per-type、三个 graph-level），用 `go/parser` 读回导出声明并**双向**比对；
+第八个嵌入模板 `templates/softdelete_config_init.tmpl` 是 Ent partial，不产生独立顶层文件。
 
 ---
 
@@ -314,10 +324,10 @@ end
 HOOK -> NEXT : 生成 ent 本体
 group **阶段 1：渲染 + 格式化，只进内存**
   loop 每个 node（不是 api.Resource 则整体跳过）
-    HOOK -> REND : dto / filter / wiring
+    HOOK -> REND : dto / filter / wiring / handler
     REND --> HOOK : pendingFile{path, content}
   end
-  HOOK -> REND : errors（wiredAny 时）\nsoftdelete（softDeleteTypes 非空时）
+  HOOK -> REND : errors + http（wiredAny 时）\nsoftdelete（softDeleteTypes 非空时）
   note right of REND
     imports.Process 是**纯函数**，不碰磁盘。
     失败 = 模板生成了非法 Go = 本包的 bug
@@ -352,7 +362,7 @@ rename 循环里被 SIGKILL 仍可能留下两代混合——毫秒级窗口，�
 ```plantuml
 @startuml
 skinparam shadowing false
-participant "handler.go\n(消费者)" as H
+participant "article_handler.go\n(生成的三段式 handler)" as H
 participant "ent.ListArticles\n<entity>_wiring.go" as W
 participant "ArticleOrder\n<entity>_filter.go" as ORD
 participant "ArticleFilter.Predicates()" as PRED
@@ -360,7 +370,7 @@ participant "entapi.ListPage\nruntime/query.go" as LP
 participant "*ArticleQuery\n(ent)" as Q
 participant "ErrorMap\nentapi_errors.go" as EM
 
-H -> W : (ctx, db, filter, ListRequest)
+H -> W : h.listArticles(ctx, db, filter, ListRequest)\n请求到达时从 receiver 读取函数字段
 W -> ORD : ArticleOrder(r)
 ORD -> ORD : walk r.Sort；按 ArticleSortKeys 校验并映射每个 SortSpec
 alt key 不在白名单
@@ -392,6 +402,18 @@ W -> EM : MapError(err)（每个导出函数恰好映射一次）
 EM --> H : 结果 / ErrNotFound / 原样透传
 @enduml
 ```
+
+`templates/http.tmpl` — `API` 为每张路由构造一个持有 `*http.ServeMux` 与 `[]entapi.Route` 的
+`*APIHandler`：`GET /xs`、`POST /xs`、`GET/PATCH/DELETE /xs/{id}`。`ServeHTTP` 直接委托内部 mux，
+`Mount` 把同一清单注册到消费者 mux；前缀由外层 `http.StripPrefix` 处理。`Except` 同时关闭 endpoint、
+route 与 `{Op}{Entity}Fn`，但不关闭 wiring 或 request DTO。
+
+每个 `templates/handler.tmpl` 生成函数固定三步。绑定步骤为 POST/PATCH 施加不可配置的 1 MiB body 上限、
+解析 `application/json` media type、按生成的 request tag 数据拒绝未知/Immutable key，再调用 `Validate`；
+中间步骤在**请求时**读取 `h.<operation>`，默认字段值是同签名 wiring 函数；写出步骤返回裸 DTO/Page，
+错误经 `runtime/http.go` — `WriteProblem` 写为 `application/problem+json`。横切逻辑只在外层
+`http.Handler` 洋葱组合；router-level 404/405 保留 stdlib plain text。当前 slice 只落了 `{Op}{Entity}Fn`
+类型和未导出字段，消费者写入这些字段的 `With(...)` 组合器与 `Routes()` 仍属于 #75。
 
 **为什么排序白名单是安全边界而不是人体工学**——直接引生成物的注释：
 
@@ -494,8 +516,8 @@ func isCreatePointer(f *gen.Field) bool {
 
 | 位置 | 写法 | 为什么 |
 |---|---|---|
-| `dto.tmpl` 边处理 | `IsNotFound(err)` **不限定** | 文件落在消费者的 `package ent`，绑定到 ent 生成的谓词（解包 `*ent.NotFoundError`）。限定成 `entapi.IsNotFound` 照样编译但**静默失配** |
-| `errors.tmpl` | `NewErrorMapper(IsNotFound, IsConstraintError)` **不限定** | 同上 |
+| `templates/dto.tmpl` — response edge 段 | `IsNotFound(err)` **不限定** | 文件落在消费者的 `package ent`，绑定到 ent 生成的谓词（解包 `*ent.NotFoundError`）。限定成 `entapi.IsNotFound` 照样编译但**静默失配** |
+| `templates/errors.tmpl` — `ErrorMap` 初始化 | `NewErrorMapper(IsNotFound, IsConstraintError)` **不限定** | 同上 |
 | 所有模板 | `entapi.Err*` **必须限定** | `package ent` 里没有这些符号 |
 | 所有模板 import | `entapi "{{ entapiPkg }}"` **必须带别名** | 路径末段是 `runtime`，不带别名 goimports 会当成 `package runtime`、发现没人用、**删掉它**——而格式化失败会中止整轮生成 |
 
@@ -508,13 +530,14 @@ func isCreatePointer(f *gen.Field) bool {
 | `TestTemplateInvocationsAreRegistered` | `template_funcs_consistency_test.go` | 双向：模板调了没注册的；注册了没模板调的 |
 | `TestTemplateFuncsDoNotShadowEntBuiltins` | `template_funcs_consistency_test.go` | 静默覆盖 ent 内建函数 |
 | `TestEveryEmbeddedTemplateIsLoaded` | `template_loader_test.go` | 嵌入了但没绑定的模板 |
+| `TestArchitectureDocumentCountsTrackRepository` | `architecture_doc_test.go` | 本文的嵌入模板数、嵌套模块数与源码树脱节；缺少计数行也会失败，避免空洞通过 |
 | `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` | `annotation_surface_test.go` | 反射枚举三个 `api` 注解类型的全部导出字段，逐个 toggle 看是否改变任何**已注册**模板函数的返回值；`pendingKnobs` 必须为空 |
 | `TestDerivedEntityNamesMatchTheTemplates` | `derived_names_consistency_test.go` | §4 那张派生名表与模板脱节 |
 | `TestSchemaAPIPackageIsGeneratorFree` | `api_isolation_test.go` | schema API 包边界（带生成器正向对照） |
 | `TestRuntimePackageIsGeneratorFree` | `runtime_isolation_test.go` | runtime 包边界（带正向对照） |
 | `TestNoAmbiguousEntPackages` | `ent_package_ambiguity_test.go` | `internal/fixtures` 下任何包叫 `ent`（#49：同名 fixture 包曾让 goimports 按模块索引缓存选错包） |
 
-第 4 条的推理链值得单说：它**不渲染模板**。因为「某个已注册函数观察到这个旋钮」与
+第 5 条的推理链值得单说：它**不渲染模板**。因为「某个已注册函数观察到这个旋钮」与
 「每个已注册函数都被某模板调用」（第 1 条保证）复合起来，就等于「某模板观察到这个旋钮」——
 这正是消费者问「这个注解到底干不干活」时想要的答案。
 
@@ -525,7 +548,7 @@ func isCreatePointer(f *gen.Field) bool {
 - **fixture 契约 = 一个目录 + 一行**：加 `internal/fixtures/<dir>/<dir>ent/schema/` 和
   `codegen_fixtures_test.go` 的 `fixtures` 表里一行 `{dir: "<dir>"}`。要求**必须失败**的
   schema 再加 `wantGenErr: []string{…}`——断言的不是「它失败了」，而是**错误消息的内容**，
-  因为消息是 schema 作者能拿到的全部。当前 20 个表项，其中 9 个是拒绝用例。
+  因为消息是 schema 作者能拿到的全部。当前 21 个表项，其中 9 个是拒绝用例。
 - 目录必须叫 `<dir>ent` 而**不是** `ent`（#49，见上表）。`stale` 目录不在表里，由
   `codegen_fixtures_test.go` — `TestCodegenFixtureStaleArtifacts` 的专门用例两次生成
   （annotated → plain）来证明回收行为。
@@ -533,7 +556,7 @@ func isCreatePointer(f *gen.Field) bool {
   指令解析 `github.com/githonllc/entapi`，而 `t.TempDir()` 在任何模块之外。产物已提交，
   所以 **`make check` 后 `git status` 变脏 = 生成结果变了**，去重新生成，绝不手改带 ent 或 entapi
   generated marker 的文件；生成目录内少数明确标为 hand-written 的契约测试见 `internal/fixtures/README.md`。
-- **`make test` 不覆盖三个嵌套模块**（独立 `go.mod`，`./...` 不下降）。`make check` 才跑。
+- **`make test` 不覆盖四个嵌套模块**（独立 `go.mod`，`./...` 不下降）。`make check` 才跑。
 
 ---
 
@@ -556,20 +579,21 @@ func isCreatePointer(f *gen.Field) bool {
 | 9 | 同一改动让 surface probe 证明新字段可达；`pendingKnobs` 永久为空，不发布任何无消费方的旋钮 | `annotation_surface_test.go` |
 | 10 | `make check`（含 `test-modules`），确认树是干净的 | — |
 
-### 7.2 阅读顺序（Top 10，按理解价值）
+### 7.2 阅读顺序（Top 11，按理解价值）
 
 1. `extension.go` — `generatePerTypeFiles`：整个入口，两阶段在这里。
-2. `templates/wiring.tmpl`：生成物长什么样、以及「为什么是自由函数」。
-3. `runtime/query.go` — `ListPage` / `ListRequest.Offset`：运行期那一半的全部算法。
-4. `schema_conflicts.go` — `checkGraphConflicts`：拒绝策略与全部消息措辞。
-5. `api/annotations.go`：schema-time-only 注解模型、`schema.Merger` 与值接收者 builder 契约。
-6. `funcs.go` — `templateFuncs()`：模板能问的问题的完整清单（一页看完）。
-7. `templates/filter.tmpl` + `funcs_filter.go`：查询面，安全性最集中的地方。
-8. `cleanup.go`：marker 归属契约（ADR-0004）。
-9. `funcs_presence.go`：「字段形状只有一个权威」的三条判定。
-10. `codegen_fixtures_test.go`：唯一证明产物**能编译**的测试，以及 fixture 契约。
+2. `templates/http.tmpl` + `templates/handler.tmpl`：路由树、三段式 handler 与请求时定制点读取。
+3. `templates/wiring.tmpl`：默认中间步骤长什么样、以及「为什么是自由函数」。
+4. `runtime/query.go` — `ListPage` / `ListRequest.Offset`：运行期查询算法。
+5. `schema_conflicts.go` — `checkGraphConflicts`：拒绝策略与全部消息措辞。
+6. `api/annotations.go`：schema-time-only 注解模型、`schema.Merger` 与值接收者 builder 契约。
+7. `funcs.go` — `templateFuncs()`：模板能问的问题的完整清单（一页看完）。
+8. `templates/filter.tmpl` + `funcs_filter.go`：查询面，安全性最集中的地方。
+9. `cleanup.go`：marker 归属契约（ADR-0004）。
+10. `funcs_presence.go`：「字段形状只有一个权威」的三条判定。
+11. `codegen_fixtures_test.go`：唯一证明产物**能编译**的测试，以及 fixture 契约。
 
-配套：`docs/adr/0001`–`0006` 各自记录一条已定的、不打算再议的决定。
+配套裁决见 `docs/adr/README.md`；HTTP 拓扑与响应形状分别由 ADR-0008、ADR-0009 固定。
 
 ### 7.3 已知债务与风险区
 
@@ -581,7 +605,8 @@ func isCreatePointer(f *gen.Field) bool {
 | **`ErrorMap` 是包级可变全局量** | `templates/errors.tmpl` — `ErrorMap` | 自身不带同步；必须在建 client 时、第一个请求之前赋值 |
 | **summary 带哪些标量字段未定** | `templates/dto.tmpl` — `Summary` 生成段 | 目前 = 全部非 `Hidden`、非 `Sensitive` 标量字段。收窄需要新注解，是独立决定 |
 | **软删除依赖 Ent 未公开的 partial 扩展点** | `templates/softdelete_config_init.tmpl` | `softdelete_config_init_test.go` 钉住生成的 `newConfig` 注入块，并逐字节比较无 mixin 图与纯 Ent 的 `client.go` |
-| **`make test` 漏三个嵌套模块** | `Makefile` | 能过 `make test` 的改动仍可能被 `make test-modules` 抓住——这正是它存在的意义 |
+| **`make test` 漏四个嵌套模块** | `Makefile` — `test-modules` | 能过 `make test` 的改动仍可能被 `make test-modules` 抓住——这正是它存在的意义 |
+| **HTTP 已知残余** | `templates/handler.tmpl`、`templates/http.tmpl` | router-level 404/405 是 stdlib plain text；Save-time `ValidationError` 尚未分类，当前落 500（#74） |
 | **fixtures 子树被 `make fmt` 排除** | `Makefile` — `FMT_FILES` | 但 `gofmt -l .` 覆盖全树。那两个前缀下的**手写**文件（fixture schema、生成目录里的手写 `_test.go`）必须手工保持 gofmt-clean |
 
 ---
@@ -592,16 +617,15 @@ func isCreatePointer(f *gen.Field) bool {
 
 | 断言 | 命令 | 结果 |
 |---|---|---|
-| runtime 闭包无 ent | `go list -deps ./runtime` | 62 个包，`grep -c entgo.io` = **0** |
+| runtime 闭包无 ent | `go list -deps ./runtime` | 186 个包，`grep -c entgo.io` = **0** |
 | api 闭包不含生成器/runtime | `go list -deps ./api` | 2 个包，禁止依赖命中 **0** |
 | 生成器确实需要 ent | `go list -deps .` | `grep -c entgo.io` = **15** |
-| 测试基线绿 | 根模块与三个嵌套模块分别 `go test ./...` | 全部 `exit=0` |
-| 生成产物稳定 | 强制重跑 `TestCodegenFixtures` 前后计算 fixture digest | 两次均为 `96280feb78c4cebf15b8d56ee29662d97ed1141b` |
-| 代码量 | `wc -l`（非测试 .go） | 生成器 2545 / api 173 / runtime 623 / 模板 981 |
-| 测试规模 | `rg '^func Test'` | 全仓 200（根包 90、api 6、runtime 29、fixtures 75） |
+| 测试基线绿 | 根模块与四个嵌套模块分别 `go test ./...` | 全部 `exit=0` |
+| 代码量 | `wc -l`（非测试 .go / `.tmpl`） | 生成器 2977 / api 173 / runtime 726 / 模板 1511 |
+| 测试规模 | `rg '^func Test'` | 全仓 246（根包 102、api 6、runtime 38、fixtures 100） |
 | 派生名表 / 模板顶层声明 | `grep '^type\|^func\|^var' templates/*.tmpl` | 与 `derivedEntityDecls()` 一致 |
 | 旋钮数 | 反射三个 api 注解结构体的导出字段 | 8 个全部消费，`pendingKnobs` 为空 |
 
 **未验证 / 仅读代码得出**：覆盖率数字（CONTRIBUTING 的 >85%）未跑 `make cover` 复核。文中所有
-「消费者项目里会发生什么」的描述，证据来自 `internal/fixtures` 的生成产物与三个嵌套模块的行为
+「消费者项目里会发生什么」的描述，证据来自 `internal/fixtures` 的生成产物与四个嵌套模块的行为
 测试，本仓库没有真实下游 ent 项目。

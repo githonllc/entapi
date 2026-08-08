@@ -31,12 +31,14 @@ import (
 //   - funcs_typechecks.go: field type checking
 //   - funcs_codegen.go:    code generation helpers
 //   - funcs_imports.go:    import specs the emitted files must declare
+//   - funcs_http.go:       HTTP operations, paths, id parsing and imports
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		// Import declaration
 		"dtoImports":        dtoImports,
 		"filterImports":     filterImports,
 		"wiringImports":     wiringImports,
+		"handlerImports":    handlerImports,
 		"softDeleteImports": softDeleteImports,
 
 		// String manipulation
@@ -49,6 +51,8 @@ func templateFuncs() template.FuncMap {
 		"responseEdges":   responseEdges,
 		"edgeJSONKey":     edgeJSONKey,
 		"hasCreateFamily": hasCreateFamily,
+		"resourceOps":     resourceOps,
+		"routePath":       routePath,
 
 		// Request presence model
 		"isCreatePointer":  isCreatePointer,
@@ -75,5 +79,6 @@ func templateFuncs() template.FuncMap {
 		// means "a template calls this". Registration is a claim, not a
 		// convenience.
 		"fieldValueExpr": fieldValueExpr,
+		"idParseExpr":    idParseExpr,
 	}
 }

@@ -77,3 +77,13 @@ split.
   contract. The honest fallback if the break is judged too expensive.
 - **A third marker (`AsSubstringFilterable`)** — taxonomy growth for a
   distinction Searchable already encodes; rejected.
+
+## Addendum (2026-08-08, DESIGN-v3)
+
+Under the op-in-value wire format (ADR-0007) the per-operator parameters
+disappear, so the gate's **enforcement point moves** from "the parameter does
+not exist" to the generated parser: a substring operator prefix
+(`like:`/`ilike:`/`prefix:`/`suffix:`) on a field without `Searchable` is a
+**400**, never a silent fallback to an eq literal — parse rule 4 exists
+precisely so this gate stays loud while unknown prefixes fall back (rule 5).
+The gating semantics of this ADR are unchanged.

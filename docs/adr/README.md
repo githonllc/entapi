@@ -17,6 +17,17 @@ the ADR carries the decision and its rationale.
 | [0002](0002-deterministic-pagination-pk-tiebreak.md) | Every generated list order ends with a primary-key tiebreak | **Accepted** | [#59](https://github.com/githonllc/entdomain/issues/59) |
 | [0003](0003-per-run-atomic-generation.md) | Generation is atomic per run, not per file | **Accepted** | [#61](https://github.com/githonllc/entdomain/issues/61) |
 | [0004](0004-cleanup-ownership-by-marker.md) | The ownership marker, not the current schema, decides what cleanup may delete | **Accepted** | [#63](https://github.com/githonllc/entdomain/issues/63) |
-| [0005](0005-contains-operators-gated-by-searchable.md) | Substring operators require the Searchable marker, not just Filterable | **Accepted** | [#64](https://github.com/githonllc/entdomain/issues/64) |
+| [0005](0005-contains-operators-gated-by-searchable.md) | Substring operators require the Searchable marker, not just Filterable | **Accepted** (+ 2026-08-08 addendum: enforcement point under op-in-value) | [#64](https://github.com/githonllc/entdomain/issues/64) |
+| [0006](0006-silence-by-default-annotation-model.md) | Silence by default: five deviation words replace the field-scope model | **Accepted** | — |
+| [0007](0007-op-in-value-query-wire-format.md) | Query wire format: op-in-value with an underscore-reserved namespace | **Accepted** | — |
+| [0008](0008-http-layer-topology-and-brain-swap.md) | HTTP layer: generated into the consumer's package, overridden whole-unit at wiring signatures | **Accepted** | — |
+| [0009](0009-rfc9457-errors-bare-success.md) | Errors are RFC 9457 problem+json; success responses are bare | **Accepted** | — |
+| [0010](0010-softdelete-registration-generated-init.md) | Soft-delete registration: generated init in the consumer's package, never Mount | **Accepted** (spike-gated) | — |
+
+0006–0010 record the DESIGN-v3 adjudications (grilling session 2026-08-07/08 +
+one cross-family adversarial review round; process log in `../DESIGN-v3.md`,
+final design in `../DESIGN-v3-final.md`). Their tracking issues are assigned
+when the implementation arc opens; ADR-0004 also carries a DESIGN-v3 addendum
+(marker ownership extends to `openapi.yaml`).
 
 Review-only findings without an ADR (plain bugs or documentation): [#60](https://github.com/githonllc/entdomain/issues/60) offset overflow, [#62](https://github.com/githonllc/entdomain/issues/62) reserved generated names, [#65](https://github.com/githonllc/entdomain/issues/65) `{Entity}ListResponse` role (owner decision), [#66](https://github.com/githonllc/entdomain/issues/66) stale dto.tmpl header, [#67](https://github.com/githonllc/entdomain/issues/67) no-op builder godoc.

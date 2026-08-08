@@ -15,7 +15,7 @@
 
 ## 2. 生成代码所有权与逃生舱
 
-- **entapi**：marker 首行即所有权契约，删掉即永久接管。handler 恒为三步体、无 override 点，逃生舱是**类型化换脑槽**（签名逐字相同、编译器校验）。非 CRUD 端点走 external 门，框架永不生成 Service 骨架。
+- **entapi**：marker 首行即所有权契约，删掉即永久接管。handler 恒为三段式 handler、无 override 点，逃生舱是**类型化定制点**（签名逐字相同、编译器校验）。非 CRUD 端点走自定义端点（external），框架永不生成 Service 骨架。
 - **entrest**：生成进 `rest` 包；`ServerConfig` 只暴露 `MaskErrors`/`ErrorHandler`/`GetReqID`。未见文档化的单操作覆写机制；可用 `WithHandler(false)` 卸掉路由自己包一层再挂。业务逻辑与授权的官方指引是 ent privacy 层（issue #57）。handler 配置与 auth 两页文档正文都是 `TODO`。
 - **判定**：设计上 entapi 明显占优。但 entrest 的 ent-privacy 路线在行级授权上更成熟——entapi v3 把 OwnedBy 划出界只立边界。
 
@@ -57,7 +57,7 @@
 
 ## 判决
 
-**entapi 设计上最强的三个优势**：① 默认安全 + 生成期拒绝矩阵（架构级差异，补不进 entrest）；② 类型化换脑槽 + marker 所有权（编译期契约）；③ 查询面命名空间纪律（`_` 前缀、多字段排序 PK tiebreak、400 不静默）。
+**entapi 设计上最强的三个优势**：① 默认安全 + 生成期拒绝矩阵（架构级差异，补不进 entrest）；② 类型化定制点 + marker 所有权（编译期契约）；③ 查询面命名空间纪律（`_` 前缀、多字段排序 PK tiebreak、400 不静默）。
 
 **entapi 相对 entrest 最弱的三点**：① 还不存在（HTTP 层零行，且 v3 迁移零共存期）；② OpenAPI 与开发者周边几乎空白，op-in-value 的 spec 类型精度天然低；③ 覆盖面缺口（跨边过滤、边端点、行级授权出界、软删除 HTTP 语义 defer）+ 生态为零。
 

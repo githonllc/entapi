@@ -232,11 +232,11 @@ IDEAL §1 的 `api.Mount(mux, ent.API(client))` **被推翻**（留档见 §6.1�
 修订为 **`ent.API(client)` 返回 `http.Handler`**，挂载即
 `mux.Handle("/", ent.API(client))`，另给 `.Mount(mux)` 便捷方法。
 
-### 3.2 三步体与替换实现（裁决）
+### 3.2 三段式 handler与自定义实现（裁决）
 
-生成的 handler 永远是三步体：绑 → 调一个函数 → 写。没有 override 点。
+生成的 handler 永远是三段式 handler：绑 → 调一个函数 → 写。没有 override 点。
 
-第 2 步的函数是**替换点**，其类型**与生成的 wiring 自由函数签名逐字相同**，
+第 2 步的函数是**定制点**，其类型**与生成的 wiring 自由函数签名逐字相同**，
 默认值就是 wiring 函数本身（已验证今天的签名：
 `CreateArticle(ctx, db *Client, v *ValidArticleCreateRequest) (*ArticleResponse, error)`）：
 
@@ -245,12 +245,12 @@ ent.API(client).With(ent.CreateArticleFn(myCreate))
 // myCreate: func(context.Context, *ent.Client, *ent.ValidArticleCreateRequest) (*ent.ArticleResponse, error)
 ```
 
-- 替换实现 = 换函数名，零新概念；默认实现与你的实现在类型系统里是同一种东西；
+- 自定义实现 = 换函数名，零新概念；默认实现与你的实现在类型系统里是同一种东西；
 - 返回 Response 而非 ent 实体：`NewArticleResponse` 对未加载边报错的陷阱
   暴露在**你的函数体里**、开发期撞到，而不是藏进框架的转换步骤运行期爆；
-- List 替换点的签名随 §4.6 的 `ListRequest` v2 一起变，两者是同一个契约。
+- List 定制点的签名随 §4.6 的 `ListRequest` v2 一起变，两者是同一个契约。
 
-**external 门零机制**：非 CRUD 端点就是消费者直接在自己的 mux 上注册
+**自定义端点（external）零机制**：非 CRUD 端点就是消费者直接在自己的 mux 上注册
 （stdlib mux 最长匹配天然让更具体的模式赢）。框架不提供任何东西，这是设计而非缺席。
 
 ### 3.3 错误信封与状态码（裁决）
@@ -280,7 +280,7 @@ Immutable 字段出现在 PATCH body 被 `encoding/json` 静默丢弃的洞—�
   snake（列名、JSON key），路径跟着走，一个系统一种命名法。无 `Path()` 覆写旋钮。
 - **五端点**：`GET /xs`、`POST /xs`、`GET/PATCH/DELETE /xs/{id}`。
 - **`DeleteBatch` 不上 HTTP 面**：批量删无标准 REST 动词，默认暴露是脚枪；
-  留在 service 层，要暴露走 external 门。
+  留在 service 层，要暴露走自定义端点（external）。
 - 路由用 Go 1.22+ stdlib `http.ServeMux` 方法+路径模式，不自研（IDEAL §5 既决）。
 
 ---
@@ -304,7 +304,7 @@ GET /records?title=ilike:simon&score=gt:30&status=in:active,archived&_sort=creat
 ### 4.2 类型化结构体保留为解析结果
 
 **#27 的 `{Entity}Filter` 结构体不删**：生成的解析器把 `score=gt:30` 解析进
-`Filter.ScoreGT *int`。wiring 签名、service 层 API、替换点因此零改动。
+`Filter.ScoreGT *int`。wiring 签名、service 层 API、定制点因此零改动。
 变的只是 HTTP 绑参层——`form` tag 及其绑定语义退役（supersession 记账见 §4.5）。
 
 ### 4.3 算子表不回运行期
@@ -324,11 +324,11 @@ GET /records?title=ilike:simon&score=gt:30&status=in:active,archived&_sort=creat
   2. 无冒号 → `eq` 字面值（`?title=abc` ≡ `?title=eq:abc`）;
   3. 有冒号，前缀 ∈ **该字段的允许算子集** → 按算子解析;
   4. 有冒号，前缀是**全局已知算子但该字段不允许**（如 `contains:` 打在非
-     Searchable 字段）→ **400**——ADR-0005 的门控保持大声，不静默吞;
+     Searchable 字段）→ **400**——ADR-0005 的门控保持显式报错，不静默吞;
   5. 有冒号，前缀**不是任何已知算子** → 整值回落 `eq` 字面值——时间
      `12:30`、URL 等朴素值直接可用（评审 A1 的痛点消解）；string 字段上
      拼错的算子静默成字面值是**已接受代价**（typed 字段由值解析失败兜出 400）;
-  6. `eq:` 显式前缀 = 字面值转义舱（值恰以算子前缀开头时用：
+  6. `eq:` 显式前缀 = 字面值转义写法（值恰以算子前缀开头时用：
      `eq:like:john` → 字面值 `like:john`）。
 - **`between:` 是纯糖**：解析为 gte+lte 两个已有谓词，不新增谓词类型;
 - **`json:` 本 arc 不做**（JSONB 与 ent JSON 字段谓词是独立深水区，defer）;
@@ -371,7 +371,7 @@ op-in-value 让过滤参数变成裸字段名，`sort`/`page`/`size` 与同名�
   **非法字段 400 不静默跳**（entigo 的静默跳过与 ADR-0001 精神冲突，不带入），
   **PK tiebreak 永远追加在末尾**（ADR-0002）;
 - **`ListRequest` v2**：`SortBy string` → 排序项列表；`sort_by`/`order` 字段退役；
-  这是 runtime 的 API 变更，随 v0 自由破坏；List 替换点签名随之变;
+  这是 runtime 的 API 变更，随 v0 自由破坏；List 定制点签名随之变;
 - **分页两家本就同模型**：`_page`/`_size`，1 起数，默认 20、上限 1000 钳制在
   唯一入口（`runtime/types.go` 现状，仅参数名加前缀）;
 - **`_q` 保留 entdomain 设计**：对全部 Searchable 字段 Contains 后 OR
@@ -511,7 +511,7 @@ runtime 装配机制，不是 Mount。
 | 泛型运行时 0 entgo 依赖 | ✅ | 保留；新增 http 助手仍 stdlib-only | `[已存在]` + 扩展 |
 | 声明成本 | 每字段 3–4 连链 | `api.Resource()` 一行 + 五词偏离 | **推翻 Scope 模型** |
 | 属性推导 | 仅 presence | Sensitive/Immutable/Default 全面推导 + 拒绝矩阵 | 扩展 |
-| HTTP handler/路由 | 无 | 生成三步体 + 替换实现 + external | **新增** |
+| HTTP handler/路由 | 无 | 生成三段式 handler + 自定义实现 + external | **新增** |
 | OpenAPI | 无 | 落盘 + embed 服务 + 3.1 | **新增** |
 | 唯一键仪式 | 手写 init | 文本匹配 + 生成期按方言装配 | **新增** |
 | 软删除仪式 | 手写 Register | ent 原生自动（spike 先行） | **新增（带验证门）** |
@@ -526,7 +526,7 @@ runtime 装配机制，不是 Mount。
 1. ~~方言文本匹配依赖第三方错误文本稳定性~~——**评审证实并已修订**（§5.2：
    主通道改接口探测，lib/pq 非英语 locale 场景闭合；C4）。残余：接口探测
    覆盖不到的驱动仍靠文本兜底;
-2. **`eq:` 转义舱的完备性**（§4.3）——评审攻了 URL 编码维度（A1，已入档）；
+2. **`eq:` 转义写法的完备性**（§4.3）——评审攻了 URL 编码维度（A1，已入档）；
    `in:`/`between:` 值内逗号仍是不可表达残余;
 3. **`client.config.driver` 包内访问**依赖 ent 生成形状不变（§5.2 已验证
    v0.14.4，升级 ent 需复验）;
@@ -633,11 +633,11 @@ runtime 装配机制，不是 Mount。
 3. **竞对对比评审的增补**（独立上下文 Opus 对比 lrstanley/entrest，报告存
    `docs/COMPARISON-entrest.md`）。入档四组：① §4.4 边界从三条扩到六条
    （非请求路径旁路契约、privacy×软删除 spike 共存场景、privacy 下
-   `ListPage.total` 待验证）；② **实现前必决**：事务边界（替换点/wiring
+   `ListPage.total` 待验证）；② **实现前必决**：事务边界（定制点/wiring
    收 `*Client` 不收 `*Tx`，跨实体事务无法纳入生成步）；`With` 组合语义
    同日由 owner 裁决为 Functional Options（变参≡链式、last-wins、nil 拒绝，
    见 final §2.2），不再悬置；
-   ③ §2.2 说破"替换实现不是中间件"——横切走 `http.Handler` 洋葱组合或
+   ③ §2.2 说破"自定义实现不是中间件"——横切走 `http.Handler` 洋葱组合或
    `Routes()` 逐路由包裹，身份经 context 传递；④ 偷师清单七项进 §5
    backlog，其中 ErrorHandler 观测钩子（第 3 步、已分类结果、观测/替换
    两档、全局+op）形态定稿。
@@ -714,7 +714,7 @@ $ curl -XPATCH localhost:8080/users/9f1c… -d '{"password_hash":"x"}'
 ### A.3 框架故意不管的部分
 
 注册的请求体是 `{"email","password"}`，不是生成的 CreateRequest 形状，中间有
-一步哈希——业务逻辑，走 **external 门**：
+一步哈希——业务逻辑，走 **自定义端点（external）**：
 
 ```go
 // register.go —— 普通函数，框架看不见它
@@ -742,21 +742,21 @@ mux.HandleFunc("POST /login", Login(client))                 // login 从头到�
 `NewUserResponse`/`ErrorMap` 是生成的），只是没用生成的 handler 与 wiring——
 "偏离 = 少调一个函数"。
 
-只改一步而不换请求形状时才用**替换实现**（§3.2）。2026-08-08 增补：service 接入
+只改一步而不换请求形状时才用**自定义实现**（§3.2）。2026-08-08 增补：service 接入
 与横切的完整写法收进 `DESIGN-v3-final.md` 附录，要点两条——
 
-1. **用 service 替换实现 = 方法值**：`UserService` 普通结构体注入依赖，
-   `Patch` 方法与替换点同签名，`With(ent.PatchUserFn(svc.Patch))` 直接塞——
+1. **用 service 自定义实现 = 方法值**：`UserService` 普通结构体注入依赖，
+   `Patch` 方法与定制点同签名，`With(ent.PatchUserFn(svc.Patch))` 直接塞——
    receiver 被方法值捕获，IoC 就是闭包捕获，框架对 service 形状零规定；
-2. **横切（认证/header/审计）= `http.Handler` 洋葱**，跑在三步体之前、
+2. **横切（认证/header/审计）= `http.Handler` 洋葱**，跑在三段式 handler之前、
    401 短路不进绑参，身份经 `entapi.WithActor`（runtime context 契约，
-   §4.4 边界 2）传给替换点与 ent privacy；按路由选择性横切用 `Routes()`
+   §4.4 边界 2）传给定制点与 ent privacy；按路由选择性横切用 `Routes()`
    清单按 `Method`/`Path` 选切点。切面栈是 main.go 里的显式包裹，
    无注解拦截器链。
 
 ```go
 svc := &UserService{mailer: mailer}
-api := ent.API(client).With(ent.PatchUserFn(svc.Patch))  // 替换实现：方法值即闭包
+api := ent.API(client).With(ent.PatchUserFn(svc.Patch))  // 自定义实现：方法值即闭包
 h := withAuth(withHeaderCheck(api))                       // 横切：洋葱，外层先跑
 mux.Handle("/api/", http.StripPrefix("/api", h))
 ```
@@ -766,5 +766,5 @@ mux.Handle("/api/", http.StripPrefix("/api", h))
 - `password_hash` 逼出了 §2 矩阵的 Hidden×必填×OpCreate 拒绝行;
 - `Except(OpCreate)` 展示了操作子集的真实动机：**"创建"不是 CRUD 的实体**
   （注册、下单、开票……）是常态而非例外;
-- 三扇门各就各位：中间件在 Mount 外、替换实现替换整单元、external 整动词自持——
+- 三种定制方式各就各位：中间件在 Mount 外、自定义实现替换整单元、external 整动词自持——
   没有一处发生在生成类型内部（#29 的比例论证闭环）。

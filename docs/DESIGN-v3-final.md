@@ -95,10 +95,10 @@ ent 构建器仍叫 `UpdateOne`——那条缝在两个产品之间，不在本�
 3. 入口：**`ent.API(client)` 返回 `http.Handler`**，
    `mux.Handle("/", ent.API(client))` 或便捷方法 `.Mount(mux)`。
 
-### 2.2 三步体与替换实现
+### 2.2 三段式 handler与自定义实现
 
 生成的 handler 永远三步：绑 → 调一个函数 → 写。**没有 override 点。**
-第 2 步是替换点，**类型与生成的 wiring 函数签名逐字相同**，默认值就是
+第 2 步是定制点，**类型与生成的 wiring 函数签名逐字相同**，默认值就是
 wiring 函数本身：
 
 ```go
@@ -107,23 +107,23 @@ ent.API(client).With(ent.CreateArticleFn(myCreate))
 ```
 
 `With` 的组合语义 = Go **Functional Options**（owner 裁决，2026-08-08）：
-变参且链式等价（`With(a,b).With(c)` ≡ `With(a,b,c)`）；重复设置同一替换点
+变参且链式等价（`With(a,b).With(c)` ≡ `With(a,b,c)`）；重复设置同一定制点
 **后写覆盖**（last-wins，支撑"先默认后条件覆写"的惯用组装）；唯一例外：
 **nil 函数值构造期拒绝**——nil 替换函数不可能是有意的，静默落回默认是被
 ADR-0001 判死的那类沉默。
 
-**external 门零机制**：非 CRUD 端点由消费者直接注册在自己的 mux 上
+**自定义端点（external）零机制**：非 CRUD 端点由消费者直接注册在自己的 mux 上
 （stdlib mux 最长匹配）。框架永不生成 Service 骨架。
 
-**替换实现不是中间件，横切有自己的门。** 替换实现是逐操作的整单元替换；要对**所有**
+**自定义实现不是中间件，横切另有通道。** 自定义实现是逐操作的整单元替换；要对**所有**
 端点统一加身份认证、header 检查、审计、租户注入这类横切关注，用 Go 的标准
 AOP 形态——`http.Handler` 洋葱组合：整树包裹 `auth(ent.API(client))`，或经
 `Routes()` 清单按 `Method`/`Path` 元数据**选择性逐路由包裹**。身份经
-`context.Context` 向内传递（middleware 写入 → 替换点/wiring/ent privacy 读取），
+`context.Context` 向内传递（middleware 写入 → 定制点/wiring/ent privacy 读取），
 context 就是这里的 IoC 容器。框架不提供注解式拦截器链——显式组合优于容器
-魔法，且三步体内部没有注入点是规则不是缺口（第 3 步的 ErrorHandler 观测钩子
-见 §5 backlog）。service 接入同理零机制：替换点签名里没有 receiver 位置，
-依赖注入靠闭包捕获——先构造你的 service，再用匿名函数包成替换点类型。
+魔法，且三段式 handler内部没有注入点是规则不是缺口（第 3 步的 ErrorHandler 观测钩子
+见 §5 backlog）。service 接入同理零机制：定制点签名里没有 receiver 位置，
+依赖注入靠闭包捕获——先构造你的 service，再用匿名函数包成定制点类型。
 
 ### 2.3 错误与状态码
 
@@ -159,7 +159,7 @@ extractor `func(error) (field string, ok bool)`。已知残余：非
 type Route struct {
 	Method  string        // "GET" / "POST" / "PATCH" / "DELETE"
 	Path    string        // stdlib 模式语法："/users/{id}"
-	Handler http.Handler  // 三步体，路径参数经 r.PathValue 读取
+	Handler http.Handler  // 三段式 handler，路径参数经 r.PathValue 读取
 }
 // 生成：
 func (a *API) Routes() []entapi.Route
@@ -169,7 +169,7 @@ func (a *API) Routes() []entapi.Route
 自己的 ServeMux）。清单的存在解决第三方路由器的逐路由原生集成：gin/echo
 适配器把自家路径参数注入回 `r.SetPathValue`（Go 1.22+ 标准方法）再调
 `Handler`——每框架 ~10 行、消费者侧手写，**框架自身零路由器依赖**。
-清单是纯数据导出，不是行为扩展点：替换实现仍走 `With(...)`，端点增删仍走
+清单是纯数据导出，不是行为扩展点：自定义实现仍走 `With(...)`，端点增删仍走
 `Except`/external，清单只回答"有哪些路由"。
 
 ---
@@ -194,13 +194,13 @@ GET /records?title=ilike:simon&score=gt:30&status=in:active,archived&_sort=creat
 1. 裸空值（`?title=`）→ 忽略该过滤参数；显式 `?title=eq:` → 精确匹配空串;
 2. 无冒号 → `eq` 字面值;
 3. 前缀 ∈ 该字段允许算子集 → 按算子解析;
-4. 前缀是全局已知算子但该字段不允许 → **400**（门控大声，ADR-0005）;
+4. 前缀是全局已知算子但该字段不允许 → **400**（违规显式报 400 不静默，ADR-0005）;
 5. 前缀不是任何已知算子 → 整值回落 `eq` 字面值（`12:30`、URL 直接可用）;
-6. `eq:` 显式前缀 = 字面值转义舱。
+6. `eq:` 显式前缀 = 字面值转义写法。
 
 每字段的允许算子集在 **codegen 期**从 `$field.Ops` ∩ 三维度标记算出，生成为
 parse switch——没有运行期算子表。解析结果写入保留的类型化
-`{Entity}Filter` 结构体，wiring/替换实现/service 层 API 不变。
+`{Entity}Filter` 结构体，wiring/自定义实现/service 层 API 不变。
 
 已知限制：`in:`/`between:` 值内逗号不可表达（百分号编码在 `r.URL.Query()`
 处已被解开，救不了）；OpenAPI 过滤参数为 `type: string` + `pattern` +
@@ -277,7 +277,7 @@ privacy 共存，§4.3）。
 
 **实现前必决**（2026-08-08 竞对/service 接入评审暴露，未决会冻进契约）：
 
-- **事务边界**：替换点与 wiring 收 `*Client` 不收 `*Tx`——跨实体事务性逻辑
+- **事务边界**：定制点与 wiring 收 `*Client` 不收 `*Tx`——跨实体事务性逻辑
   无法把生成的那一步纳入自己的事务。需定：提供 `*Tx` 变体、或统一走 ent
   的 tx-from-context 惯例、或如实入档"生成面不参与外部事务"。
   （原并列的第二项"`With` 组合语义"已裁决为 Functional Options，见 §2.2。）
@@ -289,7 +289,7 @@ privacy 共存，§4.3）。
    第 2 步；收**已分类结果 + 原始 error**（分类留在消费者包，runtime 不认识
    ent）；**观测/替换两档**（观测档不可改响应；替换档自负 RFC 9457 合规）；
    默认写出器公开可回调；连带 `MaskErrors` 等价物（500 的 `detail` 防泄漏）；
-   **全局一个 + op 参数**，不做逐操作（避免与替换点并行两套逐操作机制）;
+   **全局一个 + op 参数**，不做逐操作（避免与定制点并行两套逐操作机制）;
 2. **边端点** `GET /users/{id}/pets`（倾向采纳：不与"Summary 不带边"深度
    上限冲突）;
 3. **spec 精修**：基础 spec 合并 + example/schema 覆写——比"全生成 vs 删
@@ -334,11 +334,11 @@ func (User) Annotations() []schema.Annotation {
 
 生成端点：`GET /users`、`GET/PATCH/DELETE /users/{id}`、`GET /openapi.yaml`。
 `POST /users` 被 Except——注册不是 CRUD（请求体是 `{email,password}` + 哈希），
-走 external 门；若漏写 Except，`Hidden` × 必填 × OpCreate 命中拒绝矩阵，
+走自定义端点（external）；若漏写 Except，`Hidden` × 必填 × OpCreate 命中拒绝矩阵，
 生成期失败并给出修复行。
 
-**用 service 替换实现（IoC = 闭包捕获，方法值就是最惯用的闭包）**：service 是
-普通结构体，依赖随便注，框架对它的形状零规定；方法与替换点签名相同时，
+**用 service 自定义实现（IoC = 闭包捕获，方法值就是最惯用的闭包）**：service 是
+普通结构体，依赖随便注，框架对它的形状零规定；方法与定制点签名相同时，
 方法值直接塞进 `With`——receiver 被方法值捕获，这就是全部的"注入"：
 
 ```go
@@ -354,9 +354,9 @@ func (s *UserService) Patch(ctx context.Context, db *ent.Client,
 }
 ```
 
-**横切（AOP）走 `http.Handler` 洋葱，跑在三步体之前**——身份认证、header
+**横切（AOP）走 `http.Handler` 洋葱，跑在三段式 handler之前**——身份认证、header
 检查对生成的 handler 是全透明的，401 短路时绑参根本不发生；身份经 runtime
-的 context 契约（§4.4 边界 2）向内传给替换点与 ent privacy：
+的 context 契约（§4.4 边界 2）向内传给定制点与 ent privacy：
 
 ```go
 func withAuth(next http.Handler) http.Handler {
@@ -372,7 +372,7 @@ func withAuth(next http.Handler) http.Handler {
 
 func main() {
 	svc := &UserService{mailer: mailer, audit: audit}
-	api := ent.API(client).With(ent.PatchUserFn(svc.Patch))   // 替换实现：方法值即闭包
+	api := ent.API(client).With(ent.PatchUserFn(svc.Patch))   // 自定义实现：方法值即闭包
 
 	var h http.Handler = api                          // 洋葱：内层先写，外层先跑
 	h = withHeaderCheck(h)
@@ -396,6 +396,6 @@ for _, rt := range api.Routes() {
 }
 ```
 
-三扇门在此各就各位且互不越界：middleware 管**所有端点**的横切（认证/header/
-审计），替换实现管**单个操作**的业务替换，external 管**非 CRUD 动词**。框架不
+三种定制方式在此各就各位且互不越界：middleware 管**所有端点**的横切（认证/header/
+审计），自定义实现管**单个操作**的业务替换，external 管**非 CRUD 动词**。框架不
 提供注解式拦截器链——切面栈就是 main.go 里这几行显式包裹，一眼可读。

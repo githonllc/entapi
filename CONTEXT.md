@@ -37,17 +37,17 @@ _Avoid_: DomainEdge, eager edge
 **Except**:
 Resource 的操作子集选项——`api.Resource().Except(api.OpDelete, …)` 关掉指定 HTTP 端点。全字段 Immutable 而未 Except 更新操作 → 生成期拒绝。
 
-**替换实现（With）**:
-把某个操作的默认实现整个换成你的函数：`With(ent.PatchUserFn(fn))`，`fn` 的签名与生成的 wiring 函数逐字相同（编译器校验），默认值就是 wiring 函数本身。生成代码调用你，你从不嵌入它。那个可被替换的位置叫**替换点**。
-_Avoid_: 换脑, 槽/槽位/slot（中文语境）, override, embed, SetSelf
+**自定义实现（With）**:
+把某个操作的默认实现整个换成你的函数：`With(ent.PatchUserFn(fn))`，`fn` 的签名与生成的 wiring 函数逐字相同（编译器校验），默认值就是 wiring 函数本身。生成代码调用你，你从不嵌入它。那个可被替换的位置叫**定制点**。
+_Avoid_: 换脑, 替换实现（旧稿）, 槽/槽位/替换点/slot（中文语境）, override, embed, SetSelf
 
-**external 门**:
+**自定义端点（external）**:
 非 CRUD 端点的出路——消费者直接在自己的 mux 上注册，框架零机制。生成的 DTO/校验照用。
 
 ### 查询线格式（op-in-value，源自 entigo）
 
 **op-in-value**:
-过滤参数的线上语法：`field=op:value`，按第一个冒号切分算子与值（`age=gt:30`、`name=ilike:simon`）。裸值与未知前缀都回落为 eq 字面值（`title=12:30` 可用）；已知算子打在不允许它的字段上是 400（门控大声）；裸空值忽略、显式 `eq:` 匹配空串兼作字面值转义舱。算子集在 codegen 期定死。
+过滤参数的线上语法：`field=op:value`，按第一个冒号切分算子与值（`age=gt:30`、`name=ilike:simon`）。裸值与未知前缀都回落为 eq 字面值（`title=12:30` 可用）；已知算子打在不允许它的字段上是 400（违规显式报 400 不静默）；裸空值忽略、显式 `eq:` 匹配空串兼作字面值转义写法。算子集在 codegen 期定死。
 _Avoid_: filter DSL, query language
 
 **保留参数命名空间**:

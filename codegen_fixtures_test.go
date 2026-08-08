@@ -95,8 +95,8 @@ var fixtures = []fixtureCase{
 	// so the fixture flips to the ordinary generate-and-compile assertion — and
 	// compiling is what proves the identifier is no longer hardcoded anywhere.
 	{dir: "intid"},
-	{dir: "selfref", wantGenErr: []string{"Tree.children", "Tree.parent", "chained", "issue #79"}},
-	{dir: "selfrefpartial", wantGenErr: []string{"Node.children", "Node.parent", "issue #79"}},
+	{dir: "selfref", wantGenErr: []string{"Tree.children", "Tree.parent", "chained", "api.EdgeAnnotation{}"}},
+	{dir: "selfrefpartial"},
 	{dir: "presence"},
 	{dir: "query"},
 	{dir: "queryconflict", wantGenErr: []string{

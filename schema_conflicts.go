@@ -246,8 +246,10 @@ func fieldWordConflicts(node *gen.Type, f *gen.Field, a *api.FieldAnnotation) []
 // Only "annotated" versus "not annotated at all" counts. Two ends carrying
 // different annotations are two decisions the author wrote down, and this
 // package has no standing to overrule them; two bare ends are one decision, not
-// to expose the relationship. It is the mixed case that has no reading as
-// intent, because the chained declaration produces exactly it by accident.
+// to expose the relationship. A deliberate one-way choice marks the excluded
+// end with api.EdgeAnnotation{}, so both ends are annotated. It is the mixed
+// case that has no reading as explicit intent, because the chained declaration
+// produces exactly it by accident.
 func asymmetricSelfEdgeConflicts(node *gen.Type) []string {
 	var out []string
 	for _, inverse := range node.Edges {
@@ -290,9 +292,12 @@ func asymmetricSelfEdgeConflicts(node *gen.Type) []string {
 // is on the asymmetry rather than on the syntax, and the message names the
 // chained form as the likely cause instead of asserting it.
 //
-// A deliberate one-way self edge is not expressible in the one-word edge
-// vocabulary because it is indistinguishable here from the chained-builder
-// accident. Issue #79 tracks owner review; generation keeps refusing it.
+// The check compares annotation presence, not EdgeAnnotation.Expand. As #79
+// established, a deliberate one-way pair is expressible by marking the
+// excluded end api.EdgeAnnotation{}: both ends are then annotated, and the
+// refusal catches only the truly bare end, which is exactly the chained-builder
+// accident. This uses the same zero-value-annotation survival that
+// api.Resource() has always relied on, so it is not a fluke of one code path.
 func asymmetricSelfEdgeConflict(node *gen.Type, assoc, inverse *gen.Edge, assocAnnotated bool) string {
 	annotated, bare := inverse, assoc
 	cause := fmt.Sprintf(
@@ -307,7 +312,7 @@ func asymmetricSelfEdgeConflict(node *gen.Type, assoc, inverse *gen.Edge, assocA
 	return fmt.Sprintf(
 		"%s.%s / %s.%s: the two ends of this self-referential edge pair disagree — %s.%s carries api.Expand() while %s.%s carries no EntAPIEdge annotation at all, "+
 			"so %q appears in no response type and in no eager-load plan, and nothing else in generation says so; %s. "+
-			"Declare the two ends separately and give both api.Expand(), or remove api.Expand() from both; a deliberately one-way self pair has no spelling in this vocabulary (issue #79)",
+			"Declare the two ends separately and give both api.Expand(); or remove api.Expand() from both; or, if the asymmetry is deliberate, mark the excluded end api.EdgeAnnotation{} — a present-but-not-expanded annotation that says you considered this end and left it out",
 		node.Name, assoc.Name, node.Name, inverse.Name,
 		node.Name, annotated.Name, node.Name, bare.Name,
 		bare.Name, cause,

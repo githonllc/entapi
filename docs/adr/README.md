@@ -18,19 +18,21 @@ the ADR carries the decision and its rationale.
 | [0003](0003-per-run-atomic-generation.md) | Generation is atomic per run, not per file | **Accepted** | [#61](https://github.com/githonllc/entdomain/issues/61) |
 | [0004](0004-cleanup-ownership-by-marker.md) | The ownership marker, not the current schema, decides what cleanup may delete | **Accepted** | [#63](https://github.com/githonllc/entdomain/issues/63) |
 | [0005](0005-contains-operators-gated-by-searchable.md) | Substring operators require the Searchable marker, not just Filterable | **Accepted** (+ 2026-08-08 addendum: enforcement point under op-in-value) | [#64](https://github.com/githonllc/entdomain/issues/64) |
-| [0006](0006-silence-by-default-annotation-model.md) | Silence by default: five deviation words replace the field-scope model | **Accepted** | — |
-| [0007](0007-op-in-value-query-wire-format.md) | Query wire format: op-in-value with an underscore-reserved namespace | **Accepted** | — |
-| [0008](0008-http-layer-topology-and-brain-swap.md) | HTTP layer: generated into the consumer's package, overridden whole-unit at wiring signatures | **Accepted** | — |
-| [0009](0009-rfc9457-errors-bare-success.md) | Errors are RFC 9457 problem+json; success responses are bare | **Accepted** | — |
-| [0010](0010-softdelete-registration-generated-init.md) | Soft-delete registration: generated init in the consumer's package, never Mount | **Accepted** (spike-gated) | — |
+| [0006](0006-silence-by-default-annotation-model.md) | Silence by default: five deviation words replace the field-scope model | **Accepted** | [#71](https://github.com/githonllc/entapi/issues/71) |
+| [0007](0007-op-in-value-query-wire-format.md) | Query wire format: op-in-value with an underscore-reserved namespace | **Accepted** | [#72](https://github.com/githonllc/entapi/issues/72) |
+| [0008](0008-http-layer-topology-and-brain-swap.md) | HTTP layer: generated into the consumer's package, overridden whole-unit at wiring signatures | **Accepted** | [#73](https://github.com/githonllc/entapi/issues/73), [#75](https://github.com/githonllc/entapi/issues/75) |
+| [0009](0009-rfc9457-errors-bare-success.md) | Errors are RFC 9457 problem+json; success responses are bare | **Accepted** | [#73](https://github.com/githonllc/entapi/issues/73), [#74](https://github.com/githonllc/entapi/issues/74) |
+| [0010](0010-softdelete-registration-generated-init.md) | Soft-delete registration: generated init in the consumer's package, never Mount | **Accepted** (spike-gated) | [#70](https://github.com/githonllc/entapi/issues/70) |
 | [0011](0011-rename-module-to-entapi.md) | Rename the module: entdomain → entapi | **Accepted** (executed) | — |
-| [0012](0012-with-composes-as-functional-options.md) | `With` composes as functional options: last-wins, nil panics | **Accepted** | — |
-| [0013](0013-duplicate-params-and-value-parse-failures.md) | Repeated filter parameters AND-merge; a value that will not parse is a 400 | **Accepted** | — |
+| [0012](0012-with-composes-as-functional-options.md) | `With` composes as functional options: last-wins, nil panics | **Accepted** | [#75](https://github.com/githonllc/entapi/issues/75) |
+| [0013](0013-duplicate-params-and-value-parse-failures.md) | Repeated filter parameters AND-merge; a value that will not parse is a 400 | **Accepted** | [#72](https://github.com/githonllc/entapi/issues/72) |
 
 0006–0010 record the DESIGN-v3 adjudications (grilling session 2026-08-07/08 +
 one cross-family adversarial review round; process log in `../DESIGN-v3.md`,
-final design in `../DESIGN-v3-final.md`). Their tracking issues are assigned
-when the implementation arc opens; ADR-0004 also carries a DESIGN-v3 addendum
+final design in `../DESIGN-v3-final.md`). The implementation arc opened on
+2026-08-08 under epic [#68](https://github.com/githonllc/entapi/issues/68),
+which is where the tracking issues above come from;
+ADR-0004 also carries a DESIGN-v3 addendum
 (marker ownership extends to `openapi.yaml`). 0013 comes from the third
 grilling round (2026-08-08, process log `../DESIGN-v3.md` §13) and extends
 0007; the round's other twelve rulings are recorded in the final design in

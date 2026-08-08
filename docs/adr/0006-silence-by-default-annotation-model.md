@@ -2,8 +2,8 @@
 
 **Status:** Accepted (2026-08-07, owner-adjudicated in the DESIGN-v3 grilling
 session; survived one cross-family adversarial round 2026-08-08) ·
-**Date:** 2026-08-08 · **Tracking issue:** — (assigned when the
-implementation arc opens) · **Design:** `docs/DESIGN-v3-final.md` §1
+**Date:** 2026-08-08 · **Tracking issue:** [#71](https://github.com/githonllc/entapi/issues/71)
+· **Design:** `docs/DESIGN-v3-final.md` §1
 
 ## Context
 

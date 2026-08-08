@@ -2,8 +2,8 @@
 
 **Status:** Accepted (2026-08-07, owner-adjudicated in the DESIGN-v3 grilling
 session; classification wiring refined after review findings C3/C5) ·
-**Date:** 2026-08-08 · **Tracking issue:** — (assigned when the
-implementation arc opens) · **Design:** `docs/DESIGN-v3-final.md` §2.3
+**Date:** 2026-08-08 · **Tracking issue:** [#73](https://github.com/githonllc/entapi/issues/73),
+[#74](https://github.com/githonllc/entapi/issues/74) · **Design:** `docs/DESIGN-v3-final.md` §2.3
 
 ## Context
 

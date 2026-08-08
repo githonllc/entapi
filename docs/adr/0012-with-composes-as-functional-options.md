@@ -3,7 +3,7 @@
 **Status:** Accepted (2026-08-08, owner decision; recorded as its own ADR by
 owner call after a cross-family arbitration split on placement — v3 §12.5) ·
 **Date:** 2026-08-08 ·
-**Tracking issue:** — (assigned when the HTTP layer opens) ·
+**Tracking issue:** [#75](https://github.com/githonllc/entapi/issues/75) ·
 **Design:** `docs/DESIGN-v3-final.md` §2.2
 
 ## Context

@@ -2,7 +2,7 @@
 
 **Status:** Accepted (2026-08-08, owner-adjudicated in the third grilling
 round) · **Date:** 2026-08-08 ·
-**Tracking issue:** — (assigned when the implementation arc opens) ·
+**Tracking issue:** [#72](https://github.com/githonllc/entapi/issues/72) ·
 **Design:** `docs/DESIGN-v3-final.md` §3.1 · **Extends:** ADR-0007
 
 ## Context

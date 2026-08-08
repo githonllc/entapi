@@ -525,9 +525,22 @@ client，而是 **mutation 期被咨询的间接层**（如 mixin 声明的 hook
 
 ## 5. 落地顺序、实现前必决、backlog 与显式 defer
 
-**第一片**：`Sensitive()` 从响应消失——最小可证伪推导切片，纯收窄。
-**第二片**：软删除生成 init spike（同时为 OwnedBy arc 前置验证，场景含
-privacy 共存，§4.3）。
+**实现 arc 已开（2026-08-08）**：epic
+[#68](https://github.com/githonllc/entapi/issues/68) 下八个垂直切片——
+[#69](https://github.com/githonllc/entapi/issues/69) `Sensitive()` 收窄 ·
+[#70](https://github.com/githonllc/entapi/issues/70) 软删除 spike ·
+[#71](https://github.com/githonllc/entapi/issues/71) `entapi/api` 注解模型 ·
+[#72](https://github.com/githonllc/entapi/issues/72) 查询面 ·
+[#73](https://github.com/githonllc/entapi/issues/73) HTTP 打通 ·
+[#74](https://github.com/githonllc/entapi/issues/74) 错误分类 ·
+[#75](https://github.com/githonllc/entapi/issues/75) `With` 与 `Routes()` ·
+[#76](https://github.com/githonllc/entapi/issues/76) OpenAPI。
+下面的 backlog 八项**未建 issue**（有意为之：它们不阻塞第一片，现在建就是
+永远排不上的 open issue），第一片落地后再开。
+
+**第一片**：`Sensitive()` 从响应消失——最小可证伪推导切片，纯收窄（#69）。
+**第二片**：软删除生成 init spike（#70；同时为 OwnedBy arc 前置验证，场景含
+privacy 共存，§4.3）。它不碰注解模型，因此与主线**并行**，不是主线的下一环。
 
 **实现前必决**（2026-08-08 竞对/service 接入评审暴露）：**已全部裁决**，
 两项分别见 §2.2（`With` = Functional Options，ADR-0012）与 §2.6（事务边界）。

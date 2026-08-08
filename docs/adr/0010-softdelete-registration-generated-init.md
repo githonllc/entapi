@@ -2,7 +2,7 @@
 
 **Status:** Accepted, spike-gated (2026-08-08, owner-adjudicated after
 cross-family review killed the mixin-native premise) · **Date:** 2026-08-08 ·
-**Tracking issue:** — (assigned when the spike opens) ·
+**Tracking issue:** [#70](https://github.com/githonllc/entapi/issues/70) ·
 **Design:** `docs/DESIGN-v3-final.md` §4.3
 
 ## Context

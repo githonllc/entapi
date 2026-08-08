@@ -1,8 +1,8 @@
 # 0008 — HTTP layer: generated into the consumer's package, overridden whole-unit at wiring signatures
 
 **Status:** Accepted (2026-08-07, owner-adjudicated in the DESIGN-v3 grilling
-session) · **Date:** 2026-08-08 · **Tracking issue:** — (assigned when the
-implementation arc opens) · **Design:** `docs/DESIGN-v3-final.md` §2
+session) · **Date:** 2026-08-08 · **Tracking issue:** [#73](https://github.com/githonllc/entapi/issues/73),
+[#75](https://github.com/githonllc/entapi/issues/75) · **Design:** `docs/DESIGN-v3-final.md` §2
 
 ## Context
 

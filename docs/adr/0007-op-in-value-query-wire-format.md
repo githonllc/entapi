@@ -2,7 +2,7 @@
 
 **Status:** Accepted (2026-08-07/08, owner-adjudicated; parse rules refined
 after cross-family review findings A1/A2) · **Date:** 2026-08-08 ·
-**Tracking issue:** — (assigned when the implementation arc opens) ·
+**Tracking issue:** [#72](https://github.com/githonllc/entapi/issues/72) ·
 **Design:** `docs/DESIGN-v3-final.md` §3
 
 ## Context

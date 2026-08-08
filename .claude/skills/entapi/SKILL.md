@@ -1,6 +1,6 @@
 ---
 name: entapi
-description: Work with EntAPI — the Ent code generation extension. Use when creating Ent schemas with domain annotations, understanding generated code, debugging codegen issues, or asking about EntAPI annotation builders, field scopes, generated DTOs, the query surface, or the generated wiring functions.
+description: Work with EntAPI — the Ent code generation extension. Use when creating Ent schemas with schema-time API annotations, understanding generated code, debugging codegen issues, or asking about resources, field deviations, generated DTOs, the query surface, or generated wiring functions.
 ---
 
 # EntAPI — Ent Code Generation Extension
@@ -14,7 +14,7 @@ your handler / service (hand-written)
      │  calls, and may stop calling, any of:
      ▼
 {entity}_wiring.go (generated, ent/)   ────→  entapi runtime  ────→  ent.Client
-     │  GetX · ListXs · CreateX · UpdateX          GetOne · ListPage
+     │  GetX · ListXs · CreateX · PatchX           GetOne · ListPage
      │  DeleteX · DeleteBatchXs                    SaveOne
      │  one call each; no struct, nothing to embed
      ├──────────────► {entity}_dto.go    requests · responses · eager-load plan
@@ -43,52 +43,40 @@ The ent interceptors in `internal/database/` handle this automatically:
 
 Bypass: `ctxutil.WithSystemAccess(ctx, "reason")` for queries, `mixin.SkipSoftDelete(ctx)` for soft-delete.
 
-## Field Scopes
+## Schema API
 
-Scopes control which **handler-layer DTOs** include a field. They do NOT restrict service layer access.
+`api.Resource()` is the sole entity opt-in. Field shape comes from Ent's
+`Optional`, `Default`, `Nillable`, `Immutable`, `Sensitive` and type facts.
+Exactly five field words deviate: `Hidden`, `ReadOnly`, `Searchable`,
+`Filterable`, `Sortable`. `api.Expand()` selects one edge into a response.
 
-| Scope | Constant | Affects |
-|-------|----------|---------|
-| Create | `ScopeCreate` | `{Entity}CreateRequest` struct |
-| Update | `ScopeUpdate` | `{Entity}PatchRequest` struct |
-| Response | `ScopeResponse` | `{Entity}Response` struct |
+```go
+func (Courier) Annotations() []schema.Annotation {
+    return []schema.Annotation{api.Resource().Except(api.OpDelete)}
+}
 
-## Annotation Builders
+func (Courier) Fields() []ent.Field {
+    return []ent.Field{
+        field.String("name").
+            Annotations(api.Searchable(), api.Filterable(), api.Sortable()),
+        field.String("password_hash").Sensitive(),
+        field.Time("created_at").Default(time.Now).Immutable().
+            Annotations(api.ReadOnly()),
+    }
+}
 
-| Builder | Scopes | Use For |
-|---------|--------|---------|
-| `DefaultField()` | create, update, response | Most business fields (name, email, status) |
-| `InputOnlyField()` | create, update | Password, secrets — no response scope, so never in a response |
-| `OutputOnlyField()` | response | System fields (timestamps, computed state) |
-| `CreateOnlyField()` | create, response | Immutable after creation (external_id) |
-| `NewDomainField()` | none | Tracked by ent but not in any HTTP struct (deleted_at, password_hash) |
-| `DomainFieldWithScopes(...)` | custom | Any custom combination |
+func (Courier) Edges() []ent.Edge {
+    return []ent.Edge{
+        edge.To("events", Event.Type).
+            Annotations(api.Expand().JSONKey("history")),
+    }
+}
+```
 
-### Fluent Methods
-
-- `.WithRequired(scope)` — required in that scope's DTO. **The only fluent
-  method besides the scope builders that changes generated output.**
-
-Everything below is accepted and stored but generates nothing today. See the
-README's "Annotation surface" section for the issue tracking each:
-
-- `.AsSearchable()`, `.AsFilterable()`, `.AsSortable()` — opt-in per field, and the only way
-  in: no preset builder grants them. They generate `{Entity}Filter`, the `q` free-text
-  disjunction and `{Entity}SortKeys` in `{entity}_filter.go`. Each also needs `ScopeQuery`
-  on the same field, or generation is refused.
-- `.WithTitle()`, `.WithDescription()`, `.WithFormat()`, `.WithPattern()`,
-  `.WithRange()`, `.WithLength()`, `.WithEnum()`, `.WithExample()`,
-  `.AsReadOnly()`, `.AsWriteOnly()`, `.AsDeprecated()`, `.WithTags()` —
-  RESERVED for spec generation. All of them write onto `DomainField.Metadata`;
-  `WithDescription` and `WithExample` joined them there on #17, so read them
-  back as `d.Metadata.Description` / `d.Metadata.Example`, not off
-  `DomainField`.
-
-`.AsUniqueLookup()` and `.AsRangeLookup()` were **removed** on #17; nothing ever
-generated the `FindByX` methods they promised. `.WithValidation()` was removed
-on #17 too, with no replacement: `Validate()` on the generated request types
-(#26) is where handler-layer validation lives. The entity-level `DomainConfig`
-annotation was removed entirely — delete it from any `Annotations()` call.
+Separate field words merge; `Annotations(api.Searchable(), api.Sortable())`
+keeps both. `Hidden` conflicts with every other field word. Ent `Sensitive`
+conflicts with query dimensions and `ReadOnly`; use `Hidden` when the field
+must disappear from every HTTP surface.
 
 ## Generated Files Per Entity
 
@@ -102,19 +90,19 @@ For entity `Courier`, three files are generated in `ent/`:
 
 ### `ent/courier_dto.go`
 
-- `CourierCreateRequest` — fields with `ScopeCreate`
+- `CourierCreateRequest` — Ent fields minus `Hidden` and `ReadOnly`
   - `Validate() (*ValidCourierCreateRequest, error)` — required-field validation. It
     returns the only type `Apply` is defined on, so the builder cannot be written
     without validating.
   - `Has<Field>() bool` — whether the JSON payload carried that key. A field the
     caller omitted is never written, so the schema's `Default()` applies.
-- `CourierPatchRequest` — fields with `ScopeUpdate` that ent can actually set, as
+- `CourierPatchRequest` — Ent `MutableFields` minus `Hidden` and `ReadOnly`, as
   pointer types (partial update)
   - `Validate() (*ValidCourierPatchRequest, error)` — rejects an explicit `null` on
     a field the schema does not declare `Optional()`
   - `Has<Field>() bool` — absent, explicit `null` and value are three states:
     absent leaves the field alone, `null` clears it, a value sets it
-- `CourierResponse` — fields with `ScopeResponse`, plus nested edge responses
+- `CourierResponse` — Ent fields minus `Hidden` and `Sensitive`, plus expanded edges
 - `CourierListResponse` — paginated response wrapper: `data`, `total`, `page`, `size`.
   The same four fields as `entapi.Page`, which is what the wiring returns.
   It carried a fifth, `PageInfo`, until #6 removed the cursor surface
@@ -130,7 +118,7 @@ func DeleteCourier(ctx, db *Client, id uuid.UUID) error
 func DeleteBatchCouriers(ctx, db *Client, ids []uuid.UUID) (int, error)
 ```
 
-**These return the response DTO, not `*ent.Courier`.** Create and update take the
+**These return the response DTO, not `*ent.Courier`.** Create and patch take the
 **validated** request — `Apply` is defined on `Valid…Request` and nowhere else, so
 skipping validation is a compile error rather than a discipline problem.
 
@@ -245,10 +233,10 @@ wiring directly                                                  wiring where it
 
 | Mixin | Fields | Annotations |
 |-------|--------|-------------|
-| `DomainTimeMixin` | `created_at`, `updated_at` | OutputOnlyField |
-| `DomainTenantMixin` | `organization_id` | CreateOnlyField (interceptor auto-sets) |
-| `DomainSoftDeleteMixin` | `deleted_at` | NewDomainField (interceptor auto-filters) |
-| `DomainMetadataMixin` | `metadata` | DefaultField (JSONB) |
+| `DomainTimeMixin` | `created_at`, `updated_at` | `api.ReadOnly()` |
+| `DomainTenantMixin` | `organization_id` | Ent `Immutable()` (interceptor auto-sets) |
+| `DomainSoftDeleteMixin` | `deleted_at` | `api.Hidden()` (interceptor auto-filters) |
+| `DomainMetadataMixin` | `metadata` | no field annotation (JSONB) |
 
 ## Typed Errors
 
@@ -282,20 +270,22 @@ ext := entapi.NewExtensionWithOptions(
 
 ## Source Files
 
-Two packages, and which one a file belongs to is decided by when it runs (#15).
+Three packages, and which one a file belongs to is decided by when it runs (#15, #71).
 
-**`github.com/githonllc/entapi` — generation time.** Imported by `entc.go`
-and by schema files.
+**`github.com/githonllc/entapi` — generation time.** Imported by `entc.go` and
+schemas embedding `SoftDeleteMixin`.
 
 | File | Purpose |
 |------|---------|
-| `annotations.go` | Annotation types, scope constants, fluent builders |
-| `annotations_edge.go` | `Edge()` and the edge annotation |
 | `softdelete.go` | `SoftDeleteMixin` and the `DomainSoftDelete` marker |
 | `extension.go` | Extension configuration and generation hooks |
 | `funcs.go` | Template function registry |
 | `funcs_fields.go` | Field filtering (createFields, updateFields, etc.) |
 | `funcs_codegen.go` | Code generation helpers |
+
+**`github.com/githonllc/entapi/api` — schema time.** `api/annotations.go`
+contains the three mergeable annotation types and every public schema word. It
+imports only `entgo.io/ent/schema` and stdlib.
 
 **`github.com/githonllc/entapi/runtime` — run time.** Package name is still
 `entapi`. Imported by generated code and by consumer service/handler code.

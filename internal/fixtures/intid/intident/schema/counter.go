@@ -9,9 +9,10 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Counter declares no id field, so ent supplies its default primary key: an
@@ -32,7 +33,8 @@ type Counter struct {
 // Fields of the Counter.
 func (Counter) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("label").
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.String("label"),
 	}
 }
+
+func (Counter) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

@@ -33,7 +33,7 @@ type Record struct {
 	// Note holds the value of the "note" field.
 	Note string `json:"note,omitempty"`
 	// Secret holds the value of the "secret" field.
-	Secret       string `json:"secret,omitempty"`
+	Secret       string `json:"-"`
 	selectValues sql.SelectValues
 }
 
@@ -179,8 +179,7 @@ func (r *Record) String() string {
 	builder.WriteString("note=")
 	builder.WriteString(r.Note)
 	builder.WriteString(", ")
-	builder.WriteString("secret=")
-	builder.WriteString(r.Secret)
+	builder.WriteString("secret=<sensitive>")
 	builder.WriteByte(')')
 	return builder.String()
 }

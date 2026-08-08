@@ -36,9 +36,9 @@ func TestEdgeAnnotationsSurviveToCodegen(t *testing.T) {
 		for _, e := range n.Edges {
 			key := n.Name + "." + e.Name
 			seen[key] = true
-			_, ok := e.Annotations["DomainEdge"]
+			_, ok := e.Annotations["EntAPIEdge"]
 			if want[key] && !ok {
-				t.Errorf("%s: DomainEdge annotation did not reach codegen", key)
+				t.Errorf("%s: EntAPIEdge annotation did not reach codegen", key)
 			}
 		}
 	}
@@ -60,13 +60,13 @@ func TestEdgeAnnotationArrivesAsMap(t *testing.T) {
 	}
 	for _, n := range g.Nodes {
 		for _, e := range n.Edges {
-			raw, ok := e.Annotations["DomainEdge"]
+			raw, ok := e.Annotations["EntAPIEdge"]
 			if !ok {
 				continue
 			}
 			if _, isMap := raw.(map[string]interface{}); !isMap {
 				t.Fatalf("%s.%s: expected map[string]interface{}, got %T — "+
-					"the JSON round-trip in getDomainEdgeAnnotation exists for this",
+					"the JSON round-trip in getEdgeAnnotation exists for this",
 					n.Name, e.Name, raw)
 			}
 			return

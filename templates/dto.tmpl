@@ -7,11 +7,9 @@
 package {{ base $.Config.Package }}
 
 import (
-{{- if or (createFields $) (patchFields $) }}
 	"encoding/json"
 	"fmt"
 	"strings"
-{{- end }}
 {{- range dtoImports $ }}
 	{{ . }}
 {{- end }}
@@ -21,8 +19,9 @@ import (
 // ============================================================================================
 // Layered Architecture Overview:
 //
-// 1. CreateRequest/PatchRequest - HTTP-layer request models, restricted by scope.
-//    - Only includes fields for the corresponding scope (ScopeCreate/ScopeUpdate).
+// 1. CreateRequest/PatchRequest - HTTP-layer request models derived from Ent.
+//    - Hidden and ReadOnly are the only annotation-side request exclusions.
+//    - Optional, Default, Nillable and Immutable determine the remaining shape.
 //    - Used by the Handler layer to receive HTTP requests.
 //    - Certain fields (e.g., ID, audit fields) cannot be set via the HTTP API.
 //    - Presence is recorded per request, so an omitted key, an explicit null and
@@ -30,9 +29,9 @@ import (
 //    - Apply is defined on the VALIDATED request only, so a builder cannot be
 //      written without validating first.
 //
-// 2. Response/Summary - HTTP-layer response models, restricted by scope.
-//    - Only includes fields in ScopeResponse.
-//    - Includes a nested edge when the EDGE carries an InResponse annotation.
+// 2. Response/Summary - HTTP-layer response models derived from Ent.
+//    - Hidden and Ent Sensitive fields are excluded; ReadOnly fields remain.
+//    - Includes a nested edge when the edge carries api.Expand().
 //      Exposing the foreign-key scalar and exposing the nested object are
 //      independent decisions; neither is derived from the other.
 //    - A nested edge is rendered as the target's Summary, which carries no
@@ -41,15 +40,12 @@ import (
 //
 // Key Design Principles:
 // - transport → {{ lower $.Name }}_wiring.go → entapi runtime → ent.Client
-// - HTTP scope only affects struct generation; it restricts nothing at the ent layer.
+// - Deviation words affect HTTP generation only; they restrict nothing at the Ent layer.
 // - The consumer's own code operates directly on ent entities with full ORM capabilities.
 // ============================================================================================
 
-{{- $domainFields := domainFields $ }}
-{{- if $domainFields }}
-
 {{- $createFields := createFields $ }}
-{{- if $createFields }}
+{{- if hasCreateFamily $ }}
 
 // {{ $.Name }}CreateRequest is the create request for {{ $.Name }}.
 //
@@ -212,7 +208,6 @@ func (v *Valid{{ $.Name }}CreateRequest) Apply(b *{{ $.Name }}Create) *{{ $.Name
 {{- end }}
 
 {{- $patchFields := patchFields $ }}
-{{- if $patchFields }}
 
 // {{ $.Name }}PatchRequest is the partial-update request for {{ $.Name }}.
 //
@@ -319,7 +314,11 @@ func (r *{{ $.Name }}PatchRequest) Validate() (*Valid{{ $.Name }}PatchRequest, e
 // Apply writes the request onto an update builder. Absent fields are not
 // touched; the rest are set, or cleared when the caller sent an explicit null.
 func (v *Valid{{ $.Name }}PatchRequest) Apply(b *{{ $.Name }}UpdateOne) *{{ $.Name }}UpdateOne {
+	{{- if $patchFields }}
 	r := v.r
+	{{- else }}
+	_ = v
+	{{- end }}
 {{- range $f := $patchFields }}
 	if r.Has{{ $f.StructField }}() {
 {{- if isPatchClearable $f }}
@@ -338,8 +337,6 @@ func (v *Valid{{ $.Name }}PatchRequest) Apply(b *{{ $.Name }}UpdateOne) *{{ $.Na
 {{- end }}
 	return b
 }
-
-{{- end }}
 
 {{- $responseFields := responseFields $ }}
 {{- $responseEdges := responseEdges $ }}
@@ -381,8 +378,8 @@ func New{{ $.Name }}Summary(e *{{ $.Name }}) *{{ $.Name }}Summary {
 
 // {{ $.Name }}Response represents the response for {{ $.Name }}.
 //
-// It is emitted unconditionally: an entity whose every annotated field is
-// InputOnly still has a meaningful response carrying its ID, and
+// It is emitted unconditionally: an entity whose every scalar field is
+// Sensitive still has a meaningful response carrying its ID, and
 // {{ $.Name }}ListResponse below refers to this type either way.
 {{- if $responseEdges }}
 //
@@ -504,5 +501,3 @@ func New{{ $.Name }}ListResponse(p *entapi.Page[{{ $.Name }}Response]) *{{ $.Nam
 	r := {{ $.Name }}ListResponse(*p)
 	return &r
 }
-
-{{- end }}

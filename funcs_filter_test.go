@@ -6,6 +6,8 @@ import (
 
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/schema/field"
+
+	"github.com/githonllc/entapi/api"
 )
 
 // paramNames projects filterParams onto the struct field names it produces, so
@@ -47,7 +49,7 @@ func TestFilterParamsFollowEntsOperatorTable(t *testing.T) {
 			// Filterable only: the cheap class. HasSuffix and Contains are
 			// operators ent derived and this field did not earn.
 			name:  "string/filterable",
-			field: newStringField("title", ptr(DefaultField().AsFilterable())),
+			field: newStringField("title", fieldPtr(api.Filterable())),
 			want: []string{
 				"Title", "TitleNEQ", "TitleIn", "TitleNotIn",
 				"TitleGT", "TitleGTE", "TitleLT", "TitleLTE",
@@ -55,9 +57,9 @@ func TestFilterParamsFollowEntsOperatorTable(t *testing.T) {
 			},
 		},
 		{
-			// The same type, plus AsSearchable: the substring class returns.
+			// The same type, plus api.Searchable(): the substring class returns.
 			name:  "string/filterable+searchable",
-			field: newStringField("title", ptr(DefaultField().AsFilterable().AsSearchable())),
+			field: newStringField("title", fieldPtr(api.FieldAnnotation{Filterable: true, Searchable: true})),
 			want: []string{
 				"Title", "TitleNEQ", "TitleIn", "TitleNotIn",
 				"TitleGT", "TitleGTE", "TitleLT", "TitleLTE",
@@ -158,22 +160,20 @@ func TestFilterParamsOfNilField(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Selection: the scope is the outer gate, the marker is the dimension.
+// Selection: any query-dimension word reaches the query surface.
 // ────────────────────────────────────────────────────────────────────────────
 
-func TestQueryFieldsSelectByScopeAndMarkersByAnnotation(t *testing.T) {
-	filterable := ptr(DefaultField().AsFilterable())
-	searchable := ptr(DefaultField().AsSearchable())
-	sortable := ptr(DefaultField().AsSortable())
-	unmarked := ptr(DefaultField())
-	inputOnly := ptr(InputOnlyField()) // no ScopeQuery
+func TestQueryFieldsSelectDimensionWords(t *testing.T) {
+	filterable := fieldPtr(api.Filterable())
+	searchable := fieldPtr(api.Searchable())
+	sortable := fieldPtr(api.Sortable())
+	unmarked := fieldPtr(api.FieldAnnotation{})
 
 	node := newTestType("Doc",
 		newStringField("title", filterable),
 		newStringField("body", searchable),
 		newStringField("slug", sortable),
 		newStringField("note", unmarked),
-		newStringField("secret", inputOnly),
 		newStringField("plain", nil), // no annotation at all
 	)
 
@@ -181,9 +181,9 @@ func TestQueryFieldsSelectByScopeAndMarkersByAnnotation(t *testing.T) {
 	for _, f := range queryFields(node) {
 		got = append(got, f.Name)
 	}
-	want := []string{"title", "body", "slug", "note"}
+	want := []string{"title", "body", "slug"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("queryFields = %v, want %v (secret withholds ScopeQuery, plain has no annotation)", got, want)
+		t.Errorf("queryFields = %v, want %v", got, want)
 	}
 
 	if !isFilterable(node.Fields[0]) || isSearchable(node.Fields[0]) || isSortable(node.Fields[0]) {
@@ -210,26 +210,6 @@ func TestQueryFieldsSelectByScopeAndMarkersByAnnotation(t *testing.T) {
 	}
 }
 
-// TestPresetBuildersGrantNoQueryMarker is the assertion behind the opt-in
-// default. A preset that granted them would make essentially every
-// response-visible field orderable, which is exactly what the sort allow-list
-// exists to prevent.
-func TestPresetBuildersGrantNoQueryMarker(t *testing.T) {
-	for name, a := range map[string]DomainField{
-		"DefaultField":    DefaultField(),
-		"InputOnlyField":  InputOnlyField(),
-		"OutputOnlyField": OutputOnlyField(),
-		"CreateOnlyField": CreateOnlyField(),
-		"IdField":         IdField(),
-		"AuditLogField":   AuditLogField(),
-	} {
-		if a.Searchable || a.Filterable || a.Sortable {
-			t.Errorf("%s() grants a query marker (searchable=%v filterable=%v sortable=%v); the three are opt-in",
-				name, a.Searchable, a.Filterable, a.Sortable)
-		}
-	}
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Imports.
 // ────────────────────────────────────────────────────────────────────────────
@@ -239,7 +219,7 @@ func TestPresetBuildersGrantNoQueryMarker(t *testing.T) {
 // marks nothing — that entity still gets an (empty) filter type, an (empty)
 // allow-list and an Order function, and each names one of them.
 func TestFilterImportsAreUnconditionalPlusFieldTypes(t *testing.T) {
-	node := newTestType("Doc", newStringField("title", ptr(DefaultField())))
+	node := newTestType("Doc", newStringField("title", nil))
 	node.Config = &gen.Config{Package: "example.com/app/ent"}
 
 	got := filterImports(node)
@@ -256,7 +236,7 @@ func TestFilterImportsAreUnconditionalPlusFieldTypes(t *testing.T) {
 	// it, and it is what fieldImportSpec reads.
 	createdAt := newField("created_at",
 		&field.TypeInfo{Type: field.TypeTime, Ident: "time.Time", PkgPath: "time"},
-		ptr(DefaultField().AsFilterable()))
+		fieldPtr(api.Filterable()))
 	node.Fields = append(node.Fields, createdAt)
 	got = filterImports(node)
 	want = append(want, `"time"`)

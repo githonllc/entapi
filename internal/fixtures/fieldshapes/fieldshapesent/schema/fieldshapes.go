@@ -3,17 +3,17 @@
 // historically turned into source that does not compile (#10).
 //
 // Every entity here is expected to GENERATE and COMPILE. The one shape that is
-// expected to be refused at generation time — an ent-Immutable field carrying
-// ScopeUpdate — lives in the sibling "immutable" fixture, because a refused
-// generation and a compiled generation cannot share a directory.
+// used to be refused — an Ent Immutable field — now derives out of PATCH and
+// lives in the positive sibling "immutable" fixture.
 package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Tags is a named type whose underlying type is a slice. Reaching the generated
@@ -33,30 +33,29 @@ type NillableWidget struct {
 // Fields of the NillableWidget.
 func (NillableWidget) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
 		// Nillable + optional: the entity field is *string.
 		field.String("nickname").
 			Optional().
-			Nillable().
-			Annotations(entapi.DefaultField()),
+			Nillable(),
 
-		// Nillable + required on create: the create request must carry *string,
-		// because the create builder's setter is SetNillableHandle(*string).
+		// Nillable + optional: the create request carries *string because the
+		// create builder's setter is SetNillableHandle(*string).
 		field.String("handle").
 			Optional().
-			Nillable().
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+			Nillable(),
 
 		// Same, non-string, so the required-field validator's string special
 		// case is not the only thing exercised.
 		field.Int("quota").
 			Optional().
-			Nillable().
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+			Nillable(),
 	}
+}
+
+func (NillableWidget) Annotations() []schema.Annotation {
+	return []schema.Annotation{api.Resource()}
 }
 
 // EnumWidget covers ent enums, whose Go type is a named string type generated
@@ -68,20 +67,18 @@ type EnumWidget struct {
 // Fields of the EnumWidget.
 func (EnumWidget) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
 		field.Enum("status").
-			Values("draft", "live").
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+			Values("draft", "live"),
 
 		field.Enum("tier").
 			Values("free", "paid").
-			Optional().
-			Annotations(entapi.DefaultField()),
+			Optional(),
 	}
 }
+
+func (EnumWidget) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }
 
 // JSONWidget covers unnamed slice and map field types, optional and required.
 type JSONWidget struct {
@@ -91,25 +88,21 @@ type JSONWidget struct {
 // Fields of the JSONWidget.
 func (JSONWidget) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
 		field.JSON("tags", []string{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+			Optional(),
 
 		field.JSON("meta", map[string]string{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+			Optional(),
 
-		field.JSON("required_tags", []string{}).
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.JSON("required_tags", []string{}),
 
-		field.JSON("required_meta", map[string]string{}).
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.JSON("required_meta", map[string]string{}),
 	}
 }
+
+func (JSONWidget) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }
 
 // NamedTypeWidget covers named Go types over a slice and over a map — the shape
 // string-prefix type detection cannot see.
@@ -120,22 +113,20 @@ type NamedTypeWidget struct {
 // Fields of the NamedTypeWidget.
 func (NamedTypeWidget) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
 		field.JSON("labels", Tags{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+			Optional(),
 
 		field.JSON("attrs", Attrs{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+			Optional(),
 
-		field.JSON("required_labels", Tags{}).
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.JSON("required_labels", Tags{}),
 
-		field.JSON("required_attrs", Attrs{}).
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.JSON("required_attrs", Attrs{}),
 	}
+}
+
+func (NamedTypeWidget) Annotations() []schema.Annotation {
+	return []schema.Annotation{api.Resource()}
 }

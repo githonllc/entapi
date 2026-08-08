@@ -10,10 +10,11 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Sprocket is the entity that loses its annotations between the two runs.
@@ -24,14 +25,13 @@ type Sprocket struct {
 // Fields of the Sprocket.
 func (Sprocket) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("name").
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.String("name"),
 	}
 }
+
+func (Sprocket) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }
 
 // Trinket never carries annotations in either schema, so entapi never
 // generates anything for it. The fixture keeps a hand-written trinket_dto.go

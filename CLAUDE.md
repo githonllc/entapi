@@ -22,10 +22,11 @@ Note: the Makefile overrides `GOPATH=/tmp/gopath` and `GOMODCACHE=/tmp/gomodcach
 
 ## What this repository is
 
-One Go module, **two packages**, split by *when the code runs* (#15). Both are `package entapi`, so every call site reads `entapi.X` whichever one it came from; only the import path differs.
+One Go module, **three packages**, split by *when the code runs* (#15, #71).
 
-1. **`github.com/githonllc/entapi` — code-generation time.** An [Ent](https://entgo.io) extension. Consumers wire it into their `entc.go`; it reads `DomainField` annotations off `gen.Field`s and writes `{entity}_dto.go`, `{entity}_filter.go`, `{entity}_wiring.go` per annotated entity, plus `entapi_errors.go` and `entapi_softdelete.go` per graph, into the consumer's `ent/` package. Schema files import this one too, for the annotation builders, `Edge()` and `SoftDeleteMixin`.
-2. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendIf`/`AppendIfSlice`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, `ErrorMapper`, `Ptr`/`PtrOrNil`/`PtrNilSafe`, and the soft-delete context switches. There is no cursor type: `Cursor`, `PageInfo`, `EncodeCursor`, `DecodeCursor` and `ListRequest.Cursor` were removed on #6, and pagination is offset-only.
+1. **`github.com/githonllc/entapi` — code-generation time.** The Ent extension and `SoftDeleteMixin`. It writes `{entity}_dto.go`, `{entity}_filter.go`, `{entity}_wiring.go` per `api.Resource()`, plus graph files, into the consumer's `ent/` package.
+2. **`github.com/githonllc/entapi/api` — schema time only.** The three mergeable annotations and their builders. It may import only `entgo.io/ent/schema` and stdlib; `TestSchemaAPIPackageIsGeneratorFree` guards the transitive closure.
+3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendIf`/`AppendIfSlice`, error sentinels and mapper, pointer helpers, and soft-delete context switches.
 
 **The split is load-bearing, not cosmetic.** `template_index.go` declares package-level vars calling `mustLoadTemplate`, so while the two halves shared a package, a consumer's production binary that wanted `ErrValidation` embedded five templates and ran the template loader at init. Measured, and asserted by `TestRuntimePackageIsGeneratorFree`: `go list -deps ./runtime` reports **0** `entgo.io` packages out of 62 (all standard library) and `EmbedFiles` is empty, against **15** for the generator — which is correct there, since generating genuinely needs ent.
 
@@ -38,7 +39,7 @@ There is no `main`, no example app, and no downstream ent project in this repo. 
 `extension.go` is the whole entry point:
 
 - `Hooks()` returns one `gen.Hook` (`generatePerTypeFiles`). `Templates()` returns exactly one exception: `softdelete_config_init`, a `config/init/fields/*` **partial** that extends Ent's own `client.tmpl` inside `newConfig`. It is not a standalone `GraphTemplate` output and creates no new file; it renders no bytes when the graph has no `SoftDeleteMixin`, so those clients remain byte-identical to plain Ent output. All standalone entapi files still go through the hook below.
-- The hook runs *after* `next.Generate(g)`, then loops `g.Nodes`. **A node with zero `domainFields` is skipped entirely** — that's how unannotated entities avoid producing empty files. Files an earlier run wrote for a node that is now skipped are deleted afterwards; see "Stale artifact removal" below.
+- The hook checks conflicts **before** `next.Generate(g)`, then loops `g.Nodes`. **A node without `api.Resource()` is skipped entirely.** Files an earlier run wrote for a node that is now skipped are deleted afterwards; see "Stale artifact removal" below.
 - Generation is **two-phase** (#61). Phase 1 renders every file with `text/template` and formats it through `golang.org/x/tools/imports` in `formatFile`, collecting `[]pendingFile` in memory; phase 2 writes them with `writeFormatted` (temp file in the target directory, renamed into place). **Formatting failure aborts generation and writes nothing** — `imports.Process` only fails on source it cannot parse, so its failure is a template bug, and because it is a pure function of the bytes it lands in phase 1, before anything is on disk. That is what makes the run atomic rather than merely each file: a failure at entity B can no longer leave entity A's files already replaced. The residue, stated honestly in `generatePerTypeFiles`, is a hard kill inside the phase-2 rename loop. `writeFile` no longer exists.
 - Templates declare the imports their output uses (`dtoImports` in `funcs_imports.go` computes the field-type ones). goimports stays in the pipeline as a safety net, not as the mechanism — it cannot be the mechanism now that its failure is fatal. `TestTemplatesDeclareTheirImports` fails if goimports has to add or remove anything.
 - `templateFuncMap()` layers three sources, later wins: Ent's `gen.Funcs` → this package's `templateFuncs()` → `entapiPkg` (closure over the configured import path).
@@ -75,22 +76,23 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 
 | File | Contains |
 |---|---|
-| `funcs_fields.go` | field selection: `domainFields`, `createFields`, `patchFields`, `responseFields`, `responseEdges` |
-| `funcs_scope.go` | `hasDomainScope`, `isDomainRequired`, and `getDomainFieldAnnotation` |
+| `funcs_fields.go` | derived field/edge selection: `createFields`, `patchFields`, `responseFields`, `responseEdges` |
+| `funcs_scope.go` | normalized `getResourceAnnotation`/`getFieldAnnotation`/`getEdgeAnnotation` readers, `isResource`, `resourceExcepts`, `hasCreateFamily` |
 | `funcs_presence.go` | request field shape: `isCreatePointer`, `isCreateRequired`, `isPatchClearable` |
 | `funcs_typechecks.go` | `isComplexFieldType` — **not registered as a template func**; only `fieldValueExpr` calls it |
 | `funcs_softdelete.go` | `isSoftDeletable`, `softDeleteTypes`, `softDeleteField`, `softDeleteImports` — the soft-delete mixin's marker |
 | `funcs_imports.go` | `dtoImports`: the import specs the DTO must declare for its field types |
 | `funcs_codegen.go` | `fieldValueExpr` — the response constructor's per-field expression, and the only caller of `isComplexFieldType` |
 | `funcs_strings.go` | `camelCase`, and nothing else — Ent's `gen.Funcs` already supplies `contains`, `hasPrefix`, `lower`, `snake`, `plural`, … |
-| `funcs_filter.go` | the query surface: `queryFields` (the `ScopeQuery` gate), `isFilterable`/`isSearchable`/`isSortable` (the per-dimension markers), `searchFields`, `filterParams`, `filterImports` |
-| `annotations_edge.go` | edge annotation: `DomainEdge`, `getDomainEdgeAnnotation`, `responseEdgeSet`, `edgeJSONKey` |
+| `funcs_filter.go` | the query surface: `queryFields` (any dimension word), `isFilterable`/`isSearchable`/`isSortable`, `searchFields`, `filterParams`, `filterImports` |
+| `annotations_edge.go` | `responseEdgeSet` and `edgeJSONKey`, reading `api.Expand()` through the normalized edge reader |
+| `api/annotations.go` | schema-time `ResourceAnnotation`, `FieldAnnotation`, `EdgeAnnotation`; every type implements `schema.Merger` |
 
 **A helper is only callable from a template if it appears in `templateFuncs()`.** Adding a func to a `funcs_*.go` file is not enough.
 
 ### Annotation access
 
-Never read `field.Annotations["DomainField"]` directly. Always go through `getDomainFieldAnnotation` (`funcs_scope.go`): the annotation arrives as `*DomainField` during codegen but as `map[string]interface{}` when loaded from a serialized schema, and that function normalizes both via a JSON round-trip.
+Never read the EntAPI annotation maps directly. Always use the three readers in `funcs_scope.go`: annotations arrive as Go values in hand-built unit graphs but as `map[string]interface{}` through serialized schema loading, and the readers normalize both via a JSON round-trip.
 
 ### Create and patch requests (#26)
 
@@ -101,7 +103,7 @@ and `Apply` on the validated types only. Five rules are load-bearing:
 - **Field shape comes from ent, never from a second opinion.** `funcs_presence.go`
   is the whole rule set: a create field is `*T` when `Optional || Default ||
   Nillable` — exactly when ent can fill it without the caller — and required when
-  ent requires it and cannot default it, or when the annotation says so. ent
+  `!Optional && !Default`. `Hidden` and `ReadOnly` remove request fields; ent
   decides which setters exist, so any independently derived shape shows up as a
   call to a method that was never generated.
 - **`Apply` uses `if r.X != nil { b.Set<X>(*r.X) }`, never `SetNillable<X>`.**
@@ -124,11 +126,9 @@ and `Apply` on the validated types only. Five rules are load-bearing:
 - **Requiredness is checked by presence, not by the zero value**, except for
   strings, where `== ""` says the same thing and matches the spike. `0` and
   `false` are values; #14 exists because the v1 template only checked strings.
-- **`patchFields` intersects ScopeUpdate with ent's `MutableFields`.** That is
-  the list ent's setter template iterates, so a field that survives provably has
-  a `Set<Field>`. `checkGraphConflicts` refuses Immutable+ScopeUpdate first, so
-  the intersection currently drops nothing — the refusal is what the author
-  sees, the filter is what keeps the output correct.
+- **`patchFields` starts from ent's `MutableFields`, then removes `Hidden` and
+  `ReadOnly`.** A surviving field provably has a `Set<Field>`. It is clearable
+  exactly when Ent marks it `Optional`.
 
 The one case that cannot be closed here: an `Immutable()` field named in a PATCH
 body is discarded by `encoding/json` before any validator runs. Rejecting it
@@ -142,14 +142,14 @@ and `{Entity}QueryWithResponseEdges`. Four rules are load-bearing, all
 established against real ent and real SQLite in #22 — do not re-derive them
 from the templates:
 
-- **Edges are selected by their own `DomainEdge` annotation**, never from
+- **Edges are selected by their own `api.Expand()` annotation**, never from
   foreign-key placement. Deriving it from the FK made a to-many edge
   permanently unreachable (`edge.Field()` is nil when the column is on the
   other entity) and fused "expose `author_id`" with "expose the nested
   `author`". `responseEdges` (`funcs_fields.go`) is the template entry point;
-  `responseEdgeSet` (`annotations_edge.go`) is the pure selector.
-- **`responseEdges` returns an error** when a response-scoped edge targets an
-  entity with no `DomainField` at all. The generator skips such a node, so no
+  `responseEdgeSet` (`funcs_fields.go`) is the pure selector.
+- **`responseEdges` returns an error** when an expanded edge targets a
+  non-Resource entity. The generator skips such a node, so no
   `<Target>Summary` exists; dropping the edge would silently narrow the
   response, and emitting the reference would surface as an undefined symbol in
   the consumer's build.
@@ -164,9 +164,9 @@ from the templates:
   asserted, not glossed.
 
 Because the response and summary structs are emitted for **every** entity, not
-only those with a response-scoped field, `dtoImports` adds `node.ID`'s import
+only those with a response-visible field, `dtoImports` adds `node.ID`'s import
 unconditionally (`funcs_imports.go`). Gating it on a non-empty `responseFields`
-left an all-`InputOnly` entity's ID import undeclared, and
+left an all-sensitive entity's ID import undeclared, and
 `TestTemplatesDeclareTheirImports` caught it only once the `edges` fixture —
 which has such an entity — was added to that test's corpus. Edges themselves
 need no import: `<Target>Summary` is package-local.
@@ -178,22 +178,29 @@ removal, not merely a redundancy one.
 
 **Open, and deliberately not decided here:** which scalar fields a summary
 carries. Nothing in the schema says "this field is the brief one", so the
-generator does not guess — a summary carries every response-scoped field, minus
+generator does not guess — a summary carries every response-visible field, minus
 the edges. The spike's hand-written `UserSummary{ID, Name}` picked one field by
 judgement, which is the single thing in `internal/fixture/spikeent/dto/` that is not
 mechanical. Narrowing it needs a new annotation, and that is a separate issue.
 
 ## Annotation model
 
-`annotations.go` defines `DomainField` plus value-receiver fluent builders (`WithRequired`, `AsSearchable`, `WithFormat`, …). Every builder **returns a copy** — chaining works, mutating in place does not.
+`api/annotations.go` defines exactly three annotations. `api.Resource()` is the
+sole entity switch and `.Except(Op...)` subsets public operations. Fields are
+silent by default: Optional/Default/Nillable/Immutable/Sensitive/type determine
+shape, and exactly five deviation words remain — Hidden, ReadOnly, Searchable,
+Filterable, Sortable. `api.Expand()` is the sole edge word; `.JSONKey()` changes
+only its response key.
 
-**No preset builder grants `Searchable`, `Filterable` or `Sortable`.** The three markers are opt-in per field (#27): they now generate real query parameters and a real sort allow-list, and a permissive default would make essentially every response-visible field orderable. Presets do still grant `ScopeQuery` — that scope says the field *may* be reached from the query API, and the marker says in which dimension. A marker without `ScopeQuery` is refused at generation time, as is `Searchable` on a type with no `Contains`, `Filterable` on a type with no ops, and `Sortable` on a non-comparable type (`schema_conflicts.go`).
+All builders use value receivers and return copies. All three annotation types
+implement `schema.Merger`: field booleans union, Except operations union, and
+JSONKey is last-non-empty-wins. This is load-bearing because Ent otherwise
+silently overwrites separate same-name annotations during schema loading.
 
-**Seven of the 27 exported knobs reach a template**: `DomainField.Scopes`, `DomainField.Required`, `DomainEdge.Scopes`, `DomainEdge.JSONKey` and three of the four scopes. The other 20 are accepted, stored and ignored. That is allowed but not free: `TestEveryAnnotationKnobIsConsumedOrDeclaredPending` (`annotation_surface_test.go`) derives the knob list by reflection and reachability by toggling each knob against the registered template funcs, so a new knob fails CI until it is either wired up or given a `pendingKnobs` entry naming its issue. It also fails when a listed knob *becomes* reachable — the entry is a claim with a deadline, not an exemption. See "Dead code is now a test failure" below; this is the same contract one level up.
-
-Preset builders (`DefaultField`, `InputOnlyField`, `OutputOnlyField`, `CreateOnlyField`, `IdField`, `AuditLogField`) are just scope combinations layered on `DomainFieldWithScopes`.
-
-The load-bearing design rule, repeated throughout the code and README: **scopes only control HTTP-layer struct generation.** They never restrict what the service layer can do with an ent entity. Keep new features on that side of the line.
+Every exported knob reaches a registered template function; `pendingKnobs` is
+empty. The scope charter remains: annotations control HTTP generation and do not
+remove service-layer wiring or request DTOs. Only a provably unusable create
+family may disappear when `OpCreate` is explicitly excepted.
 
 ## Conventions baked into generated code
 
@@ -228,7 +235,7 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
   per `*gen.Type`; their output files are cleaned up by the same marker scan as
   everything else (#63), with no per-name enumeration:
   `templates/softdelete.tmpl` -> `entapi_softdelete.go`, generated for a
-  soft-deletable entity even when that entity has no domain fields at all; and
+  soft-deletable entity even when that entity is not an API Resource; and
   `templates/errors.tmpl` -> `entapi_errors.go`, generated when any entity is
   annotated, holding the package's `ErrorMap` (#13).
 - **Every exported wiring function returns through `ErrorMap.MapError`, exactly
@@ -257,19 +264,13 @@ slices are expected to follow:
 > both facts. Anything that can be generated correctly is generated, not
 > refused.
 
-Two problems are detected today. The first is an ent-`Immutable()` field carrying
-`ScopeUpdate` (which `DefaultField()` grants). ent's update builders iterate
-`MutableFields`, which excludes immutable fields, so `Set<X>` does not exist on
-`<Entity>UpdateOne` and no template can emit a call that compiles. Dropping the
-field silently was rejected: it would vanish from the PATCH API where neither
-`encoding/json` nor `Validate()` can observe the missing key.
-
-There used to be a second: an entity whose primary key did not render as
-`uuid.UUID`, refused whenever `WithBaseService` or `WithBaseHandler` was on. Both
-templates and both options are gone (#29), so `checkGraphConflicts` no longer
-takes the config and no identifier type is refused. Every check that remains is
-unconditional, and all of them are skipped for a node with no domain fields —
-matching the condition the generation loop itself uses.
+The matrix rejects contradictory deviation words, type-incompatible query
+dimensions, secrets exposed as query or read-only fields, create requests that
+cannot satisfy required-no-default Ent fields, empty public PATCH surfaces,
+misplaced words, words on IDs, query words with `OpList` excepted, `_`-prefixed
+query storage keys, expansion to non-resources, asymmetric self edges, invalid
+soft-delete declarations, and generated-name collisions. HTTP rows skip nodes
+without `api.Resource()`; soft-delete and symbol checks remain graph-wide.
 
 Conversely, `Optional().Nillable()` and named `GoType`s over slices/maps *are*
 generated, because correct output exists for them — `*T` in the create request
@@ -294,7 +295,7 @@ Every row has a fixture. A fixture whose generation must fail carries
   - `internal/fixture` — the #22 spike. It breaking is the signal that generated output has drifted from the hand-written target.
   - `internal/fixtures/wiring/e2e` — the behavioural half of the wiring fixture. Compiling proves the wiring type-checks; only this proves it returns the right page, and it carries #13's three-way missing-row / `UNIQUE` / `FOREIGN KEY` mapping proof against real SQLite.
   - `internal/softdeleteproof` — the only evidence for #18's load-bearing claim: a direct `client.Doc.Query()`, with nothing generated in the call path, does not return deleted rows. A compile proof cannot tell "the predicate is generated" from "the predicate reaches the SQL".
-- `internal/fixtures/edges/edgesent/orerr_contract_test.go` is one of the few hand-written files under a generated `<dir>ent/` directory. It must be in `package edgesent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database. The others are `basic/basicent/listresponse_shape_test.go`, `presence/presenceent/account_presence_test.go`, `query/queryent/filter_contract_test.go`, `sensitive/sensitiveent/sensitive_wire_test.go` and `stale/staleent/trinket_dto.go`; `go build` ignores `_test.go` files, so only the last of those is visible to the codegen harness — and it is there precisely to prove cleanup leaves files it did not write alone.
+- `internal/fixtures/edges/edgesent/orerr_contract_test.go` is one of the few hand-written files under a generated `<dir>ent/` directory. It must be in `package edgesent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database. The others are `basic/basicent/listresponse_shape_test.go`, `createexcepted/createexceptedent/create_family_test.go`, `presence/presenceent/account_presence_test.go`, `query/queryent/filter_contract_test.go`, `sensitive/sensitiveent/sensitive_wire_test.go` and `stale/staleent/trinket_dto.go`; `go build` ignores `_test.go` files, so only the last of those is visible to the codegen harness — and it is there precisely to prove cleanup leaves files it did not write alone.
 - The two nested modules that import a fixture package (`internal/fixtures/wiring/e2e`, `internal/softdeleteproof`) alias it back to `ent` in their imports. They are hand-written and read from the consumer's side, where the generated package really is named `ent`; the alias is spelled out, so goimports has nothing to resolve.
 
 ## Dead code is now a test failure, not a convention (#7)

@@ -4,66 +4,129 @@ import (
 	"encoding/json"
 
 	"entgo.io/ent/entc/gen"
+
+	"github.com/githonllc/entapi/api"
 )
 
-// hasDomainScope checks if a field has a specific scope.
-func hasDomainScope(field *gen.Field, scope FieldScope) bool {
-	annotation := getDomainFieldAnnotation(field)
-	if annotation == nil {
+const (
+	resourceAnnotationName = "EntAPIResource"
+	fieldAnnotationName    = "EntAPIField"
+	edgeAnnotationName     = "EntAPIEdge"
+)
+
+// getResourceAnnotation reads the resource annotation from an Ent type.
+//
+// Ent annotations are pointers while a schema is being described and
+// map[string]interface{} values after the serialized-schema load path. The JSON
+// round-trip keeps both paths on one reader contract.
+func getResourceAnnotation(node *gen.Type) *api.ResourceAnnotation {
+	if node == nil {
+		return nil
+	}
+	return decodeResourceAnnotation(node.Annotations[resourceAnnotationName])
+}
+
+func decodeResourceAnnotation(raw interface{}) *api.ResourceAnnotation {
+	switch v := raw.(type) {
+	case *api.ResourceAnnotation:
+		return v
+	case api.ResourceAnnotation:
+		return &v
+	case map[string]interface{}:
+		var out api.ResourceAnnotation
+		if decodeAnnotation(v, &out) {
+			return &out
+		}
+	}
+	return nil
+}
+
+// getFieldAnnotation reads the deviation words from an Ent field.
+func getFieldAnnotation(field *gen.Field) *api.FieldAnnotation {
+	if field == nil {
+		return nil
+	}
+	raw := field.Annotations[fieldAnnotationName]
+	switch v := raw.(type) {
+	case *api.FieldAnnotation:
+		return v
+	case api.FieldAnnotation:
+		return &v
+	case map[string]interface{}:
+		var out api.FieldAnnotation
+		if decodeAnnotation(v, &out) {
+			return &out
+		}
+	}
+	return nil
+}
+
+// getEdgeAnnotation reads expansion from an Ent edge.
+func getEdgeAnnotation(edge *gen.Edge) *api.EdgeAnnotation {
+	if edge == nil {
+		return nil
+	}
+	raw := edge.Annotations[edgeAnnotationName]
+	switch v := raw.(type) {
+	case *api.EdgeAnnotation:
+		return v
+	case api.EdgeAnnotation:
+		return &v
+	case map[string]interface{}:
+		var out api.EdgeAnnotation
+		if decodeAnnotation(v, &out) {
+			return &out
+		}
+	}
+	return nil
+}
+
+func decodeAnnotation(raw, dst interface{}) bool {
+	data, err := json.Marshal(raw)
+	if err != nil {
 		return false
 	}
+	return json.Unmarshal(data, dst) == nil
+}
 
-	for _, s := range annotation.Scopes {
-		if s == scope {
+func isResource(node *gen.Type) bool { return getResourceAnnotation(node) != nil }
+
+func resourceExcepts(node *gen.Type, op api.Op) bool {
+	a := getResourceAnnotation(node)
+	if a == nil {
+		return false
+	}
+	for _, excluded := range a.ExceptOps {
+		if excluded == op {
 			return true
 		}
 	}
 	return false
 }
 
-// isDomainRequired checks if a field is required in a specific scope.
-func isDomainRequired(field *gen.Field, scope FieldScope) bool {
-	annotation := getDomainFieldAnnotation(field)
-	if annotation == nil {
-		return false
-	}
-
-	if annotation.Required == nil {
-		return false
-	}
-
-	required, exists := annotation.Required[scope]
-	return exists && required
-}
-
-// getDomainFieldAnnotation extracts a DomainField annotation from a gen.Field.
-// Ent annotations arrive as *DomainField at codegen time, but as
-// map[string]interface{} when loaded from a serialized schema. This function
-// handles both cases using a JSON round-trip for the map case.
-func getDomainFieldAnnotation(field *gen.Field) *DomainField {
-	annotation, ok := field.Annotations["DomainField"]
-	if !ok {
+// blockedCreateFields returns required, non-defaulted fields that a deviation
+// word removes from the create request.
+func blockedCreateFields(node *gen.Type) []*gen.Field {
+	if node == nil {
 		return nil
 	}
-
-	// Direct type — codegen time
-	if df, ok := annotation.(*DomainField); ok {
-		return df
-	}
-
-	// map[string]interface{} — loaded from serialized schema.
-	// JSON round-trip handles all fields uniformly.
-	if m, ok := annotation.(map[string]interface{}); ok {
-		data, err := json.Marshal(m)
-		if err != nil {
-			return nil
+	var blocked []*gen.Field
+	for _, f := range node.Fields {
+		if f.Optional || f.Default {
+			continue
 		}
-		var df DomainField
-		if err := json.Unmarshal(data, &df); err != nil {
-			return nil
+		a := getFieldAnnotation(f)
+		if a != nil && (a.Hidden || a.ReadOnly) {
+			blocked = append(blocked, f)
 		}
-		return &df
 	}
+	return blocked
+}
 
-	return nil
+// hasCreateFamily reports whether templates should emit the create request and
+// wiring family. The unusable, non-Excepted quadrant is rejected before
+// templates run; returning true there makes Except observable to the surface
+// reachability test while keeping that invariant explicit.
+func hasCreateFamily(node *gen.Type) bool {
+	return len(blockedCreateFields(node)) == 0 || !resourceExcepts(node, api.OpCreate)
 }

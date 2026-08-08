@@ -2,11 +2,12 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Category is self-referential, which is the case where any fixed expansion
@@ -19,16 +20,11 @@ type Category struct {
 // Fields of the Category.
 func (Category) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("name").
-			Annotations(entapi.DefaultField()),
+		field.String("name"),
 
-		field.UUID("parent_id", uuid.UUID{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+		field.UUID("parent_id", uuid.UUID{}).Optional(),
 	}
 }
 
@@ -46,12 +42,14 @@ func (Category) Fields() []ent.Field {
 func (Category) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("children", Category.Type).
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 
 		edge.From("parent", Category.Type).
 			Ref("children").
 			Unique().
 			Field("parent_id").
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 	}
 }
+
+func (Category) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

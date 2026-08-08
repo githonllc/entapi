@@ -259,7 +259,7 @@ func TestOperatorCoverageFollowsTheClassRule(t *testing.T) {
 	}
 	for _, absent := range []string{"RefContains", "RefContainsFold", "RefEqualFold", "RefHasSuffix"} {
 		if _, ok := rt.FieldByName(absent); ok {
-			t.Errorf("RecordFilter.%s exists; ref is Filterable only, and the substring class requires AsSearchable (ADR-0005)", absent)
+			t.Errorf("RecordFilter.%s exists; ref is Filterable only, and the substring class requires api.Searchable() (ADR-0005)", absent)
 		}
 	}
 

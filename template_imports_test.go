@@ -123,7 +123,7 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 	for _, sc := range schemas {
 		t.Run(sc.name, func(t *testing.T) {
 			for _, node := range loadFixtureNodes(t, sc.schemaDir, sc.pkgPath) {
-				if len(domainFields(node)) == 0 {
+				if !isResource(node) {
 					continue
 				}
 				for _, tc := range tmpls {

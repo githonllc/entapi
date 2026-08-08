@@ -15,6 +15,7 @@ import (
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/article"
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/author"
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/note"
+	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/patchless"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -75,9 +76,10 @@ var (
 func checkColumn(table, column string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			article.Table: article.ValidColumn,
-			author.Table:  author.ValidColumn,
-			note.Table:    note.ValidColumn,
+			article.Table:   article.ValidColumn,
+			author.Table:    author.ValidColumn,
+			note.Table:      note.ValidColumn,
+			patchless.Table: patchless.ValidColumn,
 		})
 	})
 	return columnCheck(table, column)

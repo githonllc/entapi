@@ -25,7 +25,7 @@ import (
 // Source files:
 //   - funcs_strings.go:    string manipulation utilities
 //   - funcs_fields.go:     field filtering and selection
-//   - funcs_scope.go:      scope and requirement checking
+//   - funcs_scope.go:      normalized annotation readers and Resource gating
 //   - funcs_softdelete.go: the soft-delete mixin's marker and tombstone field
 //   - funcs_presence.go:   create/patch field shape and presence rules
 //   - funcs_typechecks.go: field type checking
@@ -43,20 +43,20 @@ func templateFuncs() template.FuncMap {
 		"camelCase": camelCase,
 
 		// Field selection (used in template range loops)
-		"domainFields":   domainFields,
-		"createFields":   createFields,
-		"patchFields":    patchFields,
-		"responseFields": responseFields,
-		"responseEdges":  responseEdges,
-		"edgeJSONKey":    edgeJSONKey,
+		"createFields":    createFields,
+		"patchFields":     patchFields,
+		"responseFields":  responseFields,
+		"responseEdges":   responseEdges,
+		"edgeJSONKey":     edgeJSONKey,
+		"hasCreateFamily": hasCreateFamily,
 
 		// Request presence model
 		"isCreatePointer":  isCreatePointer,
 		"isCreateRequired": isCreateRequired,
 		"isPatchClearable": isPatchClearable,
 
-		// Query surface: the outer loop is the scope, the inner test is the
-		// dimension (funcs_filter.go)
+		// Query surface: any dimension word enters the outer loop
+		// (funcs_filter.go)
 		"queryFields":  queryFields,
 		"searchFields": searchFields,
 		"isFilterable": isFilterable,

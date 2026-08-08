@@ -18,7 +18,7 @@ type Secret struct {
 	// ID of the ent.
 	ID uuid.UUID `json:"id,omitempty"`
 	// Token holds the value of the "token" field.
-	Token        string `json:"token,omitempty"`
+	Token        string `json:"-"`
 	selectValues sql.SelectValues
 }
 
@@ -94,8 +94,7 @@ func (s *Secret) String() string {
 	var builder strings.Builder
 	builder.WriteString("Secret(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", s.ID))
-	builder.WriteString("token=")
-	builder.WriteString(s.Token)
+	builder.WriteString("token=<sensitive>")
 	builder.WriteByte(')')
 	return builder.String()
 }

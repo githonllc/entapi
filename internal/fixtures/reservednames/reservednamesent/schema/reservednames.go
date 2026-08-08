@@ -30,10 +30,12 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
 	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // ErrorMap is the colliding entity. Nothing about it is unusual except its
@@ -47,14 +49,13 @@ type ErrorMap struct {
 // Fields of the ErrorMap.
 func (ErrorMap) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("label").
-			Annotations(entapi.DefaultField().WithRequired(entapi.ScopeCreate)),
+		field.String("label"),
 	}
 }
+
+func (ErrorMap) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }
 
 // Probe is the ordinary annotated entity. See the package comment for the two
 // jobs it holds down.
@@ -72,24 +73,20 @@ func (Probe) Mixin() []ent.Mixin {
 // Fields of the Probe.
 func (Probe) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
 		// create + update + response + the full query surface. Create and
 		// update scopes are what make ProbeCreateRequest, ProbePatchRequest,
 		// CreateProbe and PatchProbe reachable at all.
 		field.String("name").
-			Annotations(entapi.DefaultField().
-				WithRequired(entapi.ScopeCreate).
-				AsFilterable().
-				AsSearchable().
-				AsSortable()),
+			Annotations(api.Filterable(), api.Searchable(), api.Sortable()),
 
 		// response only, and sortable — the paging key.
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
-			Annotations(entapi.OutputOnlyField().AsSortable()),
+			Annotations(api.ReadOnly(), api.Sortable()),
 	}
 }
+
+func (Probe) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

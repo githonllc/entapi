@@ -38,7 +38,7 @@ func isSoftDeletable(node *gen.Type) bool {
 
 // softDeleteAnnotation returns the DomainSoftDelete annotation on node, or nil.
 //
-// Like getDomainFieldAnnotation it normalises through a JSON round-trip: the
+// Like the EntAPI readers it normalises through a JSON round-trip: the
 // annotation arrives as a DomainSoftDelete during codegen but as a
 // map[string]interface{} when the schema was loaded from its serialized form,
 // and reading the concrete type directly works only on the first path.

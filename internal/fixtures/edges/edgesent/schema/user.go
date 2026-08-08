@@ -14,11 +14,12 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // User is the far end of a to-many edge. The foreign key lives on Post, so
@@ -31,12 +32,9 @@ type User struct {
 // Fields of the User.
 func (User) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("name").
-			Annotations(entapi.DefaultField()),
+		field.String("name"),
 	}
 }
 
@@ -45,10 +43,12 @@ func (User) Edges() []ent.Edge {
 	return []ent.Edge{
 		// To-many, annotated: appears in UserResponse as []*PostSummary.
 		edge.To("posts", Post.Type).
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 
 		// The inverse end of Post.reviewer. Unannotated on both sides, so it
 		// must not reach any response.
 		edge.To("reviewed", Post.Type),
 	}
 }
+
+func (User) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

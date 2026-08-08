@@ -37,21 +37,12 @@ func isCreatePointer(f *gen.Field) bool {
 // isCreateRequired reports whether Validate must reject a create request that
 // supplies no value for this field.
 //
-// The schema is the first authority: a field ent marks mandatory and cannot
-// default has to be supplied, or the insert fails inside ent with an error that
-// names a column rather than a request field. The annotation can only add to
-// that — WithRequired(ScopeCreate) makes the HTTP layer stricter than the
-// database, which is a legitimate thing to ask for and the reason a Nillable
-// field can be both a pointer and required.
-//
-// It cannot subtract: there is no annotation that makes an ent-mandatory field
-// optional in the request, because nothing would then produce the value.
+// A field Ent marks mandatory and cannot default has to be supplied, or the
+// insert fails inside Ent with an error that names a column rather than a
+// request field. There is no annotation-side requiredness override.
 func isCreateRequired(f *gen.Field) bool {
 	if f == nil {
 		return false
-	}
-	if isDomainRequired(f, ScopeCreate) {
-		return true
 	}
 	return !f.Optional && !f.Default
 }
@@ -62,14 +53,9 @@ func isCreateRequired(f *gen.Field) bool {
 // for no others, so Optional is a hard precondition rather than a policy: a
 // non-optional field has no clear method to call and the column is NOT NULL
 // underneath it. Validate rejects the null instead, naming the field.
-//
-// WithRequired(ScopeUpdate) subtracts from the set. ent would accept the clear,
-// but the annotation says this field must always hold a value, and that is
-// exactly the promise a required marker makes at the HTTP layer. Absent still
-// means "leave it alone" for such a field; only null is refused.
 func isPatchClearable(f *gen.Field) bool {
 	if f == nil {
 		return false
 	}
-	return f.Optional && !isDomainRequired(f, ScopeUpdate)
+	return f.Optional
 }

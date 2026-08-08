@@ -18,9 +18,9 @@ import (
 // allow-list. They are three dimensions of one list endpoint, not three
 // features, so they are one artifact.
 //
-// Every field below carries ScopeQuery AND the marker for its dimension. A
-// field with neither is absent from all three, and there is no runtime switch
-// that can bring it back.
+// Every field below carries at least one query-dimension word. A field with no
+// Searchable, Filterable or Sortable word is absent from all three, and there
+// is no runtime switch that can bring it back.
 // ============================================================================
 
 // ArticleFilter is the structured query surface for Article.
@@ -30,7 +30,7 @@ import (
 // selection: emitting an operator costs nothing here, whereas adding one later
 // means changing a template, regenerating and possibly breaking a URL contract
 // consumers already depend on. Substring-class operators (_contains,
-// _icontains, _ieq, _suffix) additionally require AsSearchable on the field —
+// _icontains, _ieq, _suffix) additionally require api.Searchable() on the field —
 // see docs/adr/0005.
 //
 // Every parameter is a pointer or a slice, because "absent" and "the zero

@@ -45,8 +45,8 @@ type {{ $.Name }}Response struct{}
 		Target:  dir,
 		Package: "example.com/app/ent",
 	}
-	a := newTestType("A", newStringField("name", ptr(DefaultField())))
-	b := newTestType("B", newStringField("name", ptr(DefaultField())))
+	a := newTestType("A", newStringField("name", nil))
+	b := newTestType("B", newStringField("name", nil))
 	a.Config, b.Config = cfg, cfg
 	g := &gen.Graph{Config: cfg, Nodes: []*gen.Type{a, b}}
 

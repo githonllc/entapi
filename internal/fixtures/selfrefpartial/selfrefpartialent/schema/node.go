@@ -1,22 +1,17 @@
 // Package schema holds the hand-written ent schema for the "selfrefpartial"
-// codegen fixture: a self-referential pair where only ONE end is exposed, on
-// purpose, and the other end says so with a bare entapi.Edge().
-//
-// This is the escape hatch the #30 refusal points at. It exists as a fixture
-// rather than as a unit test because the thing at risk is not the check's
-// arithmetic but whether an EMPTY annotation survives the schema load at all:
-// annotations reach codegen through a JSON round-trip, and a DomainEdge with no
-// scopes and no JSON key marshals to {}. If ent dropped it, the refusal message
-// would be recommending a fix that does not work.
+// codegen fixture: a deliberately one-way self-referential pair. The one-word
+// edge vocabulary cannot distinguish this intent from the chained-builder
+// accident, so generation keeps refusing it under issue #79's owner review.
 package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Node is self-referential and exposes the upward direction only.
@@ -27,33 +22,26 @@ type Node struct {
 // Fields of the Node.
 func (Node) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("label").
-			Annotations(entapi.DefaultField()),
+		field.String("label"),
 
-		field.UUID("parent_id", uuid.UUID{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+		field.UUID("parent_id", uuid.UUID{}).Optional(),
 	}
 }
 
 // Edges of the Node.
 func (Node) Edges() []ent.Edge {
 	return []ent.Edge{
-		// Deliberately NOT in any response: a bare annotation grants no scope,
-		// so nothing about the output changes. What it changes is that the
-		// decision is written down, which is what tells it apart from the end
-		// the chained declaration forgets.
-		edge.To("children", Node.Type).
-			Annotations(entapi.Edge()),
+		// Deliberately not expanded. This asymmetry is refused.
+		edge.To("children", Node.Type),
 
 		edge.From("parent", Node.Type).
 			Ref("children").
 			Unique().
 			Field("parent_id").
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 	}
 }
+
+func (Node) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

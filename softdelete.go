@@ -5,6 +5,8 @@ import (
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/mixin"
+
+	"github.com/githonllc/entapi/api"
 )
 
 // SoftDeleteField is the column the mixin adds. It is a constant so the
@@ -78,7 +80,8 @@ func (SoftDeleteMixin) Fields() []ent.Field {
 	return []ent.Field{
 		field.Time(SoftDeleteField).
 			Optional().
-			Nillable(),
+			Nillable().
+			Annotations(api.Hidden()),
 	}
 }
 

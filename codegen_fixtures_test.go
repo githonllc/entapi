@@ -86,7 +86,7 @@ var fixtures = []fixtureCase{
 	{dir: "basic"},
 	{dir: "fieldshapes"},
 	{dir: "sensitive"},
-	{dir: "immutable", wantGenErr: []string{"Doc.origin", "Doc.source", "Immutable()", `scope "update"`, "SetOrigin", "SetSource"}},
+	{dir: "immutable"},
 	{dir: "edges"},
 	// "intid" was a REFUSAL case until #29. Its entity has ent's default int
 	// primary key, which base_service.tmpl and base_handler.tmpl could not be
@@ -95,11 +95,26 @@ var fixtures = []fixtureCase{
 	// so the fixture flips to the ordinary generate-and-compile assertion — and
 	// compiling is what proves the identifier is no longer hardcoded anywhere.
 	{dir: "intid"},
-	{dir: "selfref", wantGenErr: []string{"Tree.children", "Tree.parent", "chained", "edge.From(", "entapi.Edge()"}},
-	{dir: "selfrefpartial"},
+	{dir: "selfref", wantGenErr: []string{"Tree.children", "Tree.parent", "chained", "issue #79"}},
+	{dir: "selfrefpartial", wantGenErr: []string{"Node.children", "Node.parent", "issue #79"}},
 	{dir: "presence"},
 	{dir: "query"},
-	{dir: "queryconflict", wantGenErr: []string{"Bad.tags", "Sortable", "Bad.count", "Searchable", "Bad.meta", "Filterable", "Bad.token", `scope "query"`}},
+	{dir: "queryconflict", wantGenErr: []string{
+		"Bad.tags", "Sortable", "not comparable",
+		"Bad.count", "Searchable", "no Contains",
+		"Bad.meta", "Filterable", "no predicates",
+		"Bad.token", "Sensitive()", "query oracle",
+		"Bad.managed_secret", "api.ReadOnly()", "api.Hidden()",
+		"Bad.hidden", "api.Hidden() conflicts",
+		"Bad.private", "_private", "reserved",
+		"Excepts api.OpList",
+	}},
+	{dir: "createblocked", wantGenErr: []string{"Account.secret", "api.Hidden()", "required by Ent", "Except(api.OpCreate)", "Optional", "Default"}},
+	{dir: "patchless", wantGenErr: []string{"Document", "PATCH field set is empty", "Except(api.OpPatch)"}},
+	{dir: "misplacedword", wantGenErr: []string{"Record.misplaced_expand", "Expand() is attached to a field", "Record.owners", "field deviation word is attached to an edge"}},
+	{dir: "wordonid", wantGenErr: []string{"Widget.id", "primary key", "Sortable"}},
+	{dir: "expandnonresource", wantGenErr: []string{"Post.authors", "api.Expand() targets Author", "not an api.Resource"}},
+	{dir: "createexcepted"},
 	{dir: "wiring"},
 	{dir: "softdelete", features: []gen.Feature{gen.FeaturePrivacy}},
 	// #62: an entity whose NAME is a symbol this extension generates. The three

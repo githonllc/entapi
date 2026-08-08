@@ -61,7 +61,7 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	g := loadFixtureGraph(t, fixtureSchemaDir(root, "reservednames"), fixtureEntPkgPath("reservednames"))
 
 	probe := nodeNamed(t, g, "Probe")
-	if len(domainFields(probe)) == 0 {
+	if !isResource(probe) {
 		t.Fatal("the probe entity carries no domain fields, so the per-type templates would emit nothing at all")
 	}
 	if len(softDeleteTypes(g)) == 0 {

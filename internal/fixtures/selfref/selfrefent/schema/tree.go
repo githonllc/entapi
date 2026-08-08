@@ -5,11 +5,12 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 
-	"github.com/githonllc/entapi"
+	"github.com/githonllc/entapi/api"
 )
 
 // Tree is self-referential, declared the way a schema author reaches for first.
@@ -20,16 +21,11 @@ type Tree struct {
 // Fields of the Tree.
 func (Tree) Fields() []ent.Field {
 	return []ent.Field{
-		field.UUID("id", uuid.UUID{}).
-			Default(uuid.New).
-			Annotations(entapi.IdField()),
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 
-		field.String("name").
-			Annotations(entapi.DefaultField()),
+		field.String("name"),
 
-		field.UUID("parent_id", uuid.UUID{}).
-			Optional().
-			Annotations(entapi.DefaultField()),
+		field.UUID("parent_id", uuid.UUID{}).Optional(),
 	}
 }
 
@@ -41,6 +37,8 @@ func (Tree) Edges() []ent.Edge {
 			From("parent").
 			Unique().
 			Field("parent_id").
-			Annotations(entapi.Edge().InResponse()),
+			Annotations(api.Expand()),
 	}
 }
+
+func (Tree) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }

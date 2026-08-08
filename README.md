@@ -4,17 +4,22 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/githonllc/entapi)](https://goreportcard.com/report/github.com/githonllc/entapi)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An [Ent](https://entgo.io) extension. You annotate a schema field with what the
-HTTP layer may do with it, and it writes the request types, the response types,
-the query surface and one wiring function per operation — all into your own
-`ent` package, against a runtime that imports nothing but the standard library.
+An [Ent](https://entgo.io) extension. Mark an entity with `api.Resource()` and
+it writes request types, response types, a query surface and one wiring function
+per operation — all into your own `ent` package, against a runtime that imports
+nothing but the standard library. Field shape comes from Ent; annotations name
+only deviations.
 
 *[中文](README_zh.md)*
 
 ```go
 // schema/article.go — you write this
 field.String("title").
-    Annotations(entapi.DefaultField().AsSearchable().AsFilterable().AsSortable()),
+    Annotations(api.Searchable(), api.Filterable(), api.Sortable())
+
+func (Article) Annotations() []schema.Annotation {
+    return []schema.Annotation{api.Resource()}
+}
 ```
 
 ```go
@@ -49,8 +54,8 @@ error classification.
 
 ## Contents
 
-- [Install](#install) · [Two import paths](#two-import-paths) · [Wiring it in](#wiring-it-in)
-- [The annotation model](#the-annotation-model) — scopes and markers are two different axes
+- [Install](#install) · [Three import paths](#three-import-paths) · [Wiring it in](#wiring-it-in)
+- [The annotation model](#the-annotation-model) — Ent facts plus five deviation words
 - [What gets generated](#what-gets-generated)
 - [Requests: three-state presence](#requests-three-state-presence)
 - [Response, summary and edges](#response-summary-and-edges)
@@ -75,15 +80,15 @@ go get github.com/githonllc/entapi
 
 > **Implementation:** `go.mod`
 
-## Two import paths
+## Three import paths
 
-One module, two packages, split by *when the code runs*. Both are named
-`entapi`, so every call site reads `entapi.X` whichever one it came from;
-a file that needs both imports both and aliases one.
+One module, three packages, split by *when the code runs*. The root and runtime
+packages are named `entapi`; the schema package is named `api`.
 
 | Import | Imported by | Principal symbols |
 |---|---|---|
-| `github.com/githonllc/entapi` | your `entc.go` and your **schema** files | `Extension`, `DomainField` and its builders, `Edge()`, `SoftDeleteMixin` |
+| `github.com/githonllc/entapi` | your `entc.go`; schemas that embed soft delete | `Extension`, `SoftDeleteMixin` |
+| `github.com/githonllc/entapi/api` | your **schema** files | `Resource`, `Hidden`, `ReadOnly`, `Searchable`, `Filterable`, `Sortable`, `Expand` |
 | `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, `ErrorMapper`, `AppendIf`, `Ptr`/`PtrOrNil`/`PtrNilSafe`, `WithSoftDeleted`/`WithHardDelete` |
 
 The split is load-bearing, not cosmetic. The root package embeds five templates
@@ -147,59 +152,56 @@ renders and writes its own files.
 
 ## The annotation model
 
-Two axes. Confusing them is the most common mistake.
+`api.Resource()` is the single entity switch. Without it an entity gets no
+EntAPI files. `api.Resource().Except(api.OpCreate, ...)` removes selected public
+operation surfaces; request DTOs and wiring functions stay available to the
+service layer, except for a create family that cannot work at all.
 
-**Scopes** answer *which HTTP structs may carry this field*. There are four:
+Field membership is silent by default and derived from Ent:
 
-| Scope | Appears in |
+| Ent/API fact | Generated effect |
 |---|---|
-| `ScopeCreate` | `{E}CreateRequest` |
-| `ScopeUpdate` | `{E}PatchRequest` (and only if the field is also in ent's `MutableFields`) |
-| `ScopeQuery` | `{E}Filter` / `{E}SortKeys` |
-| `ScopeResponse` | `{E}Response` / `{E}Summary` |
+| `Optional`, `Default`, `Nillable` | create pointer and requiredness |
+| `Immutable` | absent from PATCH |
+| `Sensitive` | absent from response and summary, still settable |
+| `api.Hidden()` | absent from create, patch, response and query |
+| `api.ReadOnly()` | absent from create and patch; response remains |
+| `api.Searchable()` | free-text and substring query dimension |
+| `api.Filterable()` | structured predicates derived from Ent's operators |
+| `api.Sortable()` | enters the sort allow-list |
 
-**Markers** answer *what the query API may do with a field that already carries
-`ScopeQuery`*. There are three: `AsFilterable()`, `AsSearchable()`,
-`AsSortable()`.
+The five field words share one mergeable annotation. Separate spelling is
+canonical and safe: `Annotations(api.Searchable(), api.Sortable())` preserves
+both words through Ent's serialized schema loader. Builders use value receivers
+and return copies.
 
-```go
-entapi.DefaultField()                    // create + update + query + response
-entapi.InputOnlyField()                  // create + update           (passwords)
-entapi.OutputOnlyField()                 // query + response          (timestamps, computed state)
-entapi.CreateOnlyField()                 // create + query + response (write-once)
-entapi.IdField()                         // OutputOnly + a canned description + ReadOnly metadata
-entapi.AuditLogField()                   // OutputOnly + ReadOnly metadata
-entapi.NewDomainField()                  // no scopes — ent tracks it, it appears in no HTTP struct
-entapi.DomainFieldWithScopes(scopes...)  // any other combination
-```
+### Migration from the scope model
 
-**No preset grants a marker.** All six preset bodies set only `Scopes`; the
-`Searchable` / `Sortable` / `Filterable` booleans stay at their zero value.
-Until you chain one on, `DefaultField()` gives you an **empty** `{E}Filter`
-struct and an **empty** sort allow-list:
+There are no compatibility aliases. Migrate the old vocabulary by effect:
 
-```go
-field.String("title").
-    Annotations(entapi.DefaultField().
-        AsFilterable().     // structured URL parameters: title, title_neq, title_in, title_prefix, …
-        AsSearchable().     // joins the free-text q disjunction, and unlocks the substring operators
-        AsSortable()),      // enters {E}SortKeys
-```
+| Old spelling | New spelling |
+|---|---|
+| `DefaultField()` | no field annotation |
+| `InputOnlyField()` | Ent `Sensitive()` |
+| `OutputOnlyField()` | `api.ReadOnly()` |
+| `CreateOnlyField()` | Ent `Immutable()` |
+| `IdField()` | no annotation; Ent's ID is automatic |
+| `AuditLogField()` | `api.ReadOnly()` |
+| `NewDomainField()` | `api.Hidden()` |
+| `DomainFieldWithScopes(...)` | spell the intended effect with Ent plus the five words |
+| `ScopeCreate` / `ScopeUpdate` | derived from `Optional`, `Default`, `Nillable`, `Immutable` |
+| `ScopeResponse` | derived; remove with `Hidden` or Ent `Sensitive` |
+| `ScopeQuery` | one or more of `Searchable`, `Filterable`, `Sortable` |
+| `WithRequired(ScopeCreate)` | no successor; required means `!Optional && !Default` |
+| `AsSearchable` / `AsFilterable` / `AsSortable` | `api.Searchable()` / `api.Filterable()` / `api.Sortable()` |
+| `AsReadOnly` | `api.ReadOnly()` |
+| `AsWriteOnly` | Ent `Sensitive()` |
+| metadata builders | no successor |
+| `Edge().InResponse().As("key")` | `api.Expand().JSONKey("key")` |
 
-A marker **without** `ScopeQuery` is a generation error, not a warning — see
-[Generation can fail](#generation-can-fail-and-that-is-the-design).
-
-Every builder takes its receiver **by value and returns a copy**: chaining
-works, mutating in place does not. Slice and map fields are reallocated on
-copy, so two chains forked from the same base annotation cannot affect each
-other.
-
-> **Implementation:** `annotations.go` — `FieldScope`, `ScopeCreate`,
-> `ScopeUpdate`, `ScopeQuery`, `ScopeResponse`, `AllFieldScopes`, `DomainField`,
-> `NewDomainField`, `DomainFieldWithScopes`, `DefaultField`, `InputOnlyField`,
-> `OutputOnlyField`, `CreateOnlyField`, `IdField`, `AuditLogField`,
-> `WithRequired`, `AsSearchable`, `AsSortable`, `AsFilterable`, `copyScopes`,
-> `copyEnum`, `copyTags`
+`InputOnlyField()` was an HTTP-only promise. Ent `Sensitive()` also affects the
+service layer and logging. That broader semantic is deliberate: the declaration
+lives in the layer that owns secrecy.
 
 ### Edges
 
@@ -210,30 +212,27 @@ placement:
 func (Post) Edges() []ent.Edge {
     return []ent.Edge{
         edge.From("author", User.Type).Ref("posts").Unique().Field("author_id").
-            Annotations(entapi.Edge().InResponse().As("writer")),
+            Annotations(api.Expand().JSONKey("writer")),
     }
 }
 ```
 
-`InResponse()` puts `Author *UserSummary` in `PostResponse` and `WithAuthor()`
-in the generated eager-load plan; `As("writer")` overrides the JSON key.
-`DomainEdge` has exactly two fields, `Scopes` and `JSONKey`, and only
-`ScopeResponse` is read today.
+`Expand()` puts `Author *UserSummary` in `PostResponse` and `WithAuthor()` in
+the generated eager-load plan; `JSONKey("writer")` overrides the response key.
+Expansion is one level deep and is never inferred from foreign-key placement.
 
-An annotation arrives at codegen either as a `*DomainEdge` or as a
-`map[string]interface{}` (when loaded from a serialized schema), so every read
-goes through one JSON normalisation. The same holds for field annotations.
+An annotation arrives at codegen either as its Go type or as a
+`map[string]interface{}` after serialized schema loading, so every read goes
+through one JSON normalisation.
 
-> **Implementation:** `annotations_edge.go` — `DomainEdge`, `Edge`, `InResponse`,
-> `As`, `hasScope`, `getDomainEdgeAnnotation`, `hasEdgeScope`, `responseEdgeSet`,
-> `edgeJSONKey`; `funcs_scope.go` — `getDomainFieldAnnotation`, `hasDomainScope`,
-> `isDomainRequired`
+> **Implementation:** `api/annotations.go`; `funcs_scope.go` —
+> `getResourceAnnotation`, `getFieldAnnotation`, `getEdgeAnnotation`;
+> `annotations_edge.go` — `responseEdgeSet`, `edgeJSONKey`
 
 ## What gets generated
 
-Three files per entity that carries **at least one annotated field**. An entity
-with none is skipped entirely and produces no files — the first line of the
-generation loop is `if len(domainFields(node)) == 0 { continue }`.
+Three files per entity carrying **`api.Resource()`**. An entity without that
+single switch is skipped entirely and produces no EntAPI files.
 
 | File | Declares |
 |---|---|
@@ -248,9 +247,9 @@ Plus two files per schema, each with its own emission condition:
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
 | `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
 
-The soft-delete condition is independent of annotations: an entity with **no
-domain fields at all** still enters the traverser's type switch if it embeds
-the mixin. The extension also supplies a `config/init/fields/*` partial that
+The soft-delete condition is independent of `api.Resource()`: an entity that is
+not an HTTP resource still enters the traverser's type switch if it embeds the
+mixin. The extension also supplies a `config/init/fields/*` partial that
 extends Ent's own `client.go`: for each such entity, `newConfig` initializes its
 hook and interceptor slices. This partial creates no standalone output file and
 renders no bytes for a graph without the mixin.
@@ -263,7 +262,7 @@ entity name can collide with one — see
 > **Implementation:** `extension.go` — `generatePerTypeFiles`, `perTypeFileName`,
 > `renderDTOFile`, `renderFilterFile`, `renderWiringFile`, `renderErrorMapFile`,
 > `renderSoftDeleteFile`, `pendingFile`; `cleanup.go` — `errorMapFileName`,
-> `softDeleteFileName`; `funcs_fields.go` — `domainFields`;
+> `softDeleteFileName`; `funcs_scope.go` — `isResource`;
 > `funcs_softdelete.go` — `softDeleteTypes`; authoritative symbol list:
 > `schema_conflicts.go` — `derivedEntityDecls`
 
@@ -358,12 +357,12 @@ edges:
 `{E}QueryWithResponseEdges(q)` applies exactly the eager-load plan
 `New{E}Response` needs. Either use it or handle that error.
 
-A summary carries **every response-scoped scalar field**, minus the edges — its
+A summary carries **every response-visible scalar field**, minus the edges — its
 scalar half is identical to the response's. Narrowing it needs a new annotation;
 nothing in the schema says which field is the brief one.
 
-An edge selected for the response whose target entity has **no domain field at
-all** is a generation error: that entity is skipped, so there is no
+An expanded edge whose target is **not an `api.Resource()`** is a generation
+error: that entity is skipped, so there is no
 `<Target>Summary` to reference.
 
 > **Implementation:** `funcs_fields.go` — `responseFields`, `responseEdges`
@@ -401,10 +400,9 @@ so the tag half is pinned by a separate golden-JSON test.
 
 ## The query surface
 
-Three independent dimensions, each opt-in per field, behind one outer gate:
-`ScopeQuery`.
+Three independent dimensions, each opt-in per field.
 
-### Structured filtering — `AsFilterable()`
+### Structured filtering — `api.Filterable()`
 
 One parameter per operator **ent** derives for that type. This package keeps no
 operator table of its own — only a **naming** table, deciding what each operator's
@@ -419,7 +417,7 @@ shared by `form:` and `json:`:
 | `_contains` `_icontains` `_suffix` `_ieq` | **the substring class, see below** |
 | `_is_null` | one `*bool` collapsing `IsNil`/`NotNil` |
 
-An optional `string` field marked only `AsFilterable()` gets ten parameters:
+An optional `string` field marked only `api.Filterable()` gets ten parameters:
 
 ```
 ref  ref_neq  ref_in  ref_not_in  ref_gt  ref_gte  ref_lt  ref_lte  ref_prefix  ref_is_null
@@ -432,31 +430,31 @@ no honest answer to "is null AND is not null".
 An operator ent knows and this package has not named is skipped rather than
 emitted under a wrong name. There is no such operator today.
 
-### The substring class also needs `AsSearchable()`
+### The substring class also needs `api.Searchable()`
 
 `_contains`, `_icontains`, `_suffix` and `_ieq` are precisely the `LIKE '%x%'`
 shapes that defeat a B-tree index — the same cost profile the free-text gate
 exists to withhold. They are emitted only when the field **also** carries
-`AsSearchable()`.
+`api.Searchable()`.
 
 `_ieq` is exact-match *semantically* but sits in the expensive class for its
 *cost*: without a functional index, `LOWER(x) = LOWER(?)` scans exactly like a
 substring match. Rationale in
 [ADR-0005](docs/adr/0005-contains-operators-gated-by-searchable.md).
 
-### Free text — `AsSearchable()`
+### Free text — `api.Searchable()`
 
 Emitted only when at least one field is searchable: a single `q` parameter,
 applied as an `OR` disjunction across every searchable field and `AND`ed with
-everything else. Skipped when nil **or empty**. A field marked `AsSearchable()`
-but not `AsFilterable()` contributes to `q` only and gets no structured
+everything else. Skipped when nil **or empty**. A field marked `api.Searchable()`
+but not `api.Filterable()` contributes to `q` only and gets no structured
 parameters of its own.
 
 An entity that marks nothing gets `type PlainFilter struct{}` and `var
 PlainSortKeys = []string{}` — empty, but present, because the wiring signatures
 need them.
 
-### Sorting — `AsSortable()`
+### Sorting — `api.Sortable()`
 
 `{E}SortKeys` is the allow-list and `{E}Order` is the function that turns a
 request into ent order options. A `sort_by` outside the allow-list is an
@@ -638,15 +636,22 @@ policy:
 > facts and the fix. Anything that can be generated correctly is generated, not
 > refused.
 
-Nine situations are detected today:
+The refusal matrix covers these contradictions:
 
 | Refused | Why |
 |---|---|
-| An `Immutable()` field carrying `ScopeUpdate` — which `DefaultField()` grants | ent's update builders iterate `MutableFields`, so `SetX` does not exist and no template can emit a call that compiles |
-| A marker without `ScopeQuery` | the field is marked filterable/searchable/sortable but is unreachable from the query API, and no query artifact is generated for it |
-| `AsSearchable()` on a type with no `Contains` | there is no substring predicate to put in the free-text disjunction |
-| `AsFilterable()` on a type with no operators at all | the filter group would be empty and the parameter would silently do nothing |
-| `AsSortable()` on a non-comparable type | ent's order builders skip it, so there is no `ByX` for the allow-list |
+| `api.Hidden()` with any other field word | hidden has no surface on which another deviation can act |
+| Ent `Sensitive()` with a query word, or with `api.ReadOnly()` | a secret cannot become a query oracle; use `Hidden` for fully inaccessible data |
+| A required-no-default field blocked from create by `Hidden` or `ReadOnly`, without `Except(OpCreate)` | Ent cannot insert the row from that request |
+| An empty PATCH field set without `Except(OpPatch)` | the public PATCH surface is useless |
+| A field word on an edge, or `Expand` on a field | the word is attached to the wrong schema element |
+| Any EntAPI word on the primary key | ID behaviour is fixed and #72 owns its future query whitelist |
+| A query word while `OpList` is excepted | the query surface has been closed |
+| `api.Searchable()` on a type with no `Contains` | there is no substring predicate to emit |
+| `api.Filterable()` on a type with no operators | the filter group would silently do nothing |
+| `api.Sortable()` on a non-comparable type | Ent generates no `ByX` order option |
+| A query storage key beginning with `_` | it collides with reserved query controls |
+| `api.Expand()` targeting a non-resource | the target Summary type does not exist |
 | `DomainSoftDelete` naming a field the entity does not have | attaching the marker by hand is unsupported; embed `SoftDeleteMixin` instead |
 | A tombstone field that is not `Optional` | ent generates no `DeletedAtIsNil` predicate and the traverser would not compile |
 | A self-referential edge pair annotated on one end only | ent hands chained `edge.To(…).From(…).Annotations(…)` to the *inverse* builder, so the assoc end silently loses its annotation |
@@ -663,13 +668,12 @@ The reserved-name check runs at graph level rather than inside the node loop,
 because **the colliding entity does not have to be annotated** — ent generates a
 type for every entity, so a bare `type ErrorMap struct{ ent.Schema }` collides
 just as hard, and the node loop skips exactly those. The derived list is the
-**maximal** set of names an annotated entity can produce (an entity with no
-create-scoped field emits no `<Name>CreateRequest` today, but adding one scope
-later would), so refusing a name that would not have collided today is the
+**maximal** set of names a resource can produce, so refusing a name that would
+not have collided today is the
 accepted cost of a refusal that is stable.
 
-Every check except the soft-delete pair and the reserved names **skips an entity
-with no domain fields** — the same condition the generation loop uses.
+Every HTTP check skips an entity without `api.Resource()` — the same condition
+the generation loop uses. Soft-delete checks and reserved names remain graph-wide.
 
 Conversely, `Optional().Nillable()` and named `GoType`s over slices and maps *are*
 generated, because correct output exists for them. See
@@ -752,17 +756,14 @@ Three rules, one line each:
 
 - A create field is a **pointer** exactly when `Optional || Default || Nillable`
   — exactly when ent can fill it without the caller.
-- A create field is **required** when the annotation demands it, or when
-  `!Optional && !Default`. `WithRequired(ScopeCreate)` can only *add* strictness,
-  never remove it.
-- A patch field is **clearable** when `Optional &&` the annotation does not mark
-  it required for update.
+- A create field is **required** exactly when `!Optional && !Default`.
+- A patch field is **clearable** exactly when `Optional`.
 
 `patchFields` iterates `node.MutableFields()` rather than `node.Fields`, so a
-field that survives provably has a `Set<Field>`. (`Immutable` + `ScopeUpdate` is
-refused at generation time first, so the intersection currently drops nothing —
-the refusal is what the author sees, the filter is what keeps the output
-correct.)
+field that survives provably has a `Set<Field>`; then `Hidden` and `ReadOnly`
+remove HTTP setters. `createFields` applies the same two deviations to all Ent
+fields. `Sensitive` remains settable in both requests and is removed only from
+responses.
 
 On the response side, `Optional` comparable fields go through
 `entapi.PtrOrNil` and `Optional` slices and maps — **including** named types
@@ -780,35 +781,14 @@ branch is correct for every shape.
 > `isComplexFieldType`; `runtime/types.go` — `Ptr`, `PtrOrNil`, `PtrNilSafe`;
 > fixture: `internal/fixtures/fieldshapes/`
 
-## Accepted but not consumed
+## Annotation surface
 
-**Fifteen metadata knobs are stored and reach no template**: `DomainField.Metadata`
-itself, plus the fourteen fields of `FieldMetadata`. Thirteen builders write
-them:
+The public schema API has three mergeable annotation types and no pending
+knobs. Reflection tests toggle every exported field and builder against the
+registered template functions; an unreachable addition fails CI.
 
-`WithMetadata` · `WithTitle` · `WithDescription` · `WithExample` · `WithFormat` ·
-`WithPattern` · `WithRange` · `WithLength` · `WithEnum` · `AsReadOnly` ·
-`AsWriteOnly` · `AsDeprecated` · `WithTags`
-
-They are reserved for OpenAPI / Swagger spec generation, deliberately kept
-rather than overlooked — the first line of each one's godoc says so. A test
-derives the full knob list by reflection, then toggles each knob and renders the
-templates to decide reachability: an unreachable knob absent from the pending
-ledger fails CI, **and so does a listed knob that has become reachable**. The
-ledger is a claim with a deadline, not an exemption.
-
-**Consumed today:** `DomainField.Scopes`, `.Required`, `.Searchable`,
-`.Sortable`, `.Filterable`, plus `DomainEdge.Scopes` and `.JSONKey`.
-
-A related contract one level up: this repository treats dead code as a **test
-failure**. A template function nobody calls, a template nobody loads, and a knob
-that is neither consumed nor declared pending all break CI.
-
-> **Implementation:** `annotations.go` — `FieldMetadata`,
-> `DomainField.Metadata`, `ensureMetadata` and the thirteen builders;
-> `annotation_surface_test.go` — `pendingKnobs`; `funcs.go` — `templateFuncs`
-> (the registry itself: a helper is callable from a template only if it appears
-> there)
+> **Implementation:** `api/annotations.go`; `annotation_surface_test.go` —
+> `pendingKnobs`; `funcs.go` — `templateFuncs`
 
 ## Gotchas
 
@@ -819,14 +799,14 @@ Ordered by how quietly they hurt you.
    and surfaces as a 500.
 2. **`New{E}Response(nil)` returns `(nil, nil)`.** Not an error. Feed it a query
    that matched nothing and you get a pair of nils, not a not-found.
-3. **`_contains` requires `AsSearchable()`.** A string field marked filterable
+3. **`_contains` requires `api.Searchable()`.** A string field marked filterable
    only emits none of its four substring parameters; form and JSON binders drop
    unknown keys without complaint, so `?name_contains=x` becomes an *unfiltered*
    query rather than a 400.
-4. **No preset grants a query marker.** `DefaultField()` alone gives you an empty
-   filter struct and an empty sort allow-list.
-5. **`DefaultField()` on an `Immutable()` field always fails generation** — it
-   grants `ScopeUpdate`. Use `CreateOnlyField()` or `OutputOnlyField()`.
+4. **No query dimension is inferred.** With no query words the filter and sort
+   allow-list are empty.
+5. **An all-immutable PATCH is refused** unless the resource writes
+   `Except(api.OpPatch)`; the request type and wiring function still exist.
 6. **An `Immutable()` field in a PATCH body is discarded by `encoding/json`
    before any validator runs.** Rejecting it needs `DisallowUnknownFields` in
    your handler; the generator cannot see it. (Case *variants* of legitimate keys
@@ -834,8 +814,8 @@ Ordered by how quietly they hurt you.
 7. **`entapi.IsNotFound` is not ent's `IsNotFound`.** The templates call the
    latter *unqualified* so it binds to ent's generated predicate in your package.
    Qualifying it still compiles and then silently matches nothing.
-8. **Every metadata builder is a no-op.** `WithFormat("email")` validates
-   nothing.
+8. **A required field hidden from create blocks generation** unless create is
+   excepted, made optional, or given a default.
 9. **`DeleteBatch` returns a count, not an error, for ids that matched
     nothing.** That `int` is your only way to learn how many existed; an empty
     list deletes zero rows, which is ent's own reading of `IDIn` with no
@@ -910,8 +890,8 @@ exists to remove is worse than the break.
 | `{Entity}EntToResponse` | `New{Entity}Response`, which returns an error rather than nil on failure |
 | `Apply{Entity}CreateRequest`, `Apply{Entity}UpdateRequest` (free functions) | `Valid{Entity}…Request.Apply` |
 | `Cursor`, `PageInfo`, `EncodeCursor`, `DecodeCursor`, `ListRequest.Cursor` | nothing — pagination is offset-only |
-| `DomainField.Sensitive`, `AsSensitive` | mark the field `Sensitive()` in the ent schema — it is then dropped from both response tiers regardless of scope; or withhold `ScopeResponse` |
-| `DomainField.UniqueLookup`, `.RangeLookup`, `.Validation` | `AsFilterable()` (operators are derived from ent's `$field.Ops`); `Validate()` |
+| `DomainField.Sensitive`, `AsSensitive` | mark the field `Sensitive()` in the Ent schema; it is dropped from both response tiers while remaining settable |
+| `DomainField.UniqueLookup`, `.RangeLookup`, `.Validation` | `api.Filterable()` (operators derive from Ent's `$field.Ops`); generated request `Validate()` |
 | `DomainConfig.EntityName` | nothing — it had no readers |
 | runtime symbols living in the root package | all moved to `github.com/githonllc/entapi/runtime` |
 

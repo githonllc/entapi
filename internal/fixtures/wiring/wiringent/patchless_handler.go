@@ -22,6 +22,13 @@ import (
 // ListPatchlessesFn is byte-identical to ListPatchlesses.
 type ListPatchlessesFn func(context.Context, *Client, *PatchlessFilter, entapi.ListRequest) (*entapi.Page[PatchlessResponse], error)
 
+func (f ListPatchlessesFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListPatchlessesFn is nil")
+	}
+	h.listPatchlesses = f
+}
+
 func (h *APIHandler) handleListPatchlesses(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParsePatchlessQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListPatchlesses(w http.ResponseWriter, r *http.Reques
 
 // CreatePatchlessFn is byte-identical to CreatePatchless.
 type CreatePatchlessFn func(context.Context, *Client, *ValidPatchlessCreateRequest) (*PatchlessResponse, error)
+
+func (f CreatePatchlessFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreatePatchlessFn is nil")
+	}
+	h.createPatchless = f
+}
 
 func (h *APIHandler) handleCreatePatchless(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreatePatchless(w http.ResponseWriter, r *http.Reques
 // GetPatchlessFn is byte-identical to GetPatchless.
 type GetPatchlessFn func(context.Context, *Client, uuid.UUID) (*PatchlessResponse, error)
 
+func (f GetPatchlessFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetPatchlessFn is nil")
+	}
+	h.getPatchless = f
+}
+
 func (h *APIHandler) handleGetPatchless(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetPatchless(w http.ResponseWriter, r *http.Request) 
 
 // DeletePatchlessFn is byte-identical to DeletePatchless.
 type DeletePatchlessFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeletePatchlessFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeletePatchlessFn is nil")
+	}
+	h.deletePatchless = f
+}
 
 func (h *APIHandler) handleDeletePatchless(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

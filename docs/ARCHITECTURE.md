@@ -10,7 +10,7 @@
 **一句话**：一个 [Ent](https://entgo.io) 扩展——`api.Resource()` 选择需要 HTTP 表面的实体，字段形状
 默认由 Ent 的 `Optional`、`Default`、`Nillable`、`Immutable`、`Sensitive` 和类型派生，只有五个字段词与
 `api.Expand()` 表达偏离。生成器把请求类型、响应类型、查询面（filter/search/sort）、每个操作一个的
-wiring 函数、三段式 HTTP handler 与 `APIHandler` 路由树生成进消费者自己的 `ent/` 包，运行期只依赖标准库。
+wiring 函数、三段式 HTTP handler、`With` 定制点与 `Routes()` 路由清单生成进消费者自己的 `ent/` 包，运行期只依赖标准库。
 
 | 维度 | 事实 | 证据 |
 |---|---|---|
@@ -19,8 +19,8 @@ wiring 函数、三段式 HTTP handler 与 `APIHandler` 路由树生成进消费
 | 存储 / 中间件 | **无**。本库不含 SQL driver，也不含 HTTP 框架 | `go.mod` 无 driver 依赖；`Makefile` — `test-modules` 注释 |
 | 部署形态 | 库（`go get`）。无 `main`、无示例 app、无下游 ent 项目 | 仓库无 `main` 包 |
 | 包数 | **3 个手写产品包**（`entapi`、`api`、`runtime`）+ 8 个模板 + 5 个嵌套模块 | `extension.go` / `api/` / `runtime/` / `templates/` / `internal/**/go.mod` |
-| 手写非测试代码量 | 生成器 2977 行、api 173 行、runtime 726 行、模板 1511 行 | `wc -l`（实测） |
-| 测试规模 | 全仓 246 个 `Test*` 函数（根包 102、api 6、runtime 38、fixtures 100） | `rg '^func Test'`（实测） |
+| 手写非测试代码量 | 生成器 2980 行、api 173 行、runtime 810 行、模板 1554 行 | `wc -l`（实测） |
+| 测试规模 | 全仓 274 个 `Test*` 函数（根包 105、api 6、runtime 47、fixtures 116） | `rg '^func Test'`（实测） |
 | 测试基线 | 根模块与五个嵌套模块测试均退出 0 | `Makefile` — `test-modules`；实测 |
 | 覆盖目标 | `CONTRIBUTING` 定 >85%，由 `make cover` 报告 | `Makefile` — `cover` |
 
@@ -49,8 +49,8 @@ package "本仓库 (github.com/githonllc/entapi)" #EEF6FF {
 package "消费者项目" #FFF7E6 {
   component "ent/schema/*.go\n(手写, 带注解)" as SCHEMA
   component "entc.go\nentc.Generate(...)" as ENTC
-  component "ent/ (生成包)\nDTO / filter / wiring / handler / APIHandler" as ENTPKG
-  component "consumer mux / middleware\n(http.Handler 洋葱组合)" as MUX
+  component "ent/ (生成包)\nDTO / filter / wiring / handler / APIHandler / With / Routes" as ENTPKG
+  component "consumer mux / third-party router / middleware\n(http.Handler 洋葱组合)" as MUX
 }
 
 component "entgo.io/ent/entc/gen\n(*gen.Graph)" as ENTGEN
@@ -67,7 +67,7 @@ EXT --> TMPL
 TMPL --> FUNCS
 EXT --> ENTPKG : 写 per-type 与 graph-level 产物
 EXT --> CLEAN
-MUX --> ENTPKG : ServeHTTP / Mount
+MUX --> ENTPKG : ServeHTTP / Mount / Routes
 ENTPKG ..> RT : 生成代码 import (显式别名 entapi)
 ENTPKG --> DB
 
@@ -79,9 +79,10 @@ end note
 ```
 
 **风格**：不是分层框架，而是**一次性代码生成 + 一个泛型运行时**。没有 service 基类、handler 内
-override point 或注解式 interceptor chain。生成的 handler 固定为「绑定 → 调一个函数 → 写出」；中间函数
+定制点或注解式 interceptor chain。生成的 handler 固定为「绑定 → 调一个函数 → 写出」；中间函数
 保存在 `APIHandler` 的未导出字段里并在请求到达时读取。生成的 wiring 仍全是自由函数
-（`templates/wiring.tmpl` — 文件头设计说明），所以默认实现与定制实现具有同一份编译期签名。
+（`templates/wiring.tmpl` — 文件头设计说明），所以默认实现与定制实现具有同一份编译期签名；`With`
+只在开始服务前给这些字段赋值，`Routes()` 则把同一份路由清单按值复制给消费者。
 
 **三条承重不变式**：
 
@@ -103,7 +104,7 @@ override point 或注解式 interceptor chain。生成的 handler 固定为「�
 | 生成器 | `./*.go` | ent 扩展本体：读取注解、冲突检查、渲染、落盘、回收 | `NewExtension` / `NewExtensionWithOptions` / `SoftDeleteMixin` | `api`、`entc/gen`、`x/tools/imports`、`embed` |
 | 模板 | `templates/*.tmpl` | 生成物的形状（8 个） | 经 `//go:embed` 由 `template_loader.go` — `templateFS` 读入 | — |
 | 模板函数 | `funcs_*.go`、`annotations_edge.go` | 模板能问的所有问题 | `templateFuncs()`（`funcs.go`）**唯一注册处** | `entc/gen` |
-| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `WithValidation` / `WithUniqueViolation` / `HasUniqueViolation` / `UniqueViolation` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `WriteProblem` / `FieldError` / `Route` / `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
+| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `WithValidation` / `WithUniqueViolation` / `HasUniqueViolation` / `UniqueViolation` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `WriteProblem` / `FieldError` / `Route`（仅路由元数据）/ `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
 | codegen fixtures | `internal/fixtures/<dir>/<dir>ent/` | 生成 + 编译的证明 | — | 本模块 |
 | spike 规格 | `internal/fixture/`（**单数**） | #22 手写目标，是生成物的规格 | 独立 go.mod | ent + SQLite |
 | 行为证明 | `internal/fixtures/wiring/e2e`、`internal/fixtures/httpdemo/e2e`、`internal/softdeleteproof`、`internal/uniqueproof` | wiring、HTTP、软删除与真实 driver uniqueness channel 的行为证明 | 独立 go.mod | ent + SQL driver |
@@ -293,7 +294,7 @@ return []derivedName{
 ```
 
 这张表是 #62 的实体派生名开关：实体名撞上其中任何一个 → 生成被拒绝。图级名字
-`ErrorMap`、`API`、`APIHandler` 则由 `schema_conflicts.go` — `reservedNameConflicts` 单独保留。
+`ErrorMap`、`API`、`APIHandler`、`APIOption` 则由 `schema_conflicts.go` — `reservedNameConflicts` 单独保留。
 两张表都会腐烂，所以 `derived_names_consistency_test.go` — `TestDerivedEntityNamesMatchTheTemplates`
 渲染全部七个独立输出模板（四个 per-type、三个 graph-level），用 `go/parser` 读回导出声明并**双向**比对；
 第八个嵌入模板 `templates/softdelete_config_init.tmpl` 是 Ent partial，不产生独立顶层文件。
@@ -405,15 +406,27 @@ EM --> H : 结果 / ErrNotFound / 原样透传
 
 `templates/http.tmpl` — `API` 为每张路由构造一个持有 `*http.ServeMux` 与 `[]entapi.Route` 的
 `*APIHandler`：`GET /xs`、`POST /xs`、`GET/PATCH/DELETE /xs/{id}`。`ServeHTTP` 直接委托内部 mux，
-`Mount` 把同一清单注册到消费者 mux；前缀由外层 `http.StripPrefix` 处理。`Except` 同时关闭 endpoint、
-route 与 `{Op}{Entity}Fn`，但不关闭 wiring 或 request DTO。
+`Mount` 遍历同一份未导出清单注册到消费者 mux；`Routes()` 按注册顺序返回一份新 slice，第三方路由器
+可据此注册并用 `Request.SetPathValue` 注入路径参数。返回值是数据副本，不是增删或改写生成路由的 API。
+前缀由外层 `http.StripPrefix` 处理。`Except` 同时关闭 endpoint、route、`{Op}{Entity}Fn` 及其
+`applyOption`，但不关闭 wiring 或 request DTO。
+
+`APIOption` 只含未导出的 `applyOption(*APIHandler)`；每个未 Except 的 Fn 类型在同一模板条件下实现它。
+因此消费者不能另造一条指向已删除定制点的构造路径。`With` 原地修改并返回 receiver，可变参数等价于
+链式调用、同一点后者胜出，nil interface 与 typed-nil Fn 都在构造时 panic。它是接线期 API：开始服务
+后再调用会与请求时字段读取形成 data race，模板不为此加锁。
+
+这没有重建 `SetSelf` 的自引用分派：`With` 只是字段赋值，而该字段是 handler 到中间步骤的唯一请求时
+路径，消费者不需要安装 self；被 `Except` 删除的定制点连 Fn 类型都不存在。它也没有重建
+`Base{Entity}Handler` 的嵌入与局部遮蔽：自定义实现替换整个同类型操作，签名漂移直接编译失败。
+`Routes()` 只是数据导出，框架调用图没有新增分派。
 
 每个 `templates/handler.tmpl` 生成函数固定三步。绑定步骤为 POST/PATCH 施加不可配置的 1 MiB body 上限、
 解析 `application/json` media type、按生成的 request tag 数据拒绝未知/Immutable key，再调用 `Validate`；
 中间步骤在**请求时**读取 `h.<operation>`，默认字段值是同签名 wiring 函数；写出步骤返回裸 DTO/Page，
 错误经 `runtime/http.go` — `WriteProblem` 写为 `application/problem+json`。横切逻辑只在外层
-`http.Handler` 洋葱组合；router-level 404/405 保留 stdlib plain text。当前 slice 只落了 `{Op}{Entity}Fn`
-类型和未导出字段，消费者写入这些字段的 `With(...)` 组合器与 `Routes()` 仍属于 #75。
+`http.Handler` 洋葱组合；也可读取 `Routes()` 的 `Method` 只包裹选中的 handler。router-level 404/405
+保留 stdlib plain text。
 
 **为什么排序白名单是安全边界而不是人体工学**——直接引生成物的注释：
 
@@ -621,8 +634,8 @@ func isCreatePointer(f *gen.Field) bool {
 | api 闭包不含生成器/runtime | `go list -deps ./api` | 2 个包，禁止依赖命中 **0** |
 | 生成器确实需要 ent | `go list -deps .` | `grep -c entgo.io` = **15** |
 | 测试基线绿 | 根模块与五个嵌套模块分别 `go test ./...` | 全部 `exit=0` |
-| 代码量 | `wc -l`（非测试 .go / `.tmpl`） | 生成器 2977 / api 173 / runtime 726 / 模板 1511 |
-| 测试规模 | `rg '^func Test'` | 全仓 246（根包 102、api 6、runtime 38、fixtures 100） |
+| 代码量 | `wc -l`（非测试 .go / `.tmpl`） | 生成器 2980 / api 173 / runtime 810 / 模板 1554 |
+| 测试规模 | `rg '^func Test'` | 全仓 274（根包 105、api 6、runtime 47、fixtures 116） |
 | 派生名表 / 模板顶层声明 | `grep '^type\|^func\|^var' templates/*.tmpl` | 与 `derivedEntityDecls()` 一致 |
 | 旋钮数 | 反射三个 api 注解结构体的导出字段 | 8 个全部消费，`pendingKnobs` 为空 |
 

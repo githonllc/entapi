@@ -414,6 +414,7 @@ const errorMapSymbol = "ErrorMap"
 const (
 	apiSymbol        = "API"
 	apiHandlerSymbol = "APIHandler"
+	apiOptionSymbol  = "APIOption"
 )
 
 // reservedNameConflicts reports every entity whose NAME is also a name this
@@ -461,6 +462,8 @@ func reservedNameConflicts(g *gen.Graph) []string {
 			annotated, "carries api.Resource(), so the HTTP route tree is generated for this schema")...)
 		out = append(out, graphSymbolConflicts(g, apiHandlerSymbol, "type", httpFileName,
 			annotated, "carries api.Resource(), so the HTTP route tree is generated for this schema")...)
+		out = append(out, graphSymbolConflicts(g, apiOptionSymbol, "type", httpFileName,
+			annotated, "carries api.Resource(), so the HTTP route tree is generated for this schema")...)
 	}
 
 	// The derived half: every pair of (Resource, any entity) where the
@@ -505,7 +508,7 @@ func graphSymbolConflicts(g *gen.Graph, name, kind, file string, causes []*gen.T
 		out = append(out, fmt.Sprintf(
 			"%s: the schema declares an entity named %s, so ent generates `type %s` for it; this extension declares `%s %s` in %s (%s), "+
 				"and Go gives types, variables and functions one identifier namespace per package, so the generated package fails to compile with `%s redeclared in this block` — in two files the author did not write. "+
-				"So rename the entity: %s is a documented part of this package's API (README.md's init() example assigns to ErrorMap), and moving it would break every consumer that already refers to it",
+				"So rename the entity: %s is a documented generated API symbol, and moving it would break every consumer that already refers to it",
 			node.Name, name, name, kind, name, file, why, name, name,
 		))
 	}

@@ -223,7 +223,7 @@ func (Post) Edges() []ent.Edge {
 | 文件 | 生成条件 | 声明 |
 |---|---|---|
 | `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
-| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIHandler`、`API(client)`、`ServeHTTP`、`Mount` 与未导出的路由 manifest |
+| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Routes`、`ServeHTTP`、`Mount` 与路由 manifest |
 | `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | 未导出的查询 traverser 与删除 hook |
 
 软删除文件的条件独立于 `api.Resource()`：一个不是 HTTP resource 的实体只要嵌了 mixin，仍会被写进
@@ -253,6 +253,34 @@ api.Mount(mux)
 mux.Handle("/v1/", http.StripPrefix("/v1", api))
 ```
 
+### 用 With 提供自定义操作实现
+
+每个可达操作都会生成一个 `{Op}{Entity}Fn` 类型，其签名与对应 wiring 函数逐字相同。
+`With` 只接受这些生成的函数类型：`APIOption` 的方法未导出；被 `Except` 删除的操作既不生成
+Fn 类型，也没有第二条路径能指向那个定制点。
+
+`With` 有三条固定规则：
+
+- **可变参数等价于链式调用：** `With(a, b).With(c)` 等价于 `With(a, b, c)`。
+- **后者胜出：** 两个 option 自定义同一操作时使用后一个。
+- **nil 在构造时 panic：** nil `APIOption` 与 typed-nil Fn 都会在接线时被拒绝。
+
+`With` 原地修改并返回同一个 `*APIHandler`。必须在开始服务前完成接线；请求已经开始后再调用
+会造成 data race，行为未定义。method value 是一种很小的 service 注入：它以闭包形式保留 receiver：
+
+```go
+type ArticleService struct{ patches atomic.Int64 }
+
+func (s *ArticleService) Patch(ctx context.Context, client *ent.Client, id uuid.UUID,
+    request *ent.ValidArticlePatchRequest) (*ent.ArticleResponse, error) {
+    s.patches.Add(1)
+    return ent.PatchArticle(ctx, client, id, request)
+}
+
+service := new(ArticleService)
+api := ent.API(client).With(ent.PatchArticleFn(service.Patch))
+```
+
 每个未 Except 的 Resource 恰好得到这些 Go 1.22 pattern：
 
 | Pattern | 结果 |
@@ -274,8 +302,48 @@ POST 与 PATCH 只接受 `application/json`，允许 media-type 参数。body �
 **1 MiB，且没有配置旋钮**。未知 key 会与生成的 create/patch tag 数据比较，因此 PATCH 中
 的 Immutable key 会按名字被拒绝，不会静默丢弃。
 
-`WithActor` / `ActorFrom` 让认证主体穿过 middleware。`Route` 是 `Mount` 内部使用的
-stdlib-only manifest 行；导出 route accessor 和 `With(...)` 函数替换属于 #75。
+`WithActor` / `ActorFrom` 让认证主体穿过 middleware。
+
+### 注册导出的路由
+
+`Routes()` 按确定的注册顺序返回 `[]entapi.Route{Method, Path, Handler}`。每次调用都返回一份
+新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。这是数据导出，不是
+修改 API：用 `Except` 删除生成端点，用 `With` 提供自定义实现，额外端点直接注册到消费者自己的路由器。
+
+完整的 Gin adapter 写在消费者侧；框架不依赖 Gin：
+
+```go
+func mountGin(r *gin.Engine, api *ent.APIHandler) {
+    for _, route := range api.Routes() {
+        path := strings.ReplaceAll(route.Path, "{id}", ":id")
+        handler := route.Handler
+        r.Handle(route.Method, path, func(c *gin.Context) {
+            c.Request.SetPathValue("id", c.Param("id"))
+            handler.ServeHTTP(c.Writer, c.Request)
+        })
+    }
+}
+```
+
+Echo 是同一种形状：把 `{id}` 换成 `:id`，将 `c.Param("id")` 写入
+`c.Request().SetPathValue`，再用 Echo 的 response writer 与 request 调用该 route handler。
+
+有一个路由差异不会被这层 adapter 掩盖。Go 1.22 `ServeMux` 把 `%2F` 视为同一个编码 segment
+的一部分，并在 `PathValue` 中给 handler 解码后的 `/`；Gin 默认按已经解码的 `URL.Path` 匹配，
+所以 `/articles/a%2Fb` 不匹配 `/articles/:id`。若标识符需要编码斜杠，应显式选择并测试消费者
+路由器的策略。
+
+这份元数据也能按 Method 选择性包裹外层 middleware，不必在生成 handler 内增加 hook：
+
+```go
+for _, route := range api.Routes() {
+    handler := route.Handler
+    if route.Method == http.MethodDelete {
+        handler = requireAuth(handler)
+    }
+    mux.Handle(route.Method+" "+route.Path, handler)
+}
+```
 
 router 层未匹配的 path/method 仍保留 stdlib mux 的纯文本 404/405（405 含 `Allow`），而非
 problem+json。这个 residue 是有意的：catch-all 会让挂进消费者 mux 与直接服务整棵生成树的

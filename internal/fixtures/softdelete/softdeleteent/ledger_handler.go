@@ -22,6 +22,13 @@ import (
 // ListLedgersFn is byte-identical to ListLedgers.
 type ListLedgersFn func(context.Context, *Client, *LedgerFilter, entapi.ListRequest) (*entapi.Page[LedgerResponse], error)
 
+func (f ListLedgersFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListLedgersFn is nil")
+	}
+	h.listLedgers = f
+}
+
 func (h *APIHandler) handleListLedgers(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseLedgerQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListLedgers(w http.ResponseWriter, r *http.Request) {
 
 // CreateLedgerFn is byte-identical to CreateLedger.
 type CreateLedgerFn func(context.Context, *Client, *ValidLedgerCreateRequest) (*LedgerResponse, error)
+
+func (f CreateLedgerFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateLedgerFn is nil")
+	}
+	h.createLedger = f
+}
 
 func (h *APIHandler) handleCreateLedger(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateLedger(w http.ResponseWriter, r *http.Request) 
 // GetLedgerFn is byte-identical to GetLedger.
 type GetLedgerFn func(context.Context, *Client, uuid.UUID) (*LedgerResponse, error)
 
+func (f GetLedgerFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetLedgerFn is nil")
+	}
+	h.getLedger = f
+}
+
 func (h *APIHandler) handleGetLedger(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetLedger(w http.ResponseWriter, r *http.Request) {
 
 // PatchLedgerFn is byte-identical to PatchLedger.
 type PatchLedgerFn func(context.Context, *Client, uuid.UUID, *ValidLedgerPatchRequest) (*LedgerResponse, error)
+
+func (f PatchLedgerFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchLedgerFn is nil")
+	}
+	h.patchLedger = f
+}
 
 func (h *APIHandler) handlePatchLedger(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchLedger(w http.ResponseWriter, r *http.Request) {
 
 // DeleteLedgerFn is byte-identical to DeleteLedger.
 type DeleteLedgerFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteLedgerFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteLedgerFn is nil")
+	}
+	h.deleteLedger = f
+}
 
 func (h *APIHandler) handleDeleteLedger(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

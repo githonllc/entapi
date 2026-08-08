@@ -22,6 +22,13 @@ import (
 // ListSessionsFn is byte-identical to ListSessions.
 type ListSessionsFn func(context.Context, *Client, *SessionFilter, entapi.ListRequest) (*entapi.Page[SessionResponse], error)
 
+func (f ListSessionsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListSessionsFn is nil")
+	}
+	h.listSessions = f
+}
+
 func (h *APIHandler) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseSessionQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListSessions(w http.ResponseWriter, r *http.Request) 
 
 // CreateSessionFn is byte-identical to CreateSession.
 type CreateSessionFn func(context.Context, *Client, *ValidSessionCreateRequest) (*SessionResponse, error)
+
+func (f CreateSessionFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateSessionFn is nil")
+	}
+	h.createSession = f
+}
 
 func (h *APIHandler) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateSession(w http.ResponseWriter, r *http.Request)
 // GetSessionFn is byte-identical to GetSession.
 type GetSessionFn func(context.Context, *Client, uuid.UUID) (*SessionResponse, error)
 
+func (f GetSessionFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetSessionFn is nil")
+	}
+	h.getSession = f
+}
+
 func (h *APIHandler) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetSession(w http.ResponseWriter, r *http.Request) {
 
 // PatchSessionFn is byte-identical to PatchSession.
 type PatchSessionFn func(context.Context, *Client, uuid.UUID, *ValidSessionPatchRequest) (*SessionResponse, error)
+
+func (f PatchSessionFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchSessionFn is nil")
+	}
+	h.patchSession = f
+}
 
 func (h *APIHandler) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchSession(w http.ResponseWriter, r *http.Request) 
 
 // DeleteSessionFn is byte-identical to DeleteSession.
 type DeleteSessionFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteSessionFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteSessionFn is nil")
+	}
+	h.deleteSession = f
+}
 
 func (h *APIHandler) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

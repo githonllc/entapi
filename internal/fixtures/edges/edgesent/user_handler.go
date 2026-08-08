@@ -22,6 +22,13 @@ import (
 // ListUsersFn is byte-identical to ListUsers.
 type ListUsersFn func(context.Context, *Client, *UserFilter, entapi.ListRequest) (*entapi.Page[UserResponse], error)
 
+func (f ListUsersFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListUsersFn is nil")
+	}
+	h.listUsers = f
+}
+
 func (h *APIHandler) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseUserQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListUsers(w http.ResponseWriter, r *http.Request) {
 
 // CreateUserFn is byte-identical to CreateUser.
 type CreateUserFn func(context.Context, *Client, *ValidUserCreateRequest) (*UserResponse, error)
+
+func (f CreateUserFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateUserFn is nil")
+	}
+	h.createUser = f
+}
 
 func (h *APIHandler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 // GetUserFn is byte-identical to GetUser.
 type GetUserFn func(context.Context, *Client, uuid.UUID) (*UserResponse, error)
 
+func (f GetUserFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetUserFn is nil")
+	}
+	h.getUser = f
+}
+
 func (h *APIHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 
 // PatchUserFn is byte-identical to PatchUser.
 type PatchUserFn func(context.Context, *Client, uuid.UUID, *ValidUserPatchRequest) (*UserResponse, error)
+
+func (f PatchUserFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchUserFn is nil")
+	}
+	h.patchUser = f
+}
 
 func (h *APIHandler) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUserFn is byte-identical to DeleteUser.
 type DeleteUserFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteUserFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteUserFn is nil")
+	}
+	h.deleteUser = f
+}
 
 func (h *APIHandler) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

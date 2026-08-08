@@ -22,6 +22,13 @@ import (
 // ListAuthorsFn is byte-identical to ListAuthors.
 type ListAuthorsFn func(context.Context, *Client, *AuthorFilter, entapi.ListRequest) (*entapi.Page[AuthorResponse], error)
 
+func (f ListAuthorsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListAuthorsFn is nil")
+	}
+	h.listAuthors = f
+}
+
 func (h *APIHandler) handleListAuthors(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseAuthorQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListAuthors(w http.ResponseWriter, r *http.Request) {
 
 // CreateAuthorFn is byte-identical to CreateAuthor.
 type CreateAuthorFn func(context.Context, *Client, *ValidAuthorCreateRequest) (*AuthorResponse, error)
+
+func (f CreateAuthorFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateAuthorFn is nil")
+	}
+	h.createAuthor = f
+}
 
 func (h *APIHandler) handleCreateAuthor(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateAuthor(w http.ResponseWriter, r *http.Request) 
 // GetAuthorFn is byte-identical to GetAuthor.
 type GetAuthorFn func(context.Context, *Client, uuid.UUID) (*AuthorResponse, error)
 
+func (f GetAuthorFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetAuthorFn is nil")
+	}
+	h.getAuthor = f
+}
+
 func (h *APIHandler) handleGetAuthor(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetAuthor(w http.ResponseWriter, r *http.Request) {
 
 // PatchAuthorFn is byte-identical to PatchAuthor.
 type PatchAuthorFn func(context.Context, *Client, uuid.UUID, *ValidAuthorPatchRequest) (*AuthorResponse, error)
+
+func (f PatchAuthorFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchAuthorFn is nil")
+	}
+	h.patchAuthor = f
+}
 
 func (h *APIHandler) handlePatchAuthor(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchAuthor(w http.ResponseWriter, r *http.Request) {
 
 // DeleteAuthorFn is byte-identical to DeleteAuthor.
 type DeleteAuthorFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteAuthorFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteAuthorFn is nil")
+	}
+	h.deleteAuthor = f
+}
 
 func (h *APIHandler) handleDeleteAuthor(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

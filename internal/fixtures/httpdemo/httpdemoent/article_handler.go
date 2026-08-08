@@ -22,6 +22,13 @@ import (
 // ListArticlesFn is byte-identical to ListArticles.
 type ListArticlesFn func(context.Context, *Client, *ArticleFilter, entapi.ListRequest) (*entapi.Page[ArticleResponse], error)
 
+func (f ListArticlesFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListArticlesFn is nil")
+	}
+	h.listArticles = f
+}
+
 func (h *APIHandler) handleListArticles(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseArticleQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListArticles(w http.ResponseWriter, r *http.Request) 
 
 // CreateArticleFn is byte-identical to CreateArticle.
 type CreateArticleFn func(context.Context, *Client, *ValidArticleCreateRequest) (*ArticleResponse, error)
+
+func (f CreateArticleFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateArticleFn is nil")
+	}
+	h.createArticle = f
+}
 
 func (h *APIHandler) handleCreateArticle(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateArticle(w http.ResponseWriter, r *http.Request)
 // GetArticleFn is byte-identical to GetArticle.
 type GetArticleFn func(context.Context, *Client, uuid.UUID) (*ArticleResponse, error)
 
+func (f GetArticleFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetArticleFn is nil")
+	}
+	h.getArticle = f
+}
+
 func (h *APIHandler) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 
 // PatchArticleFn is byte-identical to PatchArticle.
 type PatchArticleFn func(context.Context, *Client, uuid.UUID, *ValidArticlePatchRequest) (*ArticleResponse, error)
+
+func (f PatchArticleFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchArticleFn is nil")
+	}
+	h.patchArticle = f
+}
 
 func (h *APIHandler) handlePatchArticle(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchArticle(w http.ResponseWriter, r *http.Request) 
 
 // DeleteArticleFn is byte-identical to DeleteArticle.
 type DeleteArticleFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteArticleFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteArticleFn is nil")
+	}
+	h.deleteArticle = f
+}
 
 func (h *APIHandler) handleDeleteArticle(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

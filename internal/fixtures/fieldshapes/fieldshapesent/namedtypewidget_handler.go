@@ -22,6 +22,13 @@ import (
 // ListNamedTypeWidgetsFn is byte-identical to ListNamedTypeWidgets.
 type ListNamedTypeWidgetsFn func(context.Context, *Client, *NamedTypeWidgetFilter, entapi.ListRequest) (*entapi.Page[NamedTypeWidgetResponse], error)
 
+func (f ListNamedTypeWidgetsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListNamedTypeWidgetsFn is nil")
+	}
+	h.listNamedTypeWidgets = f
+}
+
 func (h *APIHandler) handleListNamedTypeWidgets(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseNamedTypeWidgetQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListNamedTypeWidgets(w http.ResponseWriter, r *http.R
 
 // CreateNamedTypeWidgetFn is byte-identical to CreateNamedTypeWidget.
 type CreateNamedTypeWidgetFn func(context.Context, *Client, *ValidNamedTypeWidgetCreateRequest) (*NamedTypeWidgetResponse, error)
+
+func (f CreateNamedTypeWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateNamedTypeWidgetFn is nil")
+	}
+	h.createNamedTypeWidget = f
+}
 
 func (h *APIHandler) handleCreateNamedTypeWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateNamedTypeWidget(w http.ResponseWriter, r *http.
 // GetNamedTypeWidgetFn is byte-identical to GetNamedTypeWidget.
 type GetNamedTypeWidgetFn func(context.Context, *Client, uuid.UUID) (*NamedTypeWidgetResponse, error)
 
+func (f GetNamedTypeWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetNamedTypeWidgetFn is nil")
+	}
+	h.getNamedTypeWidget = f
+}
+
 func (h *APIHandler) handleGetNamedTypeWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetNamedTypeWidget(w http.ResponseWriter, r *http.Req
 
 // PatchNamedTypeWidgetFn is byte-identical to PatchNamedTypeWidget.
 type PatchNamedTypeWidgetFn func(context.Context, *Client, uuid.UUID, *ValidNamedTypeWidgetPatchRequest) (*NamedTypeWidgetResponse, error)
+
+func (f PatchNamedTypeWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchNamedTypeWidgetFn is nil")
+	}
+	h.patchNamedTypeWidget = f
+}
 
 func (h *APIHandler) handlePatchNamedTypeWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchNamedTypeWidget(w http.ResponseWriter, r *http.R
 
 // DeleteNamedTypeWidgetFn is byte-identical to DeleteNamedTypeWidget.
 type DeleteNamedTypeWidgetFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteNamedTypeWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteNamedTypeWidgetFn is nil")
+	}
+	h.deleteNamedTypeWidget = f
+}
 
 func (h *APIHandler) handleDeleteNamedTypeWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

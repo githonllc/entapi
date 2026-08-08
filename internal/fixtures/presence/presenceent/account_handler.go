@@ -22,6 +22,13 @@ import (
 // ListAccountsFn is byte-identical to ListAccounts.
 type ListAccountsFn func(context.Context, *Client, *AccountFilter, entapi.ListRequest) (*entapi.Page[AccountResponse], error)
 
+func (f ListAccountsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListAccountsFn is nil")
+	}
+	h.listAccounts = f
+}
+
 func (h *APIHandler) handleListAccounts(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseAccountQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListAccounts(w http.ResponseWriter, r *http.Request) 
 
 // CreateAccountFn is byte-identical to CreateAccount.
 type CreateAccountFn func(context.Context, *Client, *ValidAccountCreateRequest) (*AccountResponse, error)
+
+func (f CreateAccountFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateAccountFn is nil")
+	}
+	h.createAccount = f
+}
 
 func (h *APIHandler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateAccount(w http.ResponseWriter, r *http.Request)
 // GetAccountFn is byte-identical to GetAccount.
 type GetAccountFn func(context.Context, *Client, uuid.UUID) (*AccountResponse, error)
 
+func (f GetAccountFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetAccountFn is nil")
+	}
+	h.getAccount = f
+}
+
 func (h *APIHandler) handleGetAccount(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetAccount(w http.ResponseWriter, r *http.Request) {
 
 // PatchAccountFn is byte-identical to PatchAccount.
 type PatchAccountFn func(context.Context, *Client, uuid.UUID, *ValidAccountPatchRequest) (*AccountResponse, error)
+
+func (f PatchAccountFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchAccountFn is nil")
+	}
+	h.patchAccount = f
+}
 
 func (h *APIHandler) handlePatchAccount(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchAccount(w http.ResponseWriter, r *http.Request) 
 
 // DeleteAccountFn is byte-identical to DeleteAccount.
 type DeleteAccountFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteAccountFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteAccountFn is nil")
+	}
+	h.deleteAccount = f
+}
 
 func (h *APIHandler) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

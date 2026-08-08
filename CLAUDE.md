@@ -272,9 +272,11 @@ family may disappear when `OpCreate` is explicitly excepted.
 - **HTTP handlers are bind → call → write.** Their middle step reads the
   unexported function field through `h` at request time; capturing a default
   wiring function while `API()` builds the route would create a dead
-  customization point for #75. There is no override point inside a handler and
+  customization point for #75. There is no customization point inside a handler body and
   no generated hook/interceptor chain; cross-cutting concerns wrap the returned
   `http.Handler`.
+- `With` mutates `APIHandler` with whole-operation custom implementations; finish wiring before serving, because later calls race with request-time field reads.
+- `Routes()` returns a fresh copy in registration order, while `Mount` and the internal mux walk the single unexported route list.
 - Handler code should not import `ent` for conversion. That is a property of
   where the DTO package sits, not of a base type — `Base{Entity}Handler`
   required an `ent` import to embed it, so it never achieved the goal. Today the

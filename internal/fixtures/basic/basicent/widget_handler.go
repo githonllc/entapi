@@ -22,6 +22,13 @@ import (
 // ListWidgetsFn is byte-identical to ListWidgets.
 type ListWidgetsFn func(context.Context, *Client, *WidgetFilter, entapi.ListRequest) (*entapi.Page[WidgetResponse], error)
 
+func (f ListWidgetsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListWidgetsFn is nil")
+	}
+	h.listWidgets = f
+}
+
 func (h *APIHandler) handleListWidgets(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseWidgetQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListWidgets(w http.ResponseWriter, r *http.Request) {
 
 // CreateWidgetFn is byte-identical to CreateWidget.
 type CreateWidgetFn func(context.Context, *Client, *ValidWidgetCreateRequest) (*WidgetResponse, error)
+
+func (f CreateWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateWidgetFn is nil")
+	}
+	h.createWidget = f
+}
 
 func (h *APIHandler) handleCreateWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateWidget(w http.ResponseWriter, r *http.Request) 
 // GetWidgetFn is byte-identical to GetWidget.
 type GetWidgetFn func(context.Context, *Client, uuid.UUID) (*WidgetResponse, error)
 
+func (f GetWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetWidgetFn is nil")
+	}
+	h.getWidget = f
+}
+
 func (h *APIHandler) handleGetWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetWidget(w http.ResponseWriter, r *http.Request) {
 
 // PatchWidgetFn is byte-identical to PatchWidget.
 type PatchWidgetFn func(context.Context, *Client, uuid.UUID, *ValidWidgetPatchRequest) (*WidgetResponse, error)
+
+func (f PatchWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchWidgetFn is nil")
+	}
+	h.patchWidget = f
+}
 
 func (h *APIHandler) handlePatchWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchWidget(w http.ResponseWriter, r *http.Request) {
 
 // DeleteWidgetFn is byte-identical to DeleteWidget.
 type DeleteWidgetFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteWidgetFn is nil")
+	}
+	h.deleteWidget = f
+}
 
 func (h *APIHandler) handleDeleteWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

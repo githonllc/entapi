@@ -742,15 +742,23 @@ mux.HandleFunc("POST /login", Login(client))                 // login 从头到�
 `NewUserResponse`/`ErrorMap` 是生成的），只是没用生成的 handler 与 wiring——
 "偏离 = 少调一个函数"。
 
-只改一步而不换请求形状时才用**换脑**（§3.2）——如 suspend 时发通知：
+只改一步而不换请求形状时才用**换脑**（§3.2）。2026-08-08 增补：service 接入
+与横切的完整写法收进 `DESIGN-v3-final.md` 附录，要点两条——
+
+1. **换脑接 service = 方法值**：`UserService` 普通结构体注入依赖，
+   `Patch` 方法与槽位同签名，`With(ent.PatchUserFn(svc.Patch))` 直接塞——
+   receiver 被方法值捕获，IoC 就是闭包捕获，框架对 service 形状零规定；
+2. **横切（认证/header/审计）= `http.Handler` 洋葱**，跑在三步体之前、
+   401 短路不进绑参，身份经 `entapi.WithActor`（runtime context 契约，
+   §4.4 边界 2）传给槽位与 ent privacy；按路由选择性横切用 `Routes()`
+   清单按 `Method`/`Path` 选切点。切面栈是 main.go 里的显式包裹，
+   无注解拦截器链。
 
 ```go
-ent.API(client).With(ent.PatchUserFn(
-	func(ctx context.Context, db *ent.Client, id uuid.UUID, v *ent.ValidUserPatchRequest) (*ent.UserResponse, error) {
-		resp, err := ent.PatchUser(ctx, db, id, v)           // 默认实现就是槽位的零值
-		if err == nil && v.HasStatus() { notify(ctx, id) }
-		return resp, err
-	}))
+svc := &UserService{mailer: mailer}
+api := ent.API(client).With(ent.PatchUserFn(svc.Patch))  // 换脑：方法值即闭包
+h := withAuth(withHeaderCheck(api))                       // 横切：洋葱，外层先跑
+mux.Handle("/api/", http.StripPrefix("/api", h))
 ```
 
 ### A.4 样例的裁决价值

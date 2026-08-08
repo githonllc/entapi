@@ -337,20 +337,65 @@ func (User) Annotations() []schema.Annotation {
 走 external 门；若漏写 Except，`Hidden` × 必填 × OpCreate 命中拒绝矩阵，
 生成期失败并给出修复行。
 
-```go
-mux := http.NewServeMux()
-ent.API(client).Mount(mux)
-mux.HandleFunc("POST /register", Register(client))   // external：生成的 SetPasswordHash/NewUserResponse/ErrorMap 照用
-mux.HandleFunc("POST /login", Login(client))
-```
-
-只改一步而不换请求形状时用换脑：
+**换脑接 service（IoC = 闭包捕获，方法值就是最惯用的闭包）**：service 是
+普通结构体，依赖随便注，框架对它的形状零规定；方法与槽位签名相同时，
+方法值直接塞进 `With`——receiver 被方法值捕获，这就是全部的"注入"：
 
 ```go
-ent.API(client).With(ent.PatchUserFn(func(ctx context.Context, db *ent.Client,
+type UserService struct{ mailer Mailer; audit AuditLog }
+
+func (s *UserService) Patch(ctx context.Context, db *ent.Client,
 	id uuid.UUID, v *ent.ValidUserPatchRequest) (*ent.UserResponse, error) {
-	resp, err := ent.PatchUser(ctx, db, id, v)
-	if err == nil && v.HasStatus() { notify(ctx, id) }
+	resp, err := ent.PatchUser(ctx, db, id, v)       // 生成的那一步照用
+	if err == nil && v.HasStatus() {
+		s.mailer.NotifyStatusChange(ctx, id)          // 你的业务副作用
+	}
 	return resp, err
-}))
+}
 ```
+
+**横切（AOP）走 `http.Handler` 洋葱，跑在三步体之前**——身份认证、header
+检查对生成的 handler 是全透明的，401 短路时绑参根本不发生；身份经 runtime
+的 context 契约（§4.4 边界 2）向内传给换脑槽与 ent privacy：
+
+```go
+func withAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, err := verifyToken(r.Header.Get("Authorization"))
+		if err != nil {
+			entapi.WriteProblem(w, http.StatusUnauthorized, "unauthorized", err)
+			return                                    // 短路：不进绑参
+		}
+		next.ServeHTTP(w, r.WithContext(entapi.WithActor(r.Context(), u.ID)))
+	})
+}
+
+func main() {
+	svc := &UserService{mailer: mailer, audit: audit}
+	api := ent.API(client).With(ent.PatchUserFn(svc.Patch))   // 换脑：方法值即闭包
+
+	var h http.Handler = api                          // 洋葱：内层先写，外层先跑
+	h = withHeaderCheck(h)
+	h = withAuth(h)
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", http.StripPrefix("/api", h))  // 整树挂载（默认路径）
+	mux.HandleFunc("POST /register", Register(client)) // external：生成的 SetPasswordHash/NewUserResponse/ErrorMap 照用
+	mux.HandleFunc("POST /login", Login(client))
+	http.ListenAndServe(":8080", mux)
+}
+```
+
+**按路由选择性横切**（与整树挂载二选一）——`Routes()` 清单按元数据选切点：
+
+```go
+for _, rt := range api.Routes() {
+	h := rt.Handler
+	if rt.Method == "DELETE" { h = requireRole("admin", h) }  // 只有删除要求 admin
+	mux.Handle(rt.Method+" "+rt.Path, h)
+}
+```
+
+三扇门在此各就各位且互不越界：middleware 管**所有端点**的横切（认证/header/
+审计），换脑管**单个操作**的业务替换，external 管**非 CRUD 动词**。框架不
+提供注解式拦截器链——切面栈就是 main.go 里这几行显式包裹，一眼可读。

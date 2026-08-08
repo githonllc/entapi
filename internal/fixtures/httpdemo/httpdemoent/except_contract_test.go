@@ -20,4 +20,12 @@ func TestExceptedDeleteFnAndOptionAreAbsentFromGeneratedSource(t *testing.T) {
 			t.Fatalf("auditlog_handler.go contains %q despite Except(api.OpDelete)", absent)
 		}
 	}
+	for _, present := range []string{
+		"type CreateAuditLogFn",
+		"func (f CreateAuditLogFn) applyOption",
+	} {
+		if !strings.Contains(string(source), present) {
+			t.Fatalf("auditlog_handler.go does not contain %q for the non-excepted Create operation", present)
+		}
+	}
 }

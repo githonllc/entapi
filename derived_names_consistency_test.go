@@ -23,9 +23,10 @@ import (
 // list arrived one name short (New<N>ListResponse, added by #65) before this
 // test existed.
 //
-// So the list is not read, it is DERIVED and compared. All five templates are
-// rendered over a probe entity, go/parser reads the exported top-level
-// declarations back out, and the two sets are compared in both directions:
+// So the list is not read, it is DERIVED and compared. All five standalone
+// output templates are rendered over a probe entity, go/parser reads the
+// exported top-level declarations back out, and the two sets are compared in
+// both directions:
 //
 //	forward  every exported declaration the templates emit must be in the
 //	         reserved set, or reservedNameConflicts cannot refuse it;
@@ -53,7 +54,7 @@ import (
 // emission is driven by real annotations. internal/fixtures/reservednames is
 // that graph — Probe carries a create scope, an update scope, a response-only
 // field, all three query markers and the soft-delete mixin, which between them
-// fire every conditional in the five templates. Without that the reverse
+// fire every conditional in the five output templates. Without that the reverse
 // direction would pass while quietly checking half the list.
 func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	root := repoRoot(t)
@@ -64,7 +65,7 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 		t.Fatal("the probe entity carries no domain fields, so the per-type templates would emit nothing at all")
 	}
 	if len(softDeleteTypes(g)) == 0 {
-		t.Fatal("the probe graph has no soft-deletable entity, so RegisterSoftDelete would never be rendered")
+		t.Fatal("the probe graph has no soft-deletable entity, so the soft-delete helpers would never be rendered")
 	}
 
 	ext := NewExtensionWithOptions()
@@ -91,8 +92,7 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	record("softdelete", renderGraphTemplate(t, ext, "softdelete", softDeleteTemplate, g))
 
 	reserved := map[string]bool{
-		errorMapSymbol:           true,
-		registerSoftDeleteSymbol: true,
+		errorMapSymbol: true,
 	}
 	for _, name := range derivedEntityNames(probe) {
 		reserved[name] = true
@@ -110,7 +110,7 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	}
 
 	// Reverse: nothing is reserved that no template emits. Every conditional
-	// emission in the five templates is unlocked by the probe entity's
+	// emission in the five output templates is unlocked by the probe entity's
 	// annotations, so an absence here is a name that has gone away — the list
 	// would be refusing entity names for a symbol that no longer exists.
 	for _, name := range sortedKeys(reserved) {
@@ -124,25 +124,17 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	}
 }
 
-// TestReservedGraphSymbolsAreExported pins the other half of the reserved set's
-// premise: the two graph-level names are collidable at all.
-//
-// softDeleteTraverser and softDeleteHook are deliberately absent from the
-// reserved set because an ent entity name is always exported and theirs are not.
-// That argument fails silently the day one of them is exported, so it is checked
-// rather than asserted in a comment.
-func TestReservedGraphSymbolsAreExported(t *testing.T) {
+// TestSoftDeleteTemplateDeclaresNoExportedSymbols pins why it contributes no
+// graph-level reserved name: both helpers must stay unexported.
+func TestSoftDeleteTemplateDeclaresNoExportedSymbols(t *testing.T) {
 	root := repoRoot(t)
 	g := loadFixtureGraph(t, fixtureSchemaDir(root, "reservednames"), fixtureEntPkgPath("reservednames"))
 
 	ext := NewExtensionWithOptions()
 	src := renderGraphTemplate(t, ext, "softdelete", softDeleteTemplate, g)
 
-	for _, name := range exportedDecls(t, "softdelete", src) {
-		if name != registerSoftDeleteSymbol {
-			t.Errorf("templates/softdelete.tmpl now declares the exported %q; an entity of that name would collide with it, "+
-				"so it belongs in the graph-level reserved set in schema_conflicts.go", name)
-		}
+	if names := exportedDecls(t, "softdelete", src); len(names) != 0 {
+		t.Errorf("templates/softdelete.tmpl declares exported names %v; each needs a graph-level reserved-name check", names)
 	}
 }
 

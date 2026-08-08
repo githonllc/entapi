@@ -220,10 +220,12 @@ func (Post) Edges() []ent.Edge {
 | 文件 | 生成条件 | 声明 |
 |---|---|---|
 | `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
-| `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | `RegisterSoftDelete`、查询 traverser、删除 hook |
+| `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | 未导出的查询 traverser 与删除 hook |
 
 软删除文件的条件独立于注解：一个**没有任何 domain 字段**的实体只要嵌了 mixin，仍然会被写进
-traverser 的类型开关。
+traverser 的类型开关。扩展还提供一个 `config/init/fields/*` partial，扩展 Ent 自己的
+`client.go`：`newConfig` 会为每个这类实体初始化 hook 与 interceptor slice。这个 partial
+不产生独立文件；图里没有 mixin 时，它一个字节也不渲染。
 
 产物落在**你的** `ent` 包里（`gen.Config.Target`），所以读起来是 `ent.CreateArticle`、
 `ent.ArticleFilter`、`ent.ErrorMap`。这也正是实体名会与它们相撞的原因——见
@@ -511,17 +513,17 @@ func (Doc) Mixin() []ent.Mixin { return []ent.Mixin{entapi.SoftDeleteMixin{}} }
 
 ```go
 client := ent.NewClient(ent.Driver(drv))
-ent.RegisterSoftDelete(client)          // 恰好一次，在构造时
 ```
 
 mixin 声明一个 `Optional().Nillable()` 的 `field.Time("deleted_at")`，并挂上
 `DomainSoftDelete` 标记；ent 会把 mixin 的注解合并到实体上，所以标记就是「这个实体选择了
 软删除」的判据——不是列名约定。
 
-`RegisterSoftDelete` 安装一个 interceptor 和一个 hook。此后被删除的行会从**每一次**读取中
-消失——包括那些完全不碰本包生成物的 `client.Doc.Query()` 调用——而 `Delete` 变成对墓碑列的
-一次更新。不存在第二次写入，生成的接线里也没有任何东西知道软删除的存在：
-`DeleteArticle` 发的是 `DeleteOneID(...).Exec`，`DeleteBatchArticles` 发的是
+生成的 `newConfig` 为每个可软删除实体安装一个 interceptor 和一个 hook。没有注册调用，也
+没有构造顺序依赖：`NewClient`、`Open` 与 `enttest.Open` 全都使用这份 config。此后被删除的
+行会从**每一次**读取中消失——包括那些完全不碰本包生成物的 `client.Doc.Query()` 调用——而
+`Delete` 变成对墓碑列的一次更新。不存在第二次写入，生成的接线里也没有任何东西知道软删除
+的存在：`DeleteArticle` 发的是 `DeleteOneID(...).Exec`，`DeleteBatchArticles` 发的是
 `Delete().Where(IDIn(...)).Exec`，两者都由 hook 改写。
 
 两个互相独立的上下文开关让你按调用退出：
@@ -533,17 +535,17 @@ entapi.WithHardDelete(ctx)    // 这次删除是真删
 
 两者互不蕴含——它们用的是两个不同的未导出 context key 类型。
 
-**一个没有调用 `RegisterSoftDelete` 就构造出来的 client 不过滤任何东西，并且是硬删除
-——包括在你的测试里。**
+注入的 hook 位于索引 0，而 Ent 把索引 0 应用在最外层。因此以后通过 `client.Use` 添加的
+hook 都在软删除 hook 内层运行。
 
 > **实现：** `softdelete.go` — `SoftDeleteMixin`、`SoftDeleteField`（`"deleted_at"`）、
 > `DomainSoftDelete`、`SoftDeleteAnnotationName`；
 > `funcs_softdelete.go` — `isSoftDeletable`、`softDeleteTypes`、`softDeleteField`、
 > `softDeleteImports`；`runtime/softdelete_context.go` — `softDeletedKey`、`hardDeleteKey`、
 > `WithSoftDeleted`、`SoftDeletedIncluded`、`WithHardDelete`、`HardDeleteRequested`；
-> `templates/softdelete.tmpl`；生成物样例：
+> `templates/softdelete.tmpl`、`templates/softdelete_config_init.tmpl`；生成物样例：
 > `internal/fixtures/softdelete/softdeleteent/entapi_softdelete.go` —
-> `RegisterSoftDelete`、`softDeleteTraverser`、`softDeleteHook`
+> `softDeleteTraverser`、`softDeleteHook`；以及其 `client.go` 中的 `newConfig`
 
 ## 生成会失败，而这正是设计
 
@@ -570,8 +572,8 @@ entapi.WithHardDelete(ctx)    // 这次删除是真删
 
 一个名为 `ErrorMap` 的实体会让 ent 发射 `type ErrorMap`，而 `entapi_errors.go` 发射
 `var ErrorMap`——Go 每个包只有一个标识符命名空间，于是 `redeclared in this block`，发生在
-两个你从没写过的文件里，且没有任何东西指出原因。`RegisterSoftDelete` 同理，跨实体相撞同理：
-一个字面叫 `ArticleResponse` 的实体会撞上实体 `Article` 生成的响应类型。
+两个你从没写过的文件里，且没有任何东西指出原因。跨实体相撞同理：一个字面叫
+`ArticleResponse` 的实体会撞上实体 `Article` 生成的响应类型。
 
 保留名检查在图这一层跑，而不是在节点循环里：**相撞的实体不需要带任何注解**——ent 为每个
 实体都生成类型，一个光秃秃的 `type ErrorMap struct{ ent.Schema }` 撞得一样狠，而节点循环
@@ -696,31 +698,29 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
 
 按「有多安静地伤害你」排序。
 
-1. **没有调用 `ent.RegisterSoftDelete(client)` 的 client 不过滤任何东西，并且硬删除。**
-   包括在测试里。
-2. **在你调用 `WithUniqueViolation` 之前，`ErrorMap` 永远不会返回 `ErrAlreadyExists`。**
+1. **在你调用 `WithUniqueViolation` 之前，`ErrorMap` 永远不会返回 `ErrAlreadyExists`。**
    一个重复键会原样穿过 `MapError`，表现为 500。
-3. **`New{E}Response(nil)` 返回 `(nil, nil)`。** 不是错误。如果你把一次未命中的查询直接喂
+2. **`New{E}Response(nil)` 返回 `(nil, nil)`。** 不是错误。如果你把一次未命中的查询直接喂
    进它，拿到的是一对 nil，而不是 not-found。
-4. **`_contains` 需要 `AsSearchable()`。** 一个只标了 filterable 的字符串字段的四个子串参数
+3. **`_contains` 需要 `AsSearchable()`。** 一个只标了 filterable 的字符串字段的四个子串参数
    不会发射；form 与 JSON 绑定会丢弃未知 key 而不报错，所以 `?name_contains=x` 变成一个
    *未过滤*的查询，而不是一个 400。
-5. **没有任何预设授予查询标记。** 只写 `DefaultField()` 得到的是一个空过滤器结构体和一个空
+4. **没有任何预设授予查询标记。** 只写 `DefaultField()` 得到的是一个空过滤器结构体和一个空
    排序白名单。
-6. **在 `Immutable()` 字段上用 `DefaultField()` 一定会让生成失败**——它授予了 `ScopeUpdate`。
+5. **在 `Immutable()` 字段上用 `DefaultField()` 一定会让生成失败**——它授予了 `ScopeUpdate`。
    改用 `CreateOnlyField()` 或 `OutputOnlyField()`。
-7. **PATCH body 里出现的 `Immutable()` 字段会被 `encoding/json` 在任何验证器运行之前丢弃。**
+6. **PATCH body 里出现的 `Immutable()` 字段会被 `encoding/json` 在任何验证器运行之前丢弃。**
    拒绝它需要你的 handler 用 `DisallowUnknownFields`；生成器看不见它。（合法 key 的大小写
    *变体*会被拒绝——真正未知的 key 不会。）
-8. **`entapi.IsNotFound` 不是 ent 的 `IsNotFound`。** 生成模板以*不限定*的形式调用后者，
+7. **`entapi.IsNotFound` 不是 ent 的 `IsNotFound`。** 生成模板以*不限定*的形式调用后者，
    使其绑定到你包内 ent 生成的谓词。加上限定符照样编译，然后静默地什么都匹配不上。
-9. **每个 metadata 构造器都是 no-op。** `WithFormat("email")` 不验证任何东西。
-10. **`DeleteBatch` 对匹配不到的 id 返回计数而非错误。** 那个 `int` 是你了解「实际存在多少
+8. **每个 metadata 构造器都是 no-op。** `WithFormat("email")` 不验证任何东西。
+9. **`DeleteBatch` 对匹配不到的 id 返回计数而非错误。** 那个 `int` 是你了解「实际存在多少
     个」的唯一途径；空列表删除零行，这是 ent 对无参 `IDIn` 的读法，不是这里写的守卫。
-11. **`Page.Size` 是钳制后的 size**，而一个超界的请求永远不是错误——`ListRequest.Validate()`
+10. **`Page.Size` 是钳制后的 size**，而一个超界的请求永远不是错误——`ListRequest.Validate()`
     对 `Size` 和 `Page` 只字不提。
-12. **`ErrorMap` 是普通包级变量，不带同步。** 请在构造 client 处赋值，不要在服务运行中改。
-13. **一个你复制并修改过的生成文件仍带着 marker**——清理会删掉它。请剥掉首行。
+11. **`ErrorMap` 是普通包级变量，不带同步。** 请在构造 client 处赋值，不要在服务运行中改。
+12. **一个你复制并修改过的生成文件仍带着 marker**——清理会删掉它。请剥掉首行。
 
 ## 限制
 
@@ -752,6 +752,11 @@ T3 已经全部落地。三处偏离，都是有意的：
 
 ## 迁移注记
 
+**破坏性与行为变更（#70）：** 生成的 `RegisterSoftDelete` 已删除。重新生成后，删掉所有
+`ent.RegisterSoftDelete(client)` 调用；在 schema 中嵌入 `SoftDeleteMixin` 现在会自动配置
+`NewClient`、`Open` 与 `enttest.Open`。hook 也从过去的注册顺序位置移到了 `hooks[0]`；Ent
+把它应用在最外层，先于以后通过 `client.Use` 添加的 hook。
+
 **行为变更：** Ent 标记为 `Sensitive()` 的字段不再出现在 `{Entity}Response` 或
 `{Entity}Summary` 中。这关闭了带响应 scope 的敏感字段仍被生成并序列化的泄漏；create
 与 patch 请求保持不变。
@@ -761,6 +766,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 
 | 已删除 | 改用 |
 |---|---|
+| 生成的 `RegisterSoftDelete` | client 构造处无需任何调用——在 schema 中嵌入 `SoftDeleteMixin` 并重新生成 |
 | `Base{Entity}Service`、`Base{Entity}Handler`、`SetSelf`、生成的 hook | 生成的自由函数（`Get{E}`、`List{Es}`、…）；需要不同行为就写你自己的函数 |
 | `ExtensionConfig.GenerateBaseService`、`.GenerateBaseHandler`、`WithBaseService`、`WithBaseHandler` | 无对应物——基类不再存在 |
 | `{Entity}EntToResponse` | `New{Entity}Response`，它返回 error 而不是在错误时返回 nil |

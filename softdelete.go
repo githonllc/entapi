@@ -61,10 +61,10 @@ func (DomainSoftDelete) Name() string { return SoftDeleteAnnotationName }
 //     main package. Carrying no hooks here means adopting soft delete does not
 //     change how the consumer's project is generated. See README.
 //
-// Both halves are installed instead by one generated line at client
-// construction — `ent.RegisterSoftDelete(client)`. That is a real cost, stated
-// rather than hidden: a client built without it filters nothing, and a delete
-// on it is an ordinary hard delete.
+// Both halves are installed instead by the generated
+// config/init/fields/entapi_softdelete partial. Ent executes that partial inside
+// newConfig, so every client construction path receives fresh per-instance
+// hook and interceptor slices without changing the mixin's runtime format.
 type SoftDeleteMixin struct {
 	mixin.Schema
 }

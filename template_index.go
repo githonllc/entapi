@@ -21,6 +21,10 @@ var errorMapTemplate = mustLoadTemplate("errors")
 // softDeleteTemplate is the soft-delete traverser and delete-rewriting hook.
 // Unlike every other template here it is rendered once per GRAPH, not once per
 // type: it is a single type switch over the entities embedding
-// entapi.SoftDeleteMixin, plus the one registration function a consumer
-// calls.
+// entapi.SoftDeleteMixin.
 var softDeleteTemplate = mustLoadTemplate("softdelete")
+
+// softDeleteConfigInitTemplate is an ent partial rather than a standalone
+// output file. Its config/init/fields/* definition is executed inside
+// newConfig, where it installs the helpers above on every constructed client.
+var softDeleteConfigInitTemplate = mustLoadTemplate("softdelete_config_init")

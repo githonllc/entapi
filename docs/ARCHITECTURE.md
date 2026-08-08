@@ -407,7 +407,7 @@ order builder —— 没有任何调用方字符串被插值进 SQL（`templates
 ```
 
 重写机制本身。`SetOp` 必须在前，因为 `Client().Mutate` 按 Op 分发；不能调 `next`，因为 delete 链的
-下一环是 `sqlExec`，无论 Op 说什么都照发 DELETE（`templates/softdelete.tmpl:61-71`）：
+下一环是 `sqlExec`，无论 Op 说什么都照发 DELETE（`templates/softdelete.tmpl:57-70`）：
 
 ```gotemplate
 // templates/softdelete.tmpl — softDeleteHook()
@@ -426,9 +426,11 @@ case *{{ .Name }}Mutation:
 }
 ```
 
-代价被明写而非隐藏（`templates/softdelete.tmpl:29-31`）：**没调 `ent.RegisterSoftDelete(client)`
-的 client 什么都不过滤，删除就是真删。** 这也是 `internal/softdeleteproof` 这个独立模块存在的唯一
-理由——编译证明分不清「谓词被生成了」和「谓词到达了 SQL」。
+挂载由 `templates/softdelete_config_init.tmpl` 完成：它作为 Ent 的
+`config/init/fields/*` partial 在 `newConfig` 内直接填入每实体的 hook/interceptor slice。
+消费者不再调用注册函数。`internal/softdeleteproof` 以真实 SQLite 覆盖 `NewClient`、`Open`、
+`enttest.Open`、双 client 与 deny-by-default privacy——编译证明分不清「谓词被生成了」和
+「谓词到达了 SQL」。
 
 ---
 
@@ -556,7 +558,7 @@ func isCreatePointer(f *gen.Field) bool {
 | **默认不分类唯一键冲突** | `templates/errors.tmpl:28-55` | `ent.IsConstraintError` 分不清 UNIQUE 和 FOREIGN KEY，所以默认**不装**唯一性谓词：重复键回落成 500 而不是 409。方向是有意选的——重复键报 500 可恢复，外键失败报 409 是错答案 |
 | **`ErrorMap` 是包级可变全局量** | 同上 `:57-59` | 自身不带同步；必须在建 client 时、第一个请求之前赋值 |
 | **summary 带哪些标量字段未定** | `templates/dto.tmpl:356` | 目前 = 全部 response-scoped 字段减去边。收窄需要新注解，是独立 issue |
-| **软删除靠一行注册** | `templates/softdelete.tmpl:29-31` | 忘了 `RegisterSoftDelete(client)` 就静默退化成硬删除。测试里也必须调 |
+| **软删除依赖 Ent 未公开的 partial 扩展点** | `templates/softdelete_config_init.tmpl` | `softdelete_config_init_test.go` 钉住生成的 `newConfig` 注入块，并逐字节比较无 mixin 图与纯 Ent 的 `client.go` |
 | **`make test` 漏三个嵌套模块** | `Makefile` | 能过 `make test` 的改动仍可能被 `make test-modules` 抓住——这正是它存在的意义 |
 | **fixtures 子树被 `make fmt` 排除** | `Makefile` — `FMT_FILES` | 但 `gofmt -l .` 覆盖全树。那两个前缀下的**手写**文件（fixture schema、生成目录里的手写 `_test.go`）必须手工保持 gofmt-clean |
 

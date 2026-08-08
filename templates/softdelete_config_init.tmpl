@@ -1,0 +1,6 @@
+{{/* gotype: entgo.io/ent/entc/gen.Graph */}}
+{{- define "config/init/fields/entapi_softdelete" -}}{{- with softDeleteTypes $ }}
+	// entapi: soft-delete hooks and interceptors installed by newConfig.
+{{ range . }}	cfg.hooks.{{ .Name }} = append(cfg.hooks.{{ .Name }}, softDeleteHook())
+	cfg.inters.{{ .Name }} = append(cfg.inters.{{ .Name }}, softDeleteTraverser())
+{{ end }}{{ end }}{{- end -}}

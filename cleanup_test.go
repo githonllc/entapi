@@ -191,9 +191,9 @@ func TestCleanupRemovesDeletedEntityArtifacts(t *testing.T) {
 // TestRemoveStaleArtifacts_GraphLevelFile covers the one file that belongs to
 // no entity. The case it guards is the last schema dropping
 // entapi.SoftDeleteMixin: without it the previous run's
-// entapi_softdelete.go survives, publishing a RegisterSoftDelete that
-// registers a filter for entities that no longer have a tombstone column —
-// and it would not even compile, because the predicate it names is gone too.
+// entapi_softdelete.go survives, publishing helpers for entities that no longer
+// have a tombstone column — and it would not even compile, because the
+// predicate it names is gone too.
 func TestRemoveStaleArtifacts_GraphLevelFile(t *testing.T) {
 	t.Run("removed when this run did not write it", func(t *testing.T) {
 		dir := t.TempDir()

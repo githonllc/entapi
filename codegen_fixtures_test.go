@@ -65,6 +65,8 @@ type fixtureCase struct {
 	dir string
 	// opts are the extension options generation runs with.
 	opts []Option
+	// features are ent codegen features this fixture specifically exercises.
+	features []gen.Feature
 	// wantGenErr, when non-empty, turns the case around: generation is
 	// required to FAIL, and its error must contain every listed substring.
 	// Nothing is compiled, and nothing may be written under <dir>/<dir>ent besides
@@ -99,7 +101,7 @@ var fixtures = []fixtureCase{
 	{dir: "query"},
 	{dir: "queryconflict", wantGenErr: []string{"Bad.tags", "Sortable", "Bad.count", "Searchable", "Bad.meta", "Filterable", "Bad.token", `scope "query"`}},
 	{dir: "wiring"},
-	{dir: "softdelete"},
+	{dir: "softdelete", features: []gen.Feature{gen.FeaturePrivacy}},
 	// #62: an entity whose NAME is a symbol this extension generates. The three
 	// substrings are the three things the message has to carry — which entity,
 	// which generated file it collides in, and what to do about it — because a
@@ -140,7 +142,7 @@ func TestCodegenFixtures(t *testing.T) {
 				t.Fatalf("fixture %q: schema directory %s: %v", fc.dir, schemaDir, err)
 			}
 
-			err := generateFixture(fc.dir, schemaDir, targetDir, fc.opts)
+			err := generateFixture(fc.dir, schemaDir, targetDir, fc.opts, fc.features)
 
 			if len(fc.wantGenErr) > 0 {
 				assertGenerationRefused(t, fc, targetDir, err)
@@ -226,7 +228,7 @@ func TestCodegenFixtureStaleArtifacts(t *testing.T) {
 	}
 
 	// Run 1: Sprocket is annotated.
-	mustGenerateFixture(t, "stale", filepath.Join(fixtureDir, "annotated", "schema"), targetDir, opts)
+	mustGenerateFixture(t, "stale", filepath.Join(fixtureDir, "annotated", "schema"), targetDir, opts, nil)
 	for _, name := range generated {
 		path := filepath.Join(targetDir, name)
 		content, err := os.ReadFile(path)
@@ -240,7 +242,7 @@ func TestCodegenFixtureStaleArtifacts(t *testing.T) {
 	}
 
 	// Run 2: the same entity without annotations.
-	mustGenerateFixture(t, "stale", filepath.Join(fixtureDir, "plain", "schema"), targetDir, opts)
+	mustGenerateFixture(t, "stale", filepath.Join(fixtureDir, "plain", "schema"), targetDir, opts, nil)
 	for _, name := range generated {
 		path := filepath.Join(targetDir, name)
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -263,19 +265,20 @@ func TestCodegenFixtureStaleArtifacts(t *testing.T) {
 // generateFixture runs ent generation with this extension over schemaDir,
 // writing into targetDir. The error is returned rather than fatal: a fixture
 // with wantGenErr needs it as its assertion, not as a failure.
-func generateFixture(name, schemaDir, targetDir string, opts []Option) error {
+func generateFixture(name, schemaDir, targetDir string, opts []Option, features []gen.Feature) error {
 	pkgPath := fixtureEntPkgPath(name)
 	return entc.Generate(schemaDir, &gen.Config{
-		Target:  targetDir,
-		Package: pkgPath,
+		Target:   targetDir,
+		Package:  pkgPath,
+		Features: features,
 	}, entc.Extensions(NewExtensionWithOptions(opts...)))
 }
 
 // mustGenerateFixture is generateFixture for the callers that have no reason to
 // tolerate a failure.
-func mustGenerateFixture(t *testing.T, name, schemaDir, targetDir string, opts []Option) {
+func mustGenerateFixture(t *testing.T, name, schemaDir, targetDir string, opts []Option, features []gen.Feature) {
 	t.Helper()
-	if err := generateFixture(name, schemaDir, targetDir, opts); err != nil {
+	if err := generateFixture(name, schemaDir, targetDir, opts, features); err != nil {
 		t.Fatalf("fixture %q: ent generation failed for schema %s: %v", name, schemaDir, err)
 	}
 }

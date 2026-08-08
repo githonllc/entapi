@@ -96,6 +96,12 @@
 //
 // # Migration
 //
+// Generated RegisterSoftDelete has been removed. Regenerate and delete every
+// ent.RegisterSoftDelete(client) call: embedding [SoftDeleteMixin] now injects
+// the hook and interceptor into every generated client automatically. This
+// also makes the soft-delete hook outermost, ahead of hooks added later with
+// Client.Use. See the README migration notes.
+//
 // DomainField.Validation and WithValidation are gone, with no replacement:
 // Validate() on the generated request types supersedes them. WithDescription
 // and WithExample still exist and still chain, but store onto [FieldMetadata]

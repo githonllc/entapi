@@ -22,6 +22,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/privacy"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
@@ -38,6 +39,15 @@ type Doc struct {
 func (Doc) Mixin() []ent.Mixin {
 	return []ent.Mixin{
 		entapi.SoftDeleteMixin{},
+	}
+}
+
+// Policy denies every undecided Doc operation. Tests opt in through an allow
+// decision and prove the soft-delete hook's re-dispatched update preserves it.
+func (Doc) Policy() ent.Policy {
+	return privacy.Policy{
+		Query:    privacy.QueryPolicy{privacy.AlwaysDenyRule()},
+		Mutation: privacy.MutationPolicy{privacy.AlwaysDenyRule()},
 	}
 }
 

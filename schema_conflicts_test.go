@@ -336,13 +336,11 @@ func TestCheckGraphConflicts_MarkedFieldsThatAgreeWithTheSchema(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // Reserved names (#62). The internal/fixtures/reservednames fixture covers the
-// ErrorMap case end to end, through real ent; these cover the branches one
-// fixture cannot reach at once — the soft-delete symbol, a collision with an
-// UNannotated entity, and the two negatives.
+// ErrorMap case end to end, through real ent; these cover a collision with an
+// UNannotated entity and the negatives.
 // ---------------------------------------------------------------------------
 
-// softDeletableDoc is a node that makes softDeleteTypes(g) non-empty, which is
-// the condition RegisterSoftDelete is generated under.
+// softDeletableDoc is a node that makes softDeleteTypes(g) non-empty.
 func softDeletableDoc(name string) *gen.Type {
 	deletedAt := newTimeField(SoftDeleteField, nil)
 	deletedAt.Optional = true
@@ -351,20 +349,14 @@ func softDeletableDoc(name string) *gen.Type {
 	return node
 }
 
-func TestCheckGraphConflicts_EntityNamedRegisterSoftDelete(t *testing.T) {
+func TestCheckGraphConflicts_RegisterSoftDeleteIsNoLongerReserved(t *testing.T) {
 	g := graphOf(
 		softDeletableDoc("Doc"),
 		newTestType("RegisterSoftDelete", newStringField("title", ptr(DefaultField()))),
 	)
 
-	err := checkGraphConflicts(g)
-	if err == nil {
-		t.Fatal("expected an error for an entity named after the generated RegisterSoftDelete, got nil")
-	}
-	for _, want := range []string{"RegisterSoftDelete", "entapi_softdelete.go", "Doc embeds entapi.SoftDeleteMixin", "rename"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error does not mention %q\ngot: %v", want, err)
-		}
+	if err := checkGraphConflicts(g); err != nil {
+		t.Fatalf("RegisterSoftDelete is no longer generated and must not remain reserved: %v", err)
 	}
 }
 
@@ -410,12 +402,11 @@ func TestCheckGraphConflicts_DerivedPluralNameIsReserved(t *testing.T) {
 }
 
 // TestCheckGraphConflicts_ReservedNamesAreConditionalOnTheEmission is the
-// negative: neither graph-level file is written for this schema, so neither name
-// is taken and nothing is refused. An unconditional refusal would reject a
+// negative: the graph-level file is not written for this schema, so its name is
+// not taken and nothing is refused. An unconditional refusal would reject a
 // schema that generates and compiles.
 func TestCheckGraphConflicts_ReservedNamesAreConditionalOnTheEmission(t *testing.T) {
 	// Nothing annotated anywhere -> no entapi_errors.go.
-	// Nothing soft-deletable    -> no entapi_softdelete.go.
 	g := graphOf(
 		newTestType("ErrorMap", newStringField("label", nil)),
 		newTestType("RegisterSoftDelete", newStringField("title", nil)),

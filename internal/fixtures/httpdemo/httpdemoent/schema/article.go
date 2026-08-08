@@ -21,6 +21,7 @@ func (Article) Fields() []ent.Field {
 		field.UUID("id", uuid.UUID{}).Default(uuid.New),
 		field.String("title").
 			Unique().
+			MaxLen(64).
 			Annotations(api.Filterable(), api.Searchable(), api.Sortable()),
 		field.Int("rank").
 			Optional().

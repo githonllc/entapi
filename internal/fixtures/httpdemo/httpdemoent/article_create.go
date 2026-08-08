@@ -118,6 +118,11 @@ func (ac *ArticleCreate) check() error {
 	if _, ok := ac.mutation.Title(); !ok {
 		return &ValidationError{Name: "title", err: errors.New(`httpdemoent: missing required field "Article.title"`)}
 	}
+	if v, ok := ac.mutation.Title(); ok {
+		if err := article.TitleValidator(v); err != nil {
+			return &ValidationError{Name: "title", err: fmt.Errorf(`httpdemoent: validator failed for field "Article.title": %w`, err)}
+		}
+	}
 	if _, ok := ac.mutation.Slug(); !ok {
 		return &ValidationError{Name: "slug", err: errors.New(`httpdemoent: missing required field "Article.slug"`)}
 	}

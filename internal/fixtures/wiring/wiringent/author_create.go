@@ -27,6 +27,20 @@ func (ac *AuthorCreate) SetName(s string) *AuthorCreate {
 	return ac
 }
 
+// SetEmail sets the "email" field.
+func (ac *AuthorCreate) SetEmail(s string) *AuthorCreate {
+	ac.mutation.SetEmail(s)
+	return ac
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (ac *AuthorCreate) SetNillableEmail(s *string) *AuthorCreate {
+	if s != nil {
+		ac.SetEmail(*s)
+	}
+	return ac
+}
+
 // SetID sets the "id" field.
 func (ac *AuthorCreate) SetID(u uuid.UUID) *AuthorCreate {
 	ac.mutation.SetID(u)
@@ -102,6 +116,11 @@ func (ac *AuthorCreate) check() error {
 	if _, ok := ac.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`wiringent: missing required field "Author.name"`)}
 	}
+	if v, ok := ac.mutation.Email(); ok {
+		if err := author.EmailValidator(v); err != nil {
+			return &ValidationError{Name: "email", err: fmt.Errorf(`wiringent: validator failed for field "Author.email": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -140,6 +159,10 @@ func (ac *AuthorCreate) createSpec() (*Author, *sqlgraph.CreateSpec) {
 	if value, ok := ac.mutation.Name(); ok {
 		_spec.SetField(author.FieldName, field.TypeString, value)
 		_node.Name = value
+	}
+	if value, ok := ac.mutation.Email(); ok {
+		_spec.SetField(author.FieldEmail, field.TypeString, value)
+		_node.Email = value
 	}
 	if nodes := ac.mutation.ArticlesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

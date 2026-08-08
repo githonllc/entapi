@@ -297,9 +297,10 @@ Errors are RFC 9457 `application/problem+json`; `WriteProblem` emits
 `type: "about:blank"`, title, status and detail, plus `field` when the chain
 contains `*FieldError`. Bind failures are 400 except generated `Validate`
 failures (422), unsupported media types are 415, oversized bodies are 413, and
-middle-step sentinels map to 404/409/400. Unclassified errors are 500. Save-time
-Ent `ValidationError` classification is deliberately deferred to #74 and is
-therefore still a 500 in this slice.
+middle-step sentinels map to 404/409, plus 400 for List validation and 422 for
+Create/Patch validation. Get and Delete have no validation arm. Unclassified
+errors are 500. A Save-time Ent `ValidationError` is mapped to 422 and carries
+its field name in the problem response when Ent supplies one.
 
 POST and PATCH accept only `application/json`; media-type parameters are
 allowed. Their body is capped at **1 MiB before reading, with no configuration
@@ -562,42 +563,57 @@ that re-reads through the eager-load plan does not map twice. The result is that
 `errors.Is(err, entapi.ErrNotFound)` works at your handler boundary without
 unwrapping ent's error types.
 
-`ErrorMap` is emitted by the template as **one line**:
+`ErrorMap` is emitted with Ent's three generated predicates and a field-name
+extractor:
 
 ```go
-var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError)
-```
-
-Both predicates are **unqualified**, so they bind to the two functions ent
-generates into the **same package**. That is required: `ent.NotFoundError` and
-`ent.ConstraintError` are types ent generates per consumer project and the
-framework has no equivalents, which is why the runtime takes `func(error) bool`
-values and never names an ent type.
-
-**`ErrorMap` does not report uniqueness violations out of the box.**
-`MapError`'s branches are: not-found → wrap `ErrNotFound`; constraint **and** you
-installed a uniqueness predicate → wrap `ErrAlreadyExists`; everything else
-**returned unchanged**. ent's `IsConstraintError` cannot tell `UNIQUE` from
-`FOREIGN KEY`, so this is opt-in per driver:
-
-```go
-func init() {
-    ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(func(err error) bool {
-        var pgErr *pgconn.PgError
-        return errors.As(err, &pgErr) && pgErr.Code == "23505"
+var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError).
+    WithValidation(IsValidationError, func(err error) (string, bool) {
+        var ve *ValidationError
+        if errors.As(err, &ve) { return ve.Name, true }
+        return "", false
     })
-}
 ```
 
-The cost of skipping it is a 500 where a 409 belonged; it can never produce a
-wrong 409. `ErrorMap` is an ordinary package-level variable and carries no
-synchronisation of its own — assign it where the client is built, before the
-first request.
+The three predicates and `ValidationError` are **unqualified**, so they bind to
+symbols Ent generates into the **same package**. That is required: these types
+and predicates belong to each consumer project, so the stdlib-only runtime
+takes functions and never names an Ent type.
+
+`MapError`'s order is fixed: nil → not-found → validation (with `FieldError`
+when the extractor succeeds) → constraint **and** unique → unchanged. The
+unique test remains gated behind Ent's `IsConstraintError`; text alone never
+classifies an arbitrary error.
+
+`API(client)` installs a dialect-specific unique determination unless
+`HasUniqueViolation` says the consumer already installed one:
+
+| Dialect | Recognised as unique | Closed failure to 500 |
+|---|---|---|
+| `postgres` | An error implementing `SQLState() string` with `23505`; without that method, text containing `violates unique constraint` | A present non-`23505` SQLSTATE is authoritative and never falls through to text. Older lib/pq without `SQLState()` misses under non-English `lc_messages` |
+| `mysql` | Text containing `Error 1062` | Other text. The marker is locale-immune because go-sql-driver/mysql formats it from `MySQLError.Number` |
+| `sqlite3` | Text containing `UNIQUE constraint failed` | Other text |
+| anything else | Nothing; no determination is installed | Every duplicate remains unclassified |
+
+The three text markers are pinned verbatim to Ent v0.14.4's
+`sqlgraph.IsUniqueConstraintError`, so text-contract drift is shared with
+upstream rather than invented here. Every miss fails closed as 500. A custom
+determination installed before `API()` survives auto-wiring; installing one
+afterwards overrides it. `ErrorMap` is a plain package-level variable with no
+synchronisation, so configure it before serving requests.
+
+One named residue stays deliberately unclassified: Ent reports clearing the
+required unique edge `Article.author` as the bare error `wiringent: clearing a
+required unique edge "Article.author"`. It is not a `ValidationError`, so it
+carries no sentinel and reaches HTTP as 500. The generated PATCH surface cannot
+trigger it; only direct builder use can.
 
 > **Implementation:** `templates/wiring.tmpl`, `templates/errors.tmpl`;
 > `runtime/errors.go` — `ErrNotFound`, `ErrAlreadyExists`, `ErrValidation`,
 > `IsNotFound`, `IsAlreadyExists`, `IsValidation`; `runtime/errors_map.go` —
-> `ErrorMapper`, `NewErrorMapper`, `WithUniqueViolation`, `MapError`;
+> `ErrorMapper`, `NewErrorMapper`, `WithValidation`, `WithUniqueViolation`,
+> `HasUniqueViolation`, `MapError`; `runtime/errors_dialect.go` —
+> `UniqueViolation`;
 > `runtime/query.go` — `ListPage`, `GetOne`, `SaveOne`, `Saver[E]`;
 > `funcs_imports.go` — `wiringImports`; generated example:
 > `internal/fixtures/wiring/wiringent/article_wiring.go`
@@ -825,9 +841,9 @@ registered template functions; an unreachable addition fails CI.
 
 Ordered by how quietly they hurt you.
 
-1. **`ErrorMap` never returns `ErrAlreadyExists` until you call
-   `WithUniqueViolation`.** A duplicate key passes through `MapError` unchanged
-   and surfaces as a 500.
+1. **Unknown dialects do not get a permissive uniqueness guess.** A duplicate
+   key stays unclassified and surfaces as 500. Supply `WithUniqueViolation`
+   before `API()` for a custom dialect.
 2. **`New{E}Response(nil)` returns `(nil, nil)`.** Not an error. Feed it a query
    that matched nothing and you get a pair of nils, not a not-found.
 3. **`like:`, `ilike:` and `suffix:` require `api.Searchable()`.** On a

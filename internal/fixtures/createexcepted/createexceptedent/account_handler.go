@@ -73,8 +73,6 @@ func (h *APIHandler) handleGetAccount(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusNotFound
 		case entapi.IsAlreadyExists(err):
 			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
@@ -164,7 +162,7 @@ func (h *APIHandler) handlePatchAccount(w http.ResponseWriter, r *http.Request) 
 		case entapi.IsAlreadyExists(err):
 			status = http.StatusConflict
 		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
+			status = http.StatusUnprocessableEntity
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
@@ -200,8 +198,6 @@ func (h *APIHandler) handleDeleteAccount(w http.ResponseWriter, r *http.Request)
 			status = http.StatusNotFound
 		case entapi.IsAlreadyExists(deleteErr):
 			status = http.StatusConflict
-		case entapi.IsValidation(deleteErr):
-			status = http.StatusBadRequest
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), deleteErr)
 		return

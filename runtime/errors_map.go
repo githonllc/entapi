@@ -3,7 +3,7 @@ package entapi
 import "fmt"
 
 // ErrorMapper translates a persistence layer's errors into this package's
-// sentinels: [ErrNotFound] and [ErrAlreadyExists].
+// sentinels: [ErrNotFound], [ErrValidation], and [ErrAlreadyExists].
 //
 // It takes its classification as function values rather than importing ent and
 // calling ent.IsNotFound directly, for two reasons. The runtime core must stay
@@ -33,9 +33,11 @@ import "fmt"
 //
 // The zero value is usable and classifies nothing.
 type ErrorMapper struct {
-	isNotFound   func(error) bool
-	isConstraint func(error) bool
-	isUnique     func(error) bool
+	isNotFound      func(error) bool
+	isValidation    func(error) bool
+	validationField func(error) (string, bool)
+	isConstraint    func(error) bool
+	isUnique        func(error) bool
 }
 
 // NewErrorMapper returns a mapper driven by the given predicates.
@@ -59,6 +61,24 @@ func (m ErrorMapper) WithUniqueViolation(isUnique func(error) bool) ErrorMapper 
 	return m
 }
 
+// HasUniqueViolation reports whether a uniqueness determination is installed.
+// It lets generated HTTP wiring preserve a determination the consumer installed
+// before constructing the API.
+func (m ErrorMapper) HasUniqueViolation() bool {
+	return m.isUnique != nil
+}
+
+// WithValidation returns a copy that classifies validation errors as
+// [ErrValidation]. When field extracts a name, the mapped error also carries a
+// [FieldError] so [WriteProblem] can expose that name on the wire.
+//
+// Both functions receive the original error and may inspect its wrap chain.
+func (m ErrorMapper) WithValidation(isValidation func(error) bool, field func(error) (string, bool)) ErrorMapper {
+	m.isValidation = isValidation
+	m.validationField = field
+	return m
+}
+
 // MapError classifies err, wrapping it so that both the sentinel and the
 // original error remain in the chain and errors.Is finds either.
 //
@@ -67,9 +87,11 @@ func (m ErrorMapper) WithUniqueViolation(isUnique func(error) bool) ErrorMapper 
 //
 //  1. nil maps to nil.
 //  2. A missing row maps to [ErrNotFound].
-//  3. A constraint violation the uniqueness predicate recognises maps to
+//  3. A validation failure maps to [ErrValidation]; a field name extracted
+//     from it is carried by [FieldError].
+//  4. A constraint violation the uniqueness predicate recognises maps to
 //     [ErrAlreadyExists].
-//  4. Anything else — including a constraint violation of an unidentified kind
+//  5. Anything else — including a constraint violation of an unidentified kind
 //     — is returned unchanged. Unclassified, never swallowed, and never
 //     labelled with a sentinel that was not established.
 func (m ErrorMapper) MapError(err error) error {
@@ -78,6 +100,15 @@ func (m ErrorMapper) MapError(err error) error {
 	}
 	if m.isNotFound != nil && m.isNotFound(err) {
 		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	if m.isValidation != nil && m.isValidation(err) {
+		mapped := fmt.Errorf("%w: %w", ErrValidation, err)
+		if m.validationField != nil {
+			if field, ok := m.validationField(err); ok {
+				return &FieldError{Field: field, Err: mapped}
+			}
+		}
+		return mapped
 	}
 	if m.isConstraint != nil && m.isConstraint(err) {
 		if m.isUnique != nil && m.isUnique(err) {

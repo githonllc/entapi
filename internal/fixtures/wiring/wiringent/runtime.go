@@ -29,6 +29,10 @@ func init() {
 	article.DefaultID = articleDescID.Default.(func() uuid.UUID)
 	authorFields := schema.Author{}.Fields()
 	_ = authorFields
+	// authorDescEmail is the schema descriptor for email field.
+	authorDescEmail := authorFields[2].Descriptor()
+	// author.EmailValidator is a validator for the "email" field. It is called by the builders before save.
+	author.EmailValidator = authorDescEmail.Validators[0].(func(string) error)
 	// authorDescID is the schema descriptor for id field.
 	authorDescID := authorFields[0].Descriptor()
 	// author.DefaultID holds the default value on creation for the id field.

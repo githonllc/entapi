@@ -43,6 +43,26 @@ func (au *AuthorUpdate) SetNillableName(s *string) *AuthorUpdate {
 	return au
 }
 
+// SetEmail sets the "email" field.
+func (au *AuthorUpdate) SetEmail(s string) *AuthorUpdate {
+	au.mutation.SetEmail(s)
+	return au
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (au *AuthorUpdate) SetNillableEmail(s *string) *AuthorUpdate {
+	if s != nil {
+		au.SetEmail(*s)
+	}
+	return au
+}
+
+// ClearEmail clears the value of the "email" field.
+func (au *AuthorUpdate) ClearEmail() *AuthorUpdate {
+	au.mutation.ClearEmail()
+	return au
+}
+
 // AddArticleIDs adds the "articles" edge to the Article entity by IDs.
 func (au *AuthorUpdate) AddArticleIDs(ids ...uuid.UUID) *AuthorUpdate {
 	au.mutation.AddArticleIDs(ids...)
@@ -111,7 +131,20 @@ func (au *AuthorUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (au *AuthorUpdate) check() error {
+	if v, ok := au.mutation.Email(); ok {
+		if err := author.EmailValidator(v); err != nil {
+			return &ValidationError{Name: "email", err: fmt.Errorf(`wiringent: validator failed for field "Author.email": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (au *AuthorUpdate) sqlSave(ctx context.Context) (n int, err error) {
+	if err := au.check(); err != nil {
+		return n, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(author.Table, author.Columns, sqlgraph.NewFieldSpec(author.FieldID, field.TypeUUID))
 	if ps := au.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -122,6 +155,12 @@ func (au *AuthorUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if value, ok := au.mutation.Name(); ok {
 		_spec.SetField(author.FieldName, field.TypeString, value)
+	}
+	if value, ok := au.mutation.Email(); ok {
+		_spec.SetField(author.FieldEmail, field.TypeString, value)
+	}
+	if au.mutation.EmailCleared() {
+		_spec.ClearField(author.FieldEmail, field.TypeString)
 	}
 	if au.mutation.ArticlesCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -199,6 +238,26 @@ func (auo *AuthorUpdateOne) SetNillableName(s *string) *AuthorUpdateOne {
 	if s != nil {
 		auo.SetName(*s)
 	}
+	return auo
+}
+
+// SetEmail sets the "email" field.
+func (auo *AuthorUpdateOne) SetEmail(s string) *AuthorUpdateOne {
+	auo.mutation.SetEmail(s)
+	return auo
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (auo *AuthorUpdateOne) SetNillableEmail(s *string) *AuthorUpdateOne {
+	if s != nil {
+		auo.SetEmail(*s)
+	}
+	return auo
+}
+
+// ClearEmail clears the value of the "email" field.
+func (auo *AuthorUpdateOne) ClearEmail() *AuthorUpdateOne {
+	auo.mutation.ClearEmail()
 	return auo
 }
 
@@ -283,7 +342,20 @@ func (auo *AuthorUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (auo *AuthorUpdateOne) check() error {
+	if v, ok := auo.mutation.Email(); ok {
+		if err := author.EmailValidator(v); err != nil {
+			return &ValidationError{Name: "email", err: fmt.Errorf(`wiringent: validator failed for field "Author.email": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (auo *AuthorUpdateOne) sqlSave(ctx context.Context) (_node *Author, err error) {
+	if err := auo.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(author.Table, author.Columns, sqlgraph.NewFieldSpec(author.FieldID, field.TypeUUID))
 	id, ok := auo.mutation.ID()
 	if !ok {
@@ -311,6 +383,12 @@ func (auo *AuthorUpdateOne) sqlSave(ctx context.Context) (_node *Author, err err
 	}
 	if value, ok := auo.mutation.Name(); ok {
 		_spec.SetField(author.FieldName, field.TypeString, value)
+	}
+	if value, ok := auo.mutation.Email(); ok {
+		_spec.SetField(author.FieldEmail, field.TypeString, value)
+	}
+	if auo.mutation.EmailCleared() {
+		_spec.ClearField(author.FieldEmail, field.TypeString)
 	}
 	if auo.mutation.ArticlesCleared() {
 		edge := &sqlgraph.EdgeSpec{

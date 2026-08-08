@@ -34,6 +34,8 @@ type problem struct {
 
 func newClient(t *testing.T) *ent.Client {
 	t.Helper()
+	previousErrorMap := ent.ErrorMap
+	t.Cleanup(func() { ent.ErrorMap = previousErrorMap })
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := stdsql.Open("sqlite", dsn)
 	if err != nil {
@@ -199,6 +201,7 @@ func TestHTTPProblemStatuses(t *testing.T) {
 		{"400 middle sort allow-list", http.MethodGet, "/articles?_sort=secret", "", nil, http.StatusBadRequest, ""},
 		{"404 missing row", http.MethodGet, "/articles/00000000-0000-0000-0000-000000000001", "", nil, http.StatusNotFound, ""},
 		{"422 validation", http.MethodPost, "/articles", "application/json", strings.NewReader(`{}`), http.StatusUnprocessableEntity, ""},
+		{"422 save validation names field", http.MethodPost, "/articles", "application/json", strings.NewReader(`{"title":"` + strings.Repeat("x", 65) + `"}`), http.StatusUnprocessableEntity, "title"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -224,6 +227,60 @@ func TestHTTPProblemStatuses(t *testing.T) {
 		createArticle(t, server, "duplicate")
 		response, body := request(t, server.Client(), http.MethodPost, server.URL+"/articles", "application/json", strings.NewReader(`{"title":"duplicate"}`))
 		requireStatus(t, response, body, http.StatusConflict)
+	})
+}
+
+func TestHTTPUnknownDialectLeavesDuplicateAs500(t *testing.T) {
+	previousErrorMap := ent.ErrorMap
+	t.Cleanup(func() { ent.ErrorMap = previousErrorMap })
+
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := stdsql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("open SQLite: %v", err)
+	}
+	sqliteClient := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, db)))
+	if err := sqliteClient.Schema.Create(context.Background()); err != nil {
+		t.Fatalf("migrate through SQLite dialect: %v", err)
+	}
+	client := ent.NewClient(ent.Driver(entsql.OpenDB("weird", db)))
+	t.Cleanup(func() { _ = client.Close() })
+
+	server := newTestServer(t, ent.API(client))
+	t.Cleanup(server.Close)
+	createArticle(t, server, "duplicate")
+	response, body := request(t, server.Client(), http.MethodPost, server.URL+"/articles", "application/json",
+		strings.NewReader(`{"title":"duplicate"}`))
+	requireStatus(t, response, body, http.StatusInternalServerError)
+}
+
+func TestHTTPUniqueViolationEscapeHatchOrdering(t *testing.T) {
+	custom := func(error) bool { return false }
+
+	t.Run("installed before API survives", func(t *testing.T) {
+		client := newClient(t)
+		ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(custom)
+		server := newTestServer(t, ent.API(client))
+		defer server.Close()
+		createArticle(t, server, "before")
+		response, body := request(t, server.Client(), http.MethodPost, server.URL+"/articles", "application/json",
+			strings.NewReader(`{"title":"before"}`))
+		requireStatus(t, response, body, http.StatusInternalServerError)
+	})
+
+	t.Run("installed after API overrides automatic", func(t *testing.T) {
+		client := newClient(t)
+		api := ent.API(client)
+		if !ent.ErrorMap.HasUniqueViolation() {
+			t.Fatal("API did not install the SQLite uniqueness determination")
+		}
+		ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(custom)
+		server := newTestServer(t, api)
+		defer server.Close()
+		createArticle(t, server, "after")
+		response, body := request(t, server.Client(), http.MethodPost, server.URL+"/articles", "application/json",
+			strings.NewReader(`{"title":"after"}`))
+		requireStatus(t, response, body, http.StatusInternalServerError)
 	})
 }
 

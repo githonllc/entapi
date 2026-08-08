@@ -266,8 +266,9 @@ mux.Handle("/v1/", http.StripPrefix("/v1", api))
 错误统一是 RFC 9457 `application/problem+json`；`WriteProblem` 写出
 `type: "about:blank"`、title、status、detail，并在 error chain 含 `*FieldError` 时加
 `field`。bind 失败是 400，生成 `Validate` 失败是 422，不支持的 media type 是 415，超限
-body 是 413；中间步骤的 sentinel 映射到 404/409/400，未分类错误是 500。Save-time Ent
-`ValidationError` 的分类留给 #74，本 slice 仍落到 500。
+body 是 413；中间步骤的 sentinel 映射到 404/409，List validation 是 400，Create/Patch
+validation 是 422。Get/Delete 没有 validation 分支。未分类错误是 500。Save-time Ent
+`ValidationError` 映射为 422；Ent 给出字段名时，problem response 同时带 `field`。
 
 POST 与 PATCH 只接受 `application/json`，允许 media-type 参数。body 在读取前被限制为
 **1 MiB，且没有配置旋钮**。未知 key 会与生成的 create/patch tag 数据比较，因此 PATCH 中
@@ -490,38 +491,47 @@ create 或 update 在重新读取时不会映射两次。于是
 `errors.Is(err, entapi.ErrNotFound)` 在你的 handler 边界上直接可用，无需拆开 ent 的
 错误类型。
 
-`ErrorMap` 由模板发射**一行**：
+`ErrorMap` 由模板连同 Ent 的三个生成谓词和字段名提取器一起发射：
 
 ```go
-var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError)
-```
-
-两个谓词都**不带限定符**，所以它们绑定到 ent 生成到**同一个包**里的那两个函数。这是必须的：
-`ent.NotFoundError` 和 `ent.ConstraintError` 是 ent 为每个消费者项目单独生成的类型，框架里
-并不存在它们，所以 runtime 只能收 `func(error) bool` 而永远不认识任何 ent 类型。
-
-**`ErrorMap` 开箱状态下不会报告唯一性冲突。** `MapError` 的分支是：not-found → 包装
-`ErrNotFound`；constraint **且** 你装了唯一性判定 → 包装 `ErrAlreadyExists`；其余**原样
-返回**。ent 的 `IsConstraintError` 分辨不出 `UNIQUE` 与 `FOREIGN KEY`，所以这是按驱动
-opt-in 的：
-
-```go
-func init() {
-    ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(func(err error) bool {
-        var pgErr *pgconn.PgError
-        return errors.As(err, &pgErr) && pgErr.Code == "23505"
+var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError).
+    WithValidation(IsValidationError, func(err error) (string, bool) {
+        var ve *ValidationError
+        if errors.As(err, &ve) { return ve.Name, true }
+        return "", false
     })
-}
 ```
 
-跳过它的代价是本该 409 的地方给你 500；它绝不会产生一个错误的 409。`ErrorMap` 是一个普通的
-包级变量，自身不带任何同步——请在构造 client 处、第一个请求之前赋值。
+三个谓词与 `ValidationError` 都**不带限定符**，所以它们绑定到 Ent 生成到**同一个包**里的符号。
+这些类型与谓词属于每个消费者项目，stdlib-only runtime 因而只接收函数，永远不命名 Ent 类型。
+
+`MapError` 的固定顺序是：nil → not-found → validation（提取成功时再带 `FieldError`）→
+constraint **且** unique → 原样返回。unique 判定仍受 Ent 的 `IsConstraintError` 门控；纯文本
+永远不能把任意错误直接分类。
+
+`API(client)` 会按 dialect 自动安装 unique 判定，除非 `HasUniqueViolation` 发现消费者已经安装：
+
+| Dialect | 判为 unique | 闭合失败并落到 500 |
+|---|---|---|
+| `postgres` | 实现 `SQLState() string` 且值为 `23505`；没有该方法时，文本含 `violates unique constraint` | 一旦 SQLSTATE 存在，非 `23505` 就是权威结果，绝不继续匹配文本。旧 lib/pq 没有 `SQLState()` 时，非英文 `lc_messages` 会漏判 |
+| `mysql` | 文本含 `Error 1062` | 其他文本。该 marker 由 go-sql-driver/mysql 从 `MySQLError.Number` 格式化，免疫 locale |
+| `sqlite3` | 文本含 `UNIQUE constraint failed` | 其他文本 |
+| 其他 | 什么都不装 | 所有 duplicate 都保持未分类 |
+
+三个文本 marker 逐字钉在 Ent v0.14.4 的 `sqlgraph.IsUniqueConstraintError` 上，因此文本契约
+与上游共享漂移，而不是另造一份。所有漏判都闭合为 500。`API()` 前安装的自定义判定会被保留；
+在 `API()` 后安装则覆盖自动判定。`ErrorMap` 是普通包级变量，不带同步，请在开始服务请求前配置。
+
+一个命名 residue 仍故意不分类：Ent 把清除 required unique edge `Article.author` 报成裸错误
+`wiringent: clearing a required unique edge "Article.author"`。它不是 `ValidationError`，不携带任何
+sentinel，HTTP 结果是 500。生成的 PATCH 表面无法触发它；只有直接调用 builder 才能触发。
 
 > **实现：** `templates/wiring.tmpl`、`templates/errors.tmpl`；
 > `runtime/errors.go` — `ErrNotFound`、`ErrAlreadyExists`、`ErrValidation`、`IsNotFound`、
 > `IsAlreadyExists`、`IsValidation`；
 > `runtime/errors_map.go` — `ErrorMapper`、`NewErrorMapper`、`WithUniqueViolation`、
-> `MapError`；`runtime/query.go` — `ListPage`、`GetOne`、`SaveOne`、`Saver[E]`；
+> `WithValidation`、`HasUniqueViolation`、`MapError`；`runtime/errors_dialect.go` —
+> `UniqueViolation`；`runtime/query.go` — `ListPage`、`GetOne`、`SaveOne`、`Saver[E]`；
 > `funcs_imports.go` — `wiringImports`；生成物样例：
 > `internal/fixtures/wiring/wiringent/article_wiring.go`
 
@@ -711,8 +721,8 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
 
 按「有多安静地伤害你」排序。
 
-1. **在你调用 `WithUniqueViolation` 之前，`ErrorMap` 永远不会返回 `ErrAlreadyExists`。**
-   一个重复键会原样穿过 `MapError`，表现为 500。
+1. **未知 dialect 不会得到宽松的 unique 猜测。** 重复键保持未分类并表现为 500。自定义
+   dialect 请在 `API()` 前调用 `WithUniqueViolation`。
 2. **`New{E}Response(nil)` 返回 `(nil, nil)`。** 不是错误。如果你把一次未命中的查询直接喂
    进它，拿到的是一对 nil，而不是 not-found。
 3. **`like:`、`ilike:` 与 `suffix:` 需要 `api.Searchable()`。** 用在只 Filterable 的

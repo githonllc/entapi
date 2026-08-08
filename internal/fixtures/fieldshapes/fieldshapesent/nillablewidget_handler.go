@@ -121,7 +121,7 @@ func (h *APIHandler) handleCreateNillableWidget(w http.ResponseWriter, r *http.R
 		case entapi.IsAlreadyExists(err):
 			status = http.StatusConflict
 		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
+			status = http.StatusUnprocessableEntity
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
@@ -156,8 +156,6 @@ func (h *APIHandler) handleGetNillableWidget(w http.ResponseWriter, r *http.Requ
 			status = http.StatusNotFound
 		case entapi.IsAlreadyExists(err):
 			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
@@ -246,7 +244,7 @@ func (h *APIHandler) handlePatchNillableWidget(w http.ResponseWriter, r *http.Re
 		case entapi.IsAlreadyExists(err):
 			status = http.StatusConflict
 		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
+			status = http.StatusUnprocessableEntity
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
@@ -281,8 +279,6 @@ func (h *APIHandler) handleDeleteNillableWidget(w http.ResponseWriter, r *http.R
 			status = http.StatusNotFound
 		case entapi.IsAlreadyExists(deleteErr):
 			status = http.StatusConflict
-		case entapi.IsValidation(deleteErr):
-			status = http.StatusBadRequest
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), deleteErr)
 		return

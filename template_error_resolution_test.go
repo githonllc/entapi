@@ -99,7 +99,8 @@ func TestDTOTemplateResolvesIsNotFoundToEnt(t *testing.T) {
 //
 // errors.tmpl emits
 //
-//	var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError)
+//	var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError).
+//		WithValidation(IsValidationError, func(err error) (string, bool) { ... })
 //
 // into the consumer's `package ent`, so both names bind to Ent's own generated
 // predicates. Qualifying either as entapi.* still COMPILES — this package
@@ -124,7 +125,13 @@ func TestErrorMapTemplateResolvesEntPredicates(t *testing.T) {
 	if !strings.Contains(text, "entapi.NewErrorMapper(IsNotFound, IsConstraintError)") {
 		t.Error("errors.tmpl no longer constructs the mapper from Ent's unqualified IsNotFound and IsConstraintError; if the wiring changed, update this test")
 	}
-	for _, name := range []string{"IsNotFound", "IsConstraintError"} {
+	if !strings.Contains(text, "WithValidation(IsValidationError, func(err error) (string, bool)") {
+		t.Error("errors.tmpl does not install Ent's unqualified IsValidationError predicate")
+	}
+	if !strings.Contains(text, "var ve *ValidationError") || !strings.Contains(text, "errors.As(err, &ve)") {
+		t.Error("errors.tmpl does not extract the unqualified generated ValidationError type through errors.As")
+	}
+	for _, name := range []string{"IsNotFound", "IsConstraintError", "IsValidationError", "ValidationError"} {
 		qualified := regexp.MustCompile(`[\w.]+\.` + name + `\b`)
 		if m := qualified.FindAllString(text, -1); len(m) > 0 {
 			t.Errorf("errors.tmpl qualifies %s as %v; it must stay unqualified so it binds to Ent's generated predicate in package ent", name, m)

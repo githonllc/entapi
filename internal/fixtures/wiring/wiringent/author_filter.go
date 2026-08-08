@@ -391,6 +391,8 @@ func ParseAuthorQuery(q url.Values) (*AuthorFilter, entapi.ListRequest, error) {
 			}
 		default:
 			switch key {
+			case "email":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
 			default:
 				return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown query field %q with value %q", entapi.ErrValidation, key, values)
 			}

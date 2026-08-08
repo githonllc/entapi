@@ -1,9 +1,11 @@
 package e2e
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	"entgo.io/ent/dialect"
 	"github.com/google/uuid"
 
 	// Aliased back to `ent`. The fixture package is named wiringent so that
@@ -27,22 +29,18 @@ import (
 // ent actually supplies, and there is exactly one way to find out what
 // ent.IsConstraintError returns for a foreign-key violation: cause one.
 //
-// Three axes, and the third is the whole point of the issue:
+// Four axes, with validation and the deliberately unclassified residue added
+// by #74:
 //
-//	a missing row          -> entapi.ErrNotFound, through every operation
-//	a UNIQUE violation     -> entapi.ErrAlreadyExists
-//	a FOREIGN KEY violation-> NOT already-exists, NOT not-found, not swallowed
+//	a missing row            -> entapi.ErrNotFound, through every operation
+//	a UNIQUE violation       -> entapi.ErrAlreadyExists
+//	a FOREIGN KEY violation  -> NOT already-exists, NOT not-found, not swallowed
+//	a Save validation        -> entapi.ErrValidation with its field name
+//	a bare required-edge error -> no sentinel, not swallowed
 //
-// ent reports the last two identically, as *ent.ConstraintError.
-
-// sqliteUniqueViolation is the dialect-specific half. It stays here, in the
-// consumer, because that is the decision #13 records: the distinction between a
-// duplicate key and a foreign-key failure lives in the driver error wrapped by
-// *ent.ConstraintError, and the library does not guess it. SQLite says
-// "UNIQUE constraint failed: authors.name"; Postgres would say SQLSTATE 23505.
-func sqliteUniqueViolation(err error) bool {
-	return strings.Contains(err.Error(), "UNIQUE constraint failed")
-}
+// Ent reports UNIQUE and FOREIGN KEY failures identically as
+// *ent.ConstraintError. The validation and bare-error axes prove the two
+// separate Save-time shapes added by #74.
 
 // installUniqueViolation is the one line a consumer writes to get already-exists
 // classification, and t.Cleanup restores the default so the test that asserts
@@ -50,7 +48,11 @@ func sqliteUniqueViolation(err error) bool {
 func installUniqueViolation(t *testing.T) {
 	t.Helper()
 	prev := ent.ErrorMap
-	ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(sqliteUniqueViolation)
+	isUnique, ok := entapi.UniqueViolation(dialect.SQLite)
+	if !ok {
+		t.Fatalf("no uniqueness determination for %q", dialect.SQLite)
+	}
+	ent.ErrorMap = ent.ErrorMap.WithUniqueViolation(isUnique)
 	t.Cleanup(func() { ent.ErrorMap = prev })
 }
 
@@ -323,5 +325,44 @@ func TestWithoutTheUniquenessPredicateNothingClaimsAlreadyExists(t *testing.T) {
 	// classifies it, and only already-exists is given up.
 	if _, err := ent.GetAuthor(ctx, c, uuid.New()); !entapi.IsNotFound(err) {
 		t.Errorf("GetAuthor on a missing row = %v, want entapi.ErrNotFound", err)
+	}
+}
+
+func TestPatchSaveValidationMapsFieldName(t *testing.T) {
+	c, ctx := newClient(t)
+	author := createAuthor(t, ctx, c, "ada")
+
+	_, err := ent.PatchAuthor(ctx, c, author.ID,
+		validAuthorPatch(t, `{"email":"`+strings.Repeat("x", 65)+`"}`))
+	if err == nil {
+		t.Fatal("an email longer than the schema maximum was accepted")
+	}
+	if !entapi.IsValidation(err) {
+		t.Fatalf("err = %v, want entapi.ErrValidation in the chain", err)
+	}
+	var fieldErr *entapi.FieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "email" {
+		t.Fatalf("field error = %+v, want field email; err = %v", fieldErr, err)
+	}
+	if entapi.IsNotFound(err) || entapi.IsAlreadyExists(err) {
+		t.Fatalf("validation error carries a wrong sentinel: %v", err)
+	}
+}
+
+func TestRequiredEdgeClearResidueCarriesNoSentinel(t *testing.T) {
+	c, ctx := newClient(t)
+	author := createAuthor(t, ctx, c, "ada")
+	article := createArticle(t, ctx, c, "owned", nil, author.ID)
+
+	err := c.Article.UpdateOneID(article.ID).ClearAuthor().Exec(ctx)
+	if err == nil {
+		t.Fatal("clearing the required Article.author edge returned no error")
+	}
+	mapped := ent.ErrorMap.MapError(err)
+	if entapi.IsNotFound(mapped) || entapi.IsAlreadyExists(mapped) || entapi.IsValidation(mapped) {
+		t.Fatalf("bare required-edge error carries a sentinel: %v", mapped)
+	}
+	if !errors.Is(mapped, err) {
+		t.Fatalf("bare required-edge error was swallowed: %v", mapped)
 	}
 }

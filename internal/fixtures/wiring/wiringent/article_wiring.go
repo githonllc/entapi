@@ -109,12 +109,12 @@ func CreateArticle(ctx context.Context, db *Client, v *ValidArticleCreateRequest
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateArticle applies a validated patch to one Article.
+// PatchArticle applies a validated patch to one Article.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateArticle(ctx context.Context, db *Client, id uuid.UUID, v *ValidArticlePatchRequest) (*ArticleResponse, error) {
+func PatchArticle(ctx context.Context, db *Client, id uuid.UUID, v *ValidArticlePatchRequest) (*ArticleResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Article.UpdateOneID(id)), articleReloaded(ctx, db))
 	return r, ErrorMap.MapError(err)
 }

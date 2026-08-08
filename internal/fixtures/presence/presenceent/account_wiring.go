@@ -95,12 +95,12 @@ func CreateAccount(ctx context.Context, db *Client, v *ValidAccountCreateRequest
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateAccount applies a validated patch to one Account.
+// PatchAccount applies a validated patch to one Account.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateAccount(ctx context.Context, db *Client, id uuid.UUID, v *ValidAccountPatchRequest) (*AccountResponse, error) {
+func PatchAccount(ctx context.Context, db *Client, id uuid.UUID, v *ValidAccountPatchRequest) (*AccountResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Account.UpdateOneID(id)), NewAccountResponse)
 	return r, ErrorMap.MapError(err)
 }

@@ -109,12 +109,12 @@ func CreateUser(ctx context.Context, db *Client, v *ValidUserCreateRequest) (*Us
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateUser applies a validated patch to one User.
+// PatchUser applies a validated patch to one User.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateUser(ctx context.Context, db *Client, id uuid.UUID, v *ValidUserPatchRequest) (*UserResponse, error) {
+func PatchUser(ctx context.Context, db *Client, id uuid.UUID, v *ValidUserPatchRequest) (*UserResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.User.UpdateOneID(id)), userReloaded(ctx, db))
 	return r, ErrorMap.MapError(err)
 }

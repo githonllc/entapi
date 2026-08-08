@@ -115,16 +115,16 @@ func TestMissingRowMapsToNotFoundEverywhere(t *testing.T) {
 		{"GetArticle", func() error { _, err := ent.GetArticle(ctx, c, missing); return err }},
 		{"GetNote", func() error { _, err := ent.GetNote(ctx, c, missing); return err }},
 
-		{"UpdateAuthor", func() error {
-			_, err := ent.UpdateAuthor(ctx, c, missing, validAuthorPatch(t, `{"name":"ghost"}`))
+		{"PatchAuthor", func() error {
+			_, err := ent.PatchAuthor(ctx, c, missing, validAuthorPatch(t, `{"name":"ghost"}`))
 			return err
 		}},
-		{"UpdateArticle", func() error {
-			_, err := ent.UpdateArticle(ctx, c, missing, validArticlePatch(t, `{"title":"ghost"}`))
+		{"PatchArticle", func() error {
+			_, err := ent.PatchArticle(ctx, c, missing, validArticlePatch(t, `{"title":"ghost"}`))
 			return err
 		}},
-		{"UpdateNote", func() error {
-			_, err := ent.UpdateNote(ctx, c, missing, validNotePatch(t, `{"body":"ghost"}`))
+		{"PatchNote", func() error {
+			_, err := ent.PatchNote(ctx, c, missing, validNotePatch(t, `{"body":"ghost"}`))
 			return err
 		}},
 
@@ -221,9 +221,9 @@ func TestUniqueViolationMapsToAlreadyExists(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateAuthor", func(t *testing.T) {
+	t.Run("PatchAuthor", func(t *testing.T) {
 		bob := createAuthor(t, ctx, c, "bob")
-		_, err := ent.UpdateAuthor(ctx, c, bob.ID, validAuthorPatch(t, `{"name":"ada"}`))
+		_, err := ent.PatchAuthor(ctx, c, bob.ID, validAuthorPatch(t, `{"name":"ada"}`))
 		if err == nil {
 			t.Fatal("renaming onto an existing name was accepted")
 		}
@@ -274,9 +274,9 @@ func TestForeignKeyViolationIsNeverADuplicate(t *testing.T) {
 		assertConstraintButNotClassified(t, "CreateArticle", err)
 	})
 
-	t.Run("UpdateArticle onto an unknown author", func(t *testing.T) {
-		_, err := ent.UpdateArticle(ctx, c, article.ID, validArticlePatch(t, `{"author_id":"`+orphanID.String()+`"}`))
-		assertConstraintButNotClassified(t, "UpdateArticle", err)
+	t.Run("PatchArticle onto an unknown author", func(t *testing.T) {
+		_, err := ent.PatchArticle(ctx, c, article.ID, validArticlePatch(t, `{"author_id":"`+orphanID.String()+`"}`))
+		assertConstraintButNotClassified(t, "PatchArticle", err)
 	})
 
 	t.Run("DeleteAuthor that is still referenced", func(t *testing.T) {

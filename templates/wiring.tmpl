@@ -120,12 +120,12 @@ func Create{{ $.Name }}(ctx context.Context, db *Client, v *Valid{{ $.Name }}Cre
 }
 {{ end }}
 {{- if $patchFields }}
-// Update{{ $.Name }} applies a validated patch to one {{ $.Name }}.
+// Patch{{ $.Name }} applies a validated patch to one {{ $.Name }}.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func Update{{ $.Name }}(ctx context.Context, db *Client, id {{ $id.Type }}, v *Valid{{ $.Name }}PatchRequest) (*{{ $.Name }}Response, error) {
+func Patch{{ $.Name }}(ctx context.Context, db *Client, id {{ $id.Type }}, v *Valid{{ $.Name }}PatchRequest) (*{{ $.Name }}Response, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.{{ $.Name }}.UpdateOneID(id)), {{ $to }})
 	return r, ErrorMap.MapError(err)
 }

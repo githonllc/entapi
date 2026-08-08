@@ -96,6 +96,9 @@
 //
 // # Migration
 //
+// Generated Update{Entity} has been renamed to Patch{Entity}. Regenerate and
+// rename call sites; the request type and behavior are unchanged.
+//
 // Generated RegisterSoftDelete has been removed. Regenerate and delete every
 // ent.RegisterSoftDelete(client) call: embedding [SoftDeleteMixin] now injects
 // the hook and interceptor into every generated client automatically. This

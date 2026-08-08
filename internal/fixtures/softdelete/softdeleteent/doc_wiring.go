@@ -109,12 +109,12 @@ func CreateDoc(ctx context.Context, db *Client, v *ValidDocCreateRequest) (*DocR
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateDoc applies a validated patch to one Doc.
+// PatchDoc applies a validated patch to one Doc.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateDoc(ctx context.Context, db *Client, id uuid.UUID, v *ValidDocPatchRequest) (*DocResponse, error) {
+func PatchDoc(ctx context.Context, db *Client, id uuid.UUID, v *ValidDocPatchRequest) (*DocResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Doc.UpdateOneID(id)), docReloaded(ctx, db))
 	return r, ErrorMap.MapError(err)
 }

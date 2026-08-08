@@ -109,12 +109,12 @@ func CreateSession(ctx context.Context, db *Client, v *ValidSessionCreateRequest
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateSession applies a validated patch to one Session.
+// PatchSession applies a validated patch to one Session.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateSession(ctx context.Context, db *Client, id uuid.UUID, v *ValidSessionPatchRequest) (*SessionResponse, error) {
+func PatchSession(ctx context.Context, db *Client, id uuid.UUID, v *ValidSessionPatchRequest) (*SessionResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Session.UpdateOneID(id)), sessionReloaded(ctx, db))
 	return r, ErrorMap.MapError(err)
 }

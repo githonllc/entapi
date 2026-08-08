@@ -95,12 +95,12 @@ func CreateEnumWidget(ctx context.Context, db *Client, v *ValidEnumWidgetCreateR
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateEnumWidget applies a validated patch to one EnumWidget.
+// PatchEnumWidget applies a validated patch to one EnumWidget.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateEnumWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidEnumWidgetPatchRequest) (*EnumWidgetResponse, error) {
+func PatchEnumWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidEnumWidgetPatchRequest) (*EnumWidgetResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.EnumWidget.UpdateOneID(id)), NewEnumWidgetResponse)
 	return r, ErrorMap.MapError(err)
 }

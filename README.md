@@ -239,7 +239,7 @@ generation loop is `if len(domainFields(node)) == 0 { continue }`.
 |---|---|
 | `{entity}_dto.go` | `{E}CreateRequest`, `{E}PatchRequest`, a `Valid…` counterpart and `Apply` for each; `{E}Response`, `{E}Summary` and their constructors; `{E}QueryWithResponseEdges`; `{E}ListResponse` and `New{E}ListResponse` |
 | `{entity}_filter.go` | `{E}Filter` with its `Predicates()`, `{E}SortKeys`, `{E}Order` |
-| `{entity}_wiring.go` | `Get{E}`, `List{Es}`, `Create{E}`, `Update{E}`, `Delete{E}`, `DeleteBatch{Es}` |
+| `{entity}_wiring.go` | `Get{E}`, `List{Es}`, `Create{E}`, `Patch{E}`, `Delete{E}`, `DeleteBatch{Es}` |
 
 Plus two files per schema, each with its own emission condition:
 
@@ -519,7 +519,7 @@ behaviour, write your own function and stop calling the generated one.
 func GetArticle(ctx context.Context, db *Client, id uuid.UUID) (*ArticleResponse, error)
 func ListArticles(ctx context.Context, db *Client, f *ArticleFilter, r entapi.ListRequest) (*entapi.Page[ArticleResponse], error)
 func CreateArticle(ctx context.Context, db *Client, v *ValidArticleCreateRequest) (*ArticleResponse, error)
-func UpdateArticle(ctx context.Context, db *Client, id uuid.UUID, v *ValidArticlePatchRequest) (*ArticleResponse, error)
+func PatchArticle(ctx context.Context, db *Client, id uuid.UUID, v *ValidArticlePatchRequest) (*ArticleResponse, error)
 func DeleteArticle(ctx context.Context, db *Client, id uuid.UUID) error
 func DeleteBatchArticles(ctx context.Context, db *Client, ids []uuid.UUID) (int, error)
 ```
@@ -903,6 +903,7 @@ exists to remove is worse than the break.
 
 | Removed | Use instead |
 |---|---|
+| generated `Update{Entity}` | generated `Patch{Entity}`; regenerate and rename call sites |
 | generated `RegisterSoftDelete` | nothing at client construction — embed `SoftDeleteMixin` in the schema and regenerate |
 | `Base{Entity}Service`, `Base{Entity}Handler`, `SetSelf`, generated hooks | the generated free functions (`Get{E}`, `List{Es}`, …); write your own function if you need different behaviour |
 | `ExtensionConfig.GenerateBaseService`, `.GenerateBaseHandler`, `WithBaseService`, `WithBaseHandler` | nothing — the base classes are gone |

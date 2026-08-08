@@ -95,12 +95,12 @@ func CreateLedger(ctx context.Context, db *Client, v *ValidLedgerCreateRequest) 
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateLedger applies a validated patch to one Ledger.
+// PatchLedger applies a validated patch to one Ledger.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateLedger(ctx context.Context, db *Client, id uuid.UUID, v *ValidLedgerPatchRequest) (*LedgerResponse, error) {
+func PatchLedger(ctx context.Context, db *Client, id uuid.UUID, v *ValidLedgerPatchRequest) (*LedgerResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Ledger.UpdateOneID(id)), NewLedgerResponse)
 	return r, ErrorMap.MapError(err)
 }

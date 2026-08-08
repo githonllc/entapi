@@ -202,7 +202,7 @@ The load-bearing design rule, repeated throughout the code and README: **scopes 
   an `int` key needs no import at all (the `intid` fixture covers exactly that).
   The `uuid.UUID`-only refusal in `schema_conflicts.go` belonged to the base
   service and base handler templates and went with them (#29).
-- `Create{Entity}`/`Update{Entity}` take the **validated** request. They have no
+- `Create{Entity}`/`Patch{Entity}` take the **validated** request. They have no
   choice: `Apply` exists only on `Valid{Entity}…Request`. The exported
   `Apply{Entity}CreateRequest`/`Apply{Entity}UpdateRequest` free functions are
   gone, because taking a raw request is exactly the escape hatch that made

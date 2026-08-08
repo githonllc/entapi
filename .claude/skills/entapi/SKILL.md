@@ -98,7 +98,7 @@ For entity `Courier`, three files are generated in `ent/`:
 |------|----------|
 | `ent/courier_dto.go` | `CourierCreateRequest`, `CourierPatchRequest`, their `Validate()`/`Apply` pair, `CourierResponse`, `CourierSummary`, `NewCourierResponse`, `CourierQueryWithResponseEdges` |
 | `ent/courier_filter.go` | `CourierFilter` with `Predicates()`, `CourierSortKeys`, `CourierOrder` |
-| `ent/courier_wiring.go` | `GetCourier`, `ListCouriers`, `CreateCourier`, `UpdateCourier`, `DeleteCourier`, `DeleteBatchCouriers` — free functions, one call into the runtime each |
+| `ent/courier_wiring.go` | `GetCourier`, `ListCouriers`, `CreateCourier`, `PatchCourier`, `DeleteCourier`, `DeleteBatchCouriers` — free functions, one call into the runtime each |
 
 ### `ent/courier_dto.go`
 
@@ -125,7 +125,7 @@ For entity `Courier`, three files are generated in `ent/`:
 func GetCourier(ctx, db *Client, id uuid.UUID) (*CourierResponse, error)
 func ListCouriers(ctx, db *Client, f *CourierFilter, r entapi.ListRequest) (*entapi.Page[CourierResponse], error)
 func CreateCourier(ctx, db *Client, v *ValidCourierCreateRequest) (*CourierResponse, error)
-func UpdateCourier(ctx, db *Client, id uuid.UUID, v *ValidCourierPatchRequest) (*CourierResponse, error)
+func PatchCourier(ctx, db *Client, id uuid.UUID, v *ValidCourierPatchRequest) (*CourierResponse, error)
 func DeleteCourier(ctx, db *Client, id uuid.UUID) error
 func DeleteBatchCouriers(ctx, db *Client, ids []uuid.UUID) (int, error)
 ```
@@ -213,7 +213,7 @@ func (h *Handler) Update(c *gin.Context) {
     if err := c.ShouldBindJSON(&req); err != nil { /* 400 */ }
     v, err := req.Validate()
     if err != nil { /* 422 */ }
-    resp, err := ent.UpdateCourier(c.Request.Context(), h.db, id, v)
+    resp, err := ent.PatchCourier(c.Request.Context(), h.db, id, v)
     if err != nil { /* map and return */ }
     response.OK(c, resp)
 }

@@ -109,12 +109,12 @@ func CreateAuthor(ctx context.Context, db *Client, v *ValidAuthorCreateRequest) 
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateAuthor applies a validated patch to one Author.
+// PatchAuthor applies a validated patch to one Author.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateAuthor(ctx context.Context, db *Client, id uuid.UUID, v *ValidAuthorPatchRequest) (*AuthorResponse, error) {
+func PatchAuthor(ctx context.Context, db *Client, id uuid.UUID, v *ValidAuthorPatchRequest) (*AuthorResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Author.UpdateOneID(id)), authorReloaded(ctx, db))
 	return r, ErrorMap.MapError(err)
 }

@@ -213,7 +213,7 @@ func (Post) Edges() []ent.Edge {
 |---|---|
 | `{entity}_dto.go` | `{E}CreateRequest`、`{E}PatchRequest` 及各自的 `Valid…` 类型与 `Apply`；`{E}Response`、`{E}Summary` 及构造器；`{E}QueryWithResponseEdges`；`{E}ListResponse` 与 `New{E}ListResponse` |
 | `{entity}_filter.go` | `{E}Filter` 及其 `Predicates()`、`{E}SortKeys`、`{E}Order` |
-| `{entity}_wiring.go` | `Get{E}`、`List{Es}`、`Create{E}`、`Update{E}`、`Delete{E}`、`DeleteBatch{Es}` |
+| `{entity}_wiring.go` | `Get{E}`、`List{Es}`、`Create{E}`、`Patch{E}`、`Delete{E}`、`DeleteBatch{Es}` |
 
 外加每个 schema 两个文件，各自有独立的发射条件：
 
@@ -454,7 +454,7 @@ ent 认识而本包没有命名的操作符会被跳过，不会以错误的名�
 func GetArticle(ctx context.Context, db *Client, id uuid.UUID) (*ArticleResponse, error)
 func ListArticles(ctx context.Context, db *Client, f *ArticleFilter, r entapi.ListRequest) (*entapi.Page[ArticleResponse], error)
 func CreateArticle(ctx context.Context, db *Client, v *ValidArticleCreateRequest) (*ArticleResponse, error)
-func UpdateArticle(ctx context.Context, db *Client, id uuid.UUID, v *ValidArticlePatchRequest) (*ArticleResponse, error)
+func PatchArticle(ctx context.Context, db *Client, id uuid.UUID, v *ValidArticlePatchRequest) (*ArticleResponse, error)
 func DeleteArticle(ctx context.Context, db *Client, id uuid.UUID) error
 func DeleteBatchArticles(ctx context.Context, db *Client, ids []uuid.UUID) (int, error)
 ```
@@ -766,6 +766,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 
 | 已删除 | 改用 |
 |---|---|
+| 生成的 `Update{Entity}` | 生成的 `Patch{Entity}`；重新生成并重命名调用点 |
 | 生成的 `RegisterSoftDelete` | client 构造处无需任何调用——在 schema 中嵌入 `SoftDeleteMixin` 并重新生成 |
 | `Base{Entity}Service`、`Base{Entity}Handler`、`SetSelf`、生成的 hook | 生成的自由函数（`Get{E}`、`List{Es}`、…）；需要不同行为就写你自己的函数 |
 | `ExtensionConfig.GenerateBaseService`、`.GenerateBaseHandler`、`WithBaseService`、`WithBaseHandler` | 无对应物——基类不再存在 |

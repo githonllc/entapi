@@ -95,12 +95,12 @@ func CreateSecret(ctx context.Context, db *Client, v *ValidSecretCreateRequest) 
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateSecret applies a validated patch to one Secret.
+// PatchSecret applies a validated patch to one Secret.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateSecret(ctx context.Context, db *Client, id uuid.UUID, v *ValidSecretPatchRequest) (*SecretResponse, error) {
+func PatchSecret(ctx context.Context, db *Client, id uuid.UUID, v *ValidSecretPatchRequest) (*SecretResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Secret.UpdateOneID(id)), NewSecretResponse)
 	return r, ErrorMap.MapError(err)
 }

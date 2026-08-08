@@ -109,12 +109,12 @@ func CreateNote(ctx context.Context, db *Client, v *ValidNoteCreateRequest) (*No
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateNote applies a validated patch to one Note.
+// PatchNote applies a validated patch to one Note.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateNote(ctx context.Context, db *Client, id uuid.UUID, v *ValidNotePatchRequest) (*NoteResponse, error) {
+func PatchNote(ctx context.Context, db *Client, id uuid.UUID, v *ValidNotePatchRequest) (*NoteResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Note.UpdateOneID(id)), noteReloaded(ctx, db))
 	return r, ErrorMap.MapError(err)
 }

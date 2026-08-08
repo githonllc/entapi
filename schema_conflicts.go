@@ -459,7 +459,7 @@ func derivedEntityDecls(node *gen.Type) []derivedName {
 		{"Get" + n, wiring},
 		{"List" + p, wiring},
 		{"Create" + n, wiring},
-		{"Update" + n, wiring},
+		{"Patch" + n, wiring},
 		{"Delete" + n, wiring},
 		{"DeleteBatch" + p, wiring},
 	}

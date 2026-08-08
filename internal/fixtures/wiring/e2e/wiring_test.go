@@ -232,9 +232,9 @@ func TestWiringCreateReadListPatchDelete(t *testing.T) {
 		if err != nil {
 			t.Fatalf("validate patch: %v", err)
 		}
-		got, err := ent.UpdateArticle(ctx, c, first.ID, v)
+		got, err := ent.PatchArticle(ctx, c, first.ID, v)
 		if err != nil {
-			t.Fatalf("UpdateArticle: %v", err)
+			t.Fatalf("PatchArticle: %v", err)
 		}
 		if got.Title != "beta II" {
 			t.Errorf("patched title = %q, want %q", got.Title, "beta II")

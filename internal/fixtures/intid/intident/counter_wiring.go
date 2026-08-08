@@ -94,12 +94,12 @@ func CreateCounter(ctx context.Context, db *Client, v *ValidCounterCreateRequest
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateCounter applies a validated patch to one Counter.
+// PatchCounter applies a validated patch to one Counter.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateCounter(ctx context.Context, db *Client, id int, v *ValidCounterPatchRequest) (*CounterResponse, error) {
+func PatchCounter(ctx context.Context, db *Client, id int, v *ValidCounterPatchRequest) (*CounterResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Counter.UpdateOneID(id)), NewCounterResponse)
 	return r, ErrorMap.MapError(err)
 }

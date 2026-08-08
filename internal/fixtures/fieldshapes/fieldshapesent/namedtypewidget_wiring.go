@@ -95,12 +95,12 @@ func CreateNamedTypeWidget(ctx context.Context, db *Client, v *ValidNamedTypeWid
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateNamedTypeWidget applies a validated patch to one NamedTypeWidget.
+// PatchNamedTypeWidget applies a validated patch to one NamedTypeWidget.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateNamedTypeWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidNamedTypeWidgetPatchRequest) (*NamedTypeWidgetResponse, error) {
+func PatchNamedTypeWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidNamedTypeWidgetPatchRequest) (*NamedTypeWidgetResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.NamedTypeWidget.UpdateOneID(id)), NewNamedTypeWidgetResponse)
 	return r, ErrorMap.MapError(err)
 }

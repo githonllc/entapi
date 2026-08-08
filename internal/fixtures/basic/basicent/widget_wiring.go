@@ -95,12 +95,12 @@ func CreateWidget(ctx context.Context, db *Client, v *ValidWidgetCreateRequest) 
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateWidget applies a validated patch to one Widget.
+// PatchWidget applies a validated patch to one Widget.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidWidgetPatchRequest) (*WidgetResponse, error) {
+func PatchWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidWidgetPatchRequest) (*WidgetResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Widget.UpdateOneID(id)), NewWidgetResponse)
 	return r, ErrorMap.MapError(err)
 }

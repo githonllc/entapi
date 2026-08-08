@@ -15,9 +15,9 @@ const (
 	// - Repository layer: unrestricted, can create and set this field
 	ScopeCreate FieldScope = "create"
 
-	// ScopeUpdate indicates the field can be populated from an HTTP update request.
+	// ScopeUpdate indicates the field can be populated from an HTTP patch request.
 	// Scope of influence:
-	// - Handler layer: the field appears in the UpdateRequest struct
+	// - Handler layer: the field appears in the PatchRequest struct
 	// - Service layer: unrestricted, can update this field
 	// - Repository layer: unrestricted, can update this field
 	ScopeUpdate FieldScope = "update"

@@ -109,12 +109,12 @@ func CreateNode(ctx context.Context, db *Client, v *ValidNodeCreateRequest) (*No
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateNode applies a validated patch to one Node.
+// PatchNode applies a validated patch to one Node.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateNode(ctx context.Context, db *Client, id uuid.UUID, v *ValidNodePatchRequest) (*NodeResponse, error) {
+func PatchNode(ctx context.Context, db *Client, id uuid.UUID, v *ValidNodePatchRequest) (*NodeResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Node.UpdateOneID(id)), nodeReloaded(ctx, db))
 	return r, ErrorMap.MapError(err)
 }

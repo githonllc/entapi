@@ -95,12 +95,12 @@ func CreateRecord(ctx context.Context, db *Client, v *ValidRecordCreateRequest) 
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateRecord applies a validated patch to one Record.
+// PatchRecord applies a validated patch to one Record.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateRecord(ctx context.Context, db *Client, id uuid.UUID, v *ValidRecordPatchRequest) (*RecordResponse, error) {
+func PatchRecord(ctx context.Context, db *Client, id uuid.UUID, v *ValidRecordPatchRequest) (*RecordResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Record.UpdateOneID(id)), NewRecordResponse)
 	return r, ErrorMap.MapError(err)
 }

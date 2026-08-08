@@ -95,12 +95,12 @@ func CreatePlain(ctx context.Context, db *Client, v *ValidPlainCreateRequest) (*
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdatePlain applies a validated patch to one Plain.
+// PatchPlain applies a validated patch to one Plain.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdatePlain(ctx context.Context, db *Client, id uuid.UUID, v *ValidPlainPatchRequest) (*PlainResponse, error) {
+func PatchPlain(ctx context.Context, db *Client, id uuid.UUID, v *ValidPlainPatchRequest) (*PlainResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.Plain.UpdateOneID(id)), NewPlainResponse)
 	return r, ErrorMap.MapError(err)
 }

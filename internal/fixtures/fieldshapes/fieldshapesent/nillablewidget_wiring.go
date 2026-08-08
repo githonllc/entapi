@@ -95,12 +95,12 @@ func CreateNillableWidget(ctx context.Context, db *Client, v *ValidNillableWidge
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateNillableWidget applies a validated patch to one NillableWidget.
+// PatchNillableWidget applies a validated patch to one NillableWidget.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateNillableWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidNillableWidgetPatchRequest) (*NillableWidgetResponse, error) {
+func PatchNillableWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidNillableWidgetPatchRequest) (*NillableWidgetResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.NillableWidget.UpdateOneID(id)), NewNillableWidgetResponse)
 	return r, ErrorMap.MapError(err)
 }

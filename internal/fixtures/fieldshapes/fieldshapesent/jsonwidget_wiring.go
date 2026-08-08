@@ -95,12 +95,12 @@ func CreateJSONWidget(ctx context.Context, db *Client, v *ValidJSONWidgetCreateR
 	return r, ErrorMap.MapError(err)
 }
 
-// UpdateJSONWidget applies a validated patch to one JSONWidget.
+// PatchJSONWidget applies a validated patch to one JSONWidget.
 //
 // Fields the patch did not carry are not written at all, so a partial update
 // stays partial — that property belongs to Apply, and this function does not
 // re-decide it.
-func UpdateJSONWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidJSONWidgetPatchRequest) (*JSONWidgetResponse, error) {
+func PatchJSONWidget(ctx context.Context, db *Client, id uuid.UUID, v *ValidJSONWidgetPatchRequest) (*JSONWidgetResponse, error) {
 	r, err := entapi.SaveOne(ctx, v.Apply(db.JSONWidget.UpdateOneID(id)), NewJSONWidgetResponse)
 	return r, ErrorMap.MapError(err)
 }

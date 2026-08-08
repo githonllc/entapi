@@ -78,7 +78,7 @@ func (Probe) Fields() []ent.Field {
 
 		// create + update + response + the full query surface. Create and
 		// update scopes are what make ProbeCreateRequest, ProbePatchRequest,
-		// CreateProbe and UpdateProbe reachable at all.
+		// CreateProbe and PatchProbe reachable at all.
 		field.String("name").
 			Annotations(entapi.DefaultField().
 				WithRequired(entapi.ScopeCreate).

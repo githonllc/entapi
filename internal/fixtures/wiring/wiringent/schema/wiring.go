@@ -47,6 +47,10 @@ func (Author) Fields() []ent.Field {
 		field.String("name").
 			Unique().
 			Annotations(api.Filterable(), api.Searchable(), api.Sortable()),
+
+		field.String("email").
+			Optional().
+			MaxLen(64),
 	}
 }
 

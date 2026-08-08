@@ -1,6 +1,10 @@
 package entapi
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/printer"
+	"go/token"
 	"strings"
 	"testing"
 )
@@ -38,6 +42,48 @@ func TestHTTPTemplateBuildsRouteManifestAndLiteralMountLoop(t *testing.T) {
 		"func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)",
 		"for _, rt := range h.routes {\n\t\tmux.Handle(rt.Method+\" \"+rt.Path, rt.Handler)\n\t}",
 	)
+}
+
+func TestHandlerMiddleValidationStatusDependsOnOperation(t *testing.T) {
+	root := repoRoot(t)
+	g := loadFixtureGraph(t, fixtureSchemaDir(root, "httpdemo"), fixtureEntPkgPath("httpdemo"))
+	article := nodeNamed(t, g, "Article")
+	src := renderTemplate(t, NewExtensionWithOptions(), "handler", handlerTemplate, article)
+
+	bodies := map[string]string{}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "article_handler.go", src, 0)
+	if err != nil {
+		t.Fatalf("parse rendered handler: %v\n%s", err, src)
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil {
+			continue
+		}
+		var body strings.Builder
+		if err := printer.Fprint(&body, fset, fn.Body); err != nil {
+			t.Fatalf("print %s: %v", fn.Name.Name, err)
+		}
+		bodies[fn.Name.Name] = body.String()
+	}
+
+	assertValidationStatus := func(name, status string) {
+		t.Helper()
+		body := bodies[name]
+		want := "case entapi.IsValidation(err):\n\t\t\tstatus = " + status
+		if !strings.Contains(body, want) {
+			t.Errorf("%s validation arm does not map to %s\n%s", name, status, body)
+		}
+	}
+	assertValidationStatus("handleListArticles", "http.StatusBadRequest")
+	assertValidationStatus("handleCreateArticle", "http.StatusUnprocessableEntity")
+	assertValidationStatus("handlePatchArticle", "http.StatusUnprocessableEntity")
+	for _, name := range []string{"handleGetArticle", "handleDeleteArticle"} {
+		if strings.Contains(bodies[name], "entapi.IsValidation(") {
+			t.Errorf("%s must not classify an impossible middle-step validation error\n%s", name, bodies[name])
+		}
+	}
 }
 
 func assertSourceContains(t *testing.T, src string, wants ...string) {

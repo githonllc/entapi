@@ -5,6 +5,8 @@
 package wiringent
 
 import (
+	"errors"
+
 	entapi "github.com/githonllc/entapi/runtime"
 )
 
@@ -17,41 +19,26 @@ import (
 // argument would hold that property only for as long as every call site kept
 // passing the same one, and there is no way to check that from here.
 //
-// IsNotFound and IsConstraintError are ent's own, generated into THIS package.
+// IsNotFound, IsConstraintError and IsValidationError are ent's own, generated
+// into THIS package.
 // The framework does not export them and cannot: ent generates NotFoundError
 // and ConstraintError per project. That is why the runtime takes its
 // classification as function values and never names an ent type — see
 // entapi.ErrorMapper.
 //
-// # Uniqueness is not installed here, deliberately
+// ValidationError is generated in this package too. The extractor keeps that
+// type out of the stdlib-only runtime while preserving its field name for an
+// RFC 9457 response.
 //
-// As declared, this mapper classifies a missing row and nothing else. It never
-// returns entapi.ErrAlreadyExists, because ent.IsConstraintError cannot tell
-// a duplicate key from a foreign-key failure. Verified against real ent and
-// real SQLite, both of these satisfy it:
-//
-//	UNIQUE constraint failed: authors.name (2067)
-//	FOREIGN KEY constraint failed (787)
-//
-// Mapping that predicate straight to already-exists would answer a foreign-key
-// violation with a 409, sending the caller to fix a duplicate that does not
-// exist. The distinction lives in the driver error wrapped by
-// *ent.ConstraintError and is dialect-specific, so it is yours to supply:
-//
-//	func init() {
-//		ErrorMap = ErrorMap.WithUniqueViolation(func(err error) bool {
-//			// SQLite. For Postgres, errors.As to *pgconn.PgError and
-//			// compare Code against "23505".
-//			return strings.Contains(err.Error(), "UNIQUE constraint failed")
-//		})
-//	}
-//
-// The cost of skipping that, stated rather than hidden: a duplicate key comes
-// back unclassified, so an HTTP layer reports it as a 500 instead of a 409.
-// Everything else keeps working, not-found included. That is the direction this
-// package errs in on purpose — a 500 on a duplicate is recoverable, a 409 on a
-// foreign-key failure is a wrong answer.
-//
-// Assign it where the client is built, before the first request. It is an
-// ordinary package-level variable and carries no synchronisation of its own.
-var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError)
+// API installs the runtime determination for the client's dialect unless the
+// consumer already supplied one. ErrorMap is an ordinary package-level
+// variable and carries no synchronisation of its own; configure overrides
+// while building the client, before serving requests.
+var ErrorMap = entapi.NewErrorMapper(IsNotFound, IsConstraintError).
+	WithValidation(IsValidationError, func(err error) (string, bool) {
+		var ve *ValidationError
+		if errors.As(err, &ve) {
+			return ve.Name, true
+		}
+		return "", false
+	})

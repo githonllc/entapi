@@ -15,6 +15,10 @@ import (
 func init() {
 	articleFields := schema.Article{}.Fields()
 	_ = articleFields
+	// articleDescTitle is the schema descriptor for title field.
+	articleDescTitle := articleFields[1].Descriptor()
+	// article.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	article.TitleValidator = articleDescTitle.Validators[0].(func(string) error)
 	// articleDescSlug is the schema descriptor for slug field.
 	articleDescSlug := articleFields[3].Descriptor()
 	// article.DefaultSlug holds the default value on creation for the slug field.

@@ -18,10 +18,10 @@ wiring 函数、三段式 HTTP handler 与 `APIHandler` 路由树生成进消费
 | 核心依赖 | `entgo.io/ent v0.14.4`、`golang.org/x/tools v0.30.0`（goimports）、`github.com/google/uuid` | `go.mod` |
 | 存储 / 中间件 | **无**。本库不含 SQL driver，也不含 HTTP 框架 | `go.mod` 无 driver 依赖；`Makefile` — `test-modules` 注释 |
 | 部署形态 | 库（`go get`）。无 `main`、无示例 app、无下游 ent 项目 | 仓库无 `main` 包 |
-| 包数 | **3 个手写产品包**（`entapi`、`api`、`runtime`）+ 8 个模板 + 4 个嵌套模块 | `extension.go` / `api/` / `runtime/` / `templates/` / `internal/**/go.mod` |
+| 包数 | **3 个手写产品包**（`entapi`、`api`、`runtime`）+ 8 个模板 + 5 个嵌套模块 | `extension.go` / `api/` / `runtime/` / `templates/` / `internal/**/go.mod` |
 | 手写非测试代码量 | 生成器 2977 行、api 173 行、runtime 726 行、模板 1511 行 | `wc -l`（实测） |
 | 测试规模 | 全仓 246 个 `Test*` 函数（根包 102、api 6、runtime 38、fixtures 100） | `rg '^func Test'`（实测） |
-| 测试基线 | 根模块与四个嵌套模块测试均退出 0 | `Makefile` — `test-modules`；实测 |
+| 测试基线 | 根模块与五个嵌套模块测试均退出 0 | `Makefile` — `test-modules`；实测 |
 | 覆盖目标 | `CONTRIBUTING` 定 >85%，由 `make cover` 报告 | `Makefile` — `cover` |
 
 **三个产品包是按代码何时运行切的，不是按层次切的**：`api` 只在 schema 描述期出现，根包只在
@@ -103,10 +103,10 @@ override point 或注解式 interceptor chain。生成的 handler 固定为「�
 | 生成器 | `./*.go` | ent 扩展本体：读取注解、冲突检查、渲染、落盘、回收 | `NewExtension` / `NewExtensionWithOptions` / `SoftDeleteMixin` | `api`、`entc/gen`、`x/tools/imports`、`embed` |
 | 模板 | `templates/*.tmpl` | 生成物的形状（8 个） | 经 `//go:embed` 由 `template_loader.go` — `templateFS` 读入 | — |
 | 模板函数 | `funcs_*.go`、`annotations_edge.go` | 模板能问的所有问题 | `templateFuncs()`（`funcs.go`）**唯一注册处** | `entc/gen` |
-| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `WriteProblem` / `FieldError` / `Route` / `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
+| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `WithValidation` / `WithUniqueViolation` / `HasUniqueViolation` / `UniqueViolation` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `WriteProblem` / `FieldError` / `Route` / `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
 | codegen fixtures | `internal/fixtures/<dir>/<dir>ent/` | 生成 + 编译的证明 | — | 本模块 |
 | spike 规格 | `internal/fixture/`（**单数**） | #22 手写目标，是生成物的规格 | 独立 go.mod | ent + SQLite |
-| 行为证明 | `internal/fixtures/wiring/e2e`、`internal/fixtures/httpdemo/e2e`、`internal/softdeleteproof` | wiring、HTTP 与软删除的行为证明 | 独立 go.mod | ent + SQLite |
+| 行为证明 | `internal/fixtures/wiring/e2e`、`internal/fixtures/httpdemo/e2e`、`internal/softdeleteproof`、`internal/uniqueproof` | wiring、HTTP、软删除与真实 driver uniqueness channel 的行为证明 | 独立 go.mod | ent + SQL driver |
 
 ```plantuml
 @startuml
@@ -556,7 +556,7 @@ func isCreatePointer(f *gen.Field) bool {
   指令解析 `github.com/githonllc/entapi`，而 `t.TempDir()` 在任何模块之外。产物已提交，
   所以 **`make check` 后 `git status` 变脏 = 生成结果变了**，去重新生成，绝不手改带 ent 或 entapi
   generated marker 的文件；生成目录内少数明确标为 hand-written 的契约测试见 `internal/fixtures/README.md`。
-- **`make test` 不覆盖四个嵌套模块**（独立 `go.mod`，`./...` 不下降）。`make check` 才跑。
+- **`make test` 不覆盖五个嵌套模块**（独立 `go.mod`，`./...` 不下降）。`make check` 才跑。
 
 ---
 
@@ -601,12 +601,12 @@ func isCreatePointer(f *gen.Field) bool {
 |---|---|---|
 | **注解 API 没有 inert knob** | `api.{ResourceAnnotation,FieldAnnotation,EdgeAnnotation}` 共 8 个导出字段 | `pendingKnobs` 永久为空；surface probe 要求每个字段改变已注册模板函数，未接线的公开词不能合入 |
 | **阶段 2 的 rename 循环非原子** | `extension.go` — `generatePerTypeFiles` | ADR-0003 明确接受。硬 kill 会留下两代混合 |
-| **默认不分类唯一键冲突** | `templates/errors.tmpl` — `ErrorMap` 初始化 | `ent.IsConstraintError` 分不清 UNIQUE 和 FOREIGN KEY，所以默认**不装**唯一性谓词：重复键回落成 500 而不是 409。方向是有意选的——重复键报 500 可恢复，外键失败报 409 是错答案 |
+| **唯一键判定漏判时闭合为 500** | `runtime/errors_dialect.go` — `UniqueViolation` | `API(client)` 按 dialect 自动安装；unknown dialect、未识别文本与无方法的非英文旧 lib/pq 都保持未分类。PostgreSQL 一旦有 SQLSTATE，非 `23505` 就禁止文本回退 |
 | **`ErrorMap` 是包级可变全局量** | `templates/errors.tmpl` — `ErrorMap` | 自身不带同步；必须在建 client 时、第一个请求之前赋值 |
 | **summary 带哪些标量字段未定** | `templates/dto.tmpl` — `Summary` 生成段 | 目前 = 全部非 `Hidden`、非 `Sensitive` 标量字段。收窄需要新注解，是独立决定 |
 | **软删除依赖 Ent 未公开的 partial 扩展点** | `templates/softdelete_config_init.tmpl` | `softdelete_config_init_test.go` 钉住生成的 `newConfig` 注入块，并逐字节比较无 mixin 图与纯 Ent 的 `client.go` |
-| **`make test` 漏四个嵌套模块** | `Makefile` — `test-modules` | 能过 `make test` 的改动仍可能被 `make test-modules` 抓住——这正是它存在的意义 |
-| **HTTP 已知残余** | `templates/handler.tmpl`、`templates/http.tmpl` | router-level 404/405 是 stdlib plain text；Save-time `ValidationError` 尚未分类，当前落 500（#74） |
+| **`make test` 漏五个嵌套模块** | `Makefile` — `test-modules` | 能过 `make test` 的改动仍可能被 `make test-modules` 抓住——这正是它存在的意义 |
+| **HTTP 已知残余** | `templates/handler.tmpl`、`templates/http.tmpl`、`internal/fixtures/wiring/wiringent/article_update.go` | router-level 404/405 是 stdlib plain text；直接 builder 清除 required unique edge 产生裸错误且保持 500 |
 | **fixtures 子树被 `make fmt` 排除** | `Makefile` — `FMT_FILES` | 但 `gofmt -l .` 覆盖全树。那两个前缀下的**手写**文件（fixture schema、生成目录里的手写 `_test.go`）必须手工保持 gofmt-clean |
 
 ---
@@ -620,12 +620,12 @@ func isCreatePointer(f *gen.Field) bool {
 | runtime 闭包无 ent | `go list -deps ./runtime` | 186 个包，`grep -c entgo.io` = **0** |
 | api 闭包不含生成器/runtime | `go list -deps ./api` | 2 个包，禁止依赖命中 **0** |
 | 生成器确实需要 ent | `go list -deps .` | `grep -c entgo.io` = **15** |
-| 测试基线绿 | 根模块与四个嵌套模块分别 `go test ./...` | 全部 `exit=0` |
+| 测试基线绿 | 根模块与五个嵌套模块分别 `go test ./...` | 全部 `exit=0` |
 | 代码量 | `wc -l`（非测试 .go / `.tmpl`） | 生成器 2977 / api 173 / runtime 726 / 模板 1511 |
 | 测试规模 | `rg '^func Test'` | 全仓 246（根包 102、api 6、runtime 38、fixtures 100） |
 | 派生名表 / 模板顶层声明 | `grep '^type\|^func\|^var' templates/*.tmpl` | 与 `derivedEntityDecls()` 一致 |
 | 旋钮数 | 反射三个 api 注解结构体的导出字段 | 8 个全部消费，`pendingKnobs` 为空 |
 
 **未验证 / 仅读代码得出**：覆盖率数字（CONTRIBUTING 的 >85%）未跑 `make cover` 复核。文中所有
-「消费者项目里会发生什么」的描述，证据来自 `internal/fixtures` 的生成产物与四个嵌套模块的行为
+「消费者项目里会发生什么」的描述，证据来自 `internal/fixtures` 的生成产物与五个嵌套模块的行为
 测试，本仓库没有真实下游 ent 项目。

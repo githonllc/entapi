@@ -11,7 +11,7 @@ var (
 	// ArticlesColumns holds the columns for the "articles" table.
 	ArticlesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "title", Type: field.TypeString, Unique: true},
+		{Name: "title", Type: field.TypeString, Unique: true, Size: 64},
 		{Name: "rank", Type: field.TypeInt, Nullable: true},
 		{Name: "slug", Type: field.TypeString, Default: "generated"},
 	}

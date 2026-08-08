@@ -12,6 +12,9 @@ import (
 )
 
 func TestAPIHandlerReadsFunctionFieldAtRequestTime(t *testing.T) {
+	previousErrorMap := ErrorMap
+	ErrorMap = ErrorMap.WithUniqueViolation(func(error) bool { return false })
+	t.Cleanup(func() { ErrorMap = previousErrorMap })
 	h := API(nil)
 	called := false
 	h.createArticle = func(ctx context.Context, _ *Client, _ *ValidArticleCreateRequest) (*ArticleResponse, error) {

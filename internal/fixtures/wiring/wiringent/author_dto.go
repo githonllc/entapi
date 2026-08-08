@@ -49,7 +49,8 @@ import (
 // value, so an omitted key leaves the schema's default in effect. A field ent
 // requires and cannot default is a value type and is always written.
 type AuthorCreateRequest struct {
-	Name string `json:"name"`
+	Name  string  `json:"name"`
+	Email *string `json:"email,omitempty"`
 
 	// present records which keys the payload actually carried. It is what makes
 	// "omitted" distinguishable from "sent as the zero value" for a field whose
@@ -64,7 +65,7 @@ type AuthorCreateRequest struct {
 // authorCreateRequestTags is the canonical JSON key of every field on
 // AuthorCreateRequest, in declaration order. UnmarshalJSON needs the tags as
 // data, not as struct tags, to tell a case variant from an unrelated key.
-var authorCreateRequestTags = []string{"name"}
+var authorCreateRequestTags = []string{"name", "email"}
 
 // UnmarshalJSON records presence, then decodes normally.
 //
@@ -127,6 +128,9 @@ func (r *AuthorCreateRequest) has(field string) bool {
 // HasName reports whether the payload carried "name".
 func (r *AuthorCreateRequest) HasName() bool { return r.has("name") }
 
+// HasEmail reports whether the payload carried "email".
+func (r *AuthorCreateRequest) HasEmail() bool { return r.has("email") }
+
 // ValidAuthorCreateRequest wraps a AuthorCreateRequest that has
 // passed Validate. Apply is defined on this type and nowhere else, so a caller
 // who skips validation has no method to call — a compile error rather than a
@@ -152,6 +156,9 @@ func (r *AuthorCreateRequest) Validate() (*ValidAuthorCreateRequest, error) {
 func (v *ValidAuthorCreateRequest) Apply(b *AuthorCreate) *AuthorCreate {
 	r := v.r
 	b.SetName(r.Name)
+	if r.Email != nil {
+		b.SetEmail(*r.Email)
+	}
 	return b
 }
 
@@ -169,14 +176,15 @@ func (v *ValidAuthorCreateRequest) Apply(b *AuthorCreate) *AuthorCreate {
 // who sends it gets silence — rejecting that needs DisallowUnknownFields, which
 // belongs to the consumer's handler.
 type AuthorPatchRequest struct {
-	Name *string `json:"name,omitempty"`
+	Name  *string `json:"name,omitempty"`
+	Email *string `json:"email,omitempty"`
 
 	present map[string]bool
 }
 
 // authorPatchRequestTags is the canonical JSON key of every field on
 // AuthorPatchRequest, in declaration order.
-var authorPatchRequestTags = []string{"name"}
+var authorPatchRequestTags = []string{"name", "email"}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from
@@ -220,6 +228,9 @@ func (r *AuthorPatchRequest) has(field string) bool { return r.present[field] }
 // HasName reports whether the payload carried "name".
 func (r *AuthorPatchRequest) HasName() bool { return r.has("name") }
 
+// HasEmail reports whether the payload carried "email".
+func (r *AuthorPatchRequest) HasEmail() bool { return r.has("email") }
+
 // ValidAuthorPatchRequest wraps a AuthorPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidAuthorPatchRequest struct{ r *AuthorPatchRequest }
@@ -247,6 +258,13 @@ func (v *ValidAuthorPatchRequest) Apply(b *AuthorUpdateOne) *AuthorUpdateOne {
 	if r.HasName() {
 		b.SetName(*r.Name)
 	}
+	if r.HasEmail() {
+		if r.Email == nil {
+			b.ClearEmail()
+		} else {
+			b.SetEmail(*r.Email)
+		}
+	}
 	return b
 }
 
@@ -261,8 +279,9 @@ func (v *ValidAuthorPatchRequest) Apply(b *AuthorUpdateOne) *AuthorUpdateOne {
 // deep, and a deeper one needs another round trip per level.
 type AuthorSummary struct {
 	// ID field is always included in summaries
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
+	ID    uuid.UUID `json:"id"`
+	Name  string    `json:"name"`
+	Email *string   `json:"email,omitempty"`
 }
 
 // NewAuthorSummary converts an entity to its summary DTO. It cannot fail:
@@ -272,8 +291,9 @@ func NewAuthorSummary(e *Author) *AuthorSummary {
 		return nil
 	}
 	return &AuthorSummary{
-		ID:   e.ID,
-		Name: e.Name,
+		ID:    e.ID,
+		Name:  e.Name,
+		Email: entapi.PtrOrNil(e.Email),
 	}
 }
 
@@ -290,6 +310,7 @@ type AuthorResponse struct {
 	// ID field is always included in responses
 	ID       uuid.UUID         `json:"id"`
 	Name     string            `json:"name"`
+	Email    *string           `json:"email,omitempty"`
 	Articles []*ArticleSummary `json:"articles"`
 }
 
@@ -309,8 +330,9 @@ func NewAuthorResponse(e *Author) (*AuthorResponse, error) {
 		return nil, nil
 	}
 	r := &AuthorResponse{
-		ID:   e.ID,
-		Name: e.Name,
+		ID:    e.ID,
+		Name:  e.Name,
+		Email: entapi.PtrOrNil(e.Email),
 	}
 	// A to-many edge has no not-found state: loaded-but-empty is an empty slice,
 	// so any error here means the edge was not loaded.

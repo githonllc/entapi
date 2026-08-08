@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 make check                  # fmt + vet + test + test-modules (run before committing)
 make test                   # go test -count=1 -v ./...  (this module only)
-make test-modules           # the four nested modules; NOT covered by make test
+make test-modules           # the five nested modules; NOT covered by make test
 make cover                  # coverage summary (CONTRIBUTING targets >85%)
 make lint                   # golangci-lint run ./...   (v1; v2 rejects .golangci.yml)
 make fmt                    # gofmt + goimports -local github.com/githonllc/entapi
@@ -32,7 +32,7 @@ One Go module, **three packages**, split by *when the code runs* (#15, #71).
 
 Keep new code on the right side of that line. Anything the generated output calls at run time belongs in `runtime/` and must import stdlib only; anything ent loads belongs in the root. `softdelete.go` is the worked example of the seam: the mixin (schema-time, imports `entgo.io/ent/schema`) stayed, while `WithSoftDeleted`/`WithHardDelete` and their predicates moved to `runtime/softdelete_context.go` because the generated traverser and hook call them on every query and every delete.
 
-There is no `main` or example app. Anything about *generated* code can only be verified by generating into a real ent project — which `TestCodegenFixtures` and the four nested modules do.
+There is no `main` or example app. Anything about *generated* code can only be verified by generating into a real ent project — which `TestCodegenFixtures` and the five nested modules do.
 
 ## Generation pipeline
 
@@ -260,8 +260,15 @@ family may disappear when `OpCreate` is explicitly excepted.
 - **Every exported wiring function returns through `ErrorMap.MapError`, exactly
   once** (#13). The unexported `{entity}Get` exists precisely so a create or
   update that re-reads through the eager-load plan does not map twice. The two
-  predicates in `errors.tmpl` must stay UNQUALIFIED — `entapi.IsNotFound`
-  also exists and would still compile, silently classifying nothing.
+  base predicates, `IsValidationError`, and `ValidationError` in `errors.tmpl`
+  must stay UNQUALIFIED — runtime predicates with similar names would still
+  compile while silently classifying nothing. `MapError` is ordered nil →
+  not-found → validation → constraint-and-unique → passthrough. `API(client)`
+  installs `UniqueViolation(client.driver.Dialect())` only when
+  `HasUniqueViolation()` is false, preserving a consumer determination installed
+  before API construction. PostgreSQL SQLSTATE is authoritative when present;
+  MySQL and SQLite use dialect-gated text markers, and every miss fails closed
+  to 500 rather than inventing a 404/409/422 sentinel.
 - **HTTP handlers are bind → call → write.** Their middle step reads the
   unexported function field through `h` at request time; capturing a default
   wiring function while `API()` builds the route would create a dead
@@ -313,11 +320,12 @@ Every row has a fixture. A fixture whose generation must fail carries
 - **The generated directory is `<dir>ent`, never `ent` (#49).** A Go package is named after the last element of its import path, so `internal/fixtures/basic/basicent` declares `package basicent`. That is deliberate and load-bearing: goimports resolves a bare `ent.` reference by **package name**, and when thirteen fixtures all declared `package ent` the winner depended on its module index cache — which is how one run rewrote `entgo.io/ent` in `softdelete`'s `client.go` to `basic`'s package. The harness derives every path from `entDirName`/`fixtureEntPkgPath` in `codegen_fixtures_test.go`, and `TestNoAmbiguousEntPackages` fails the run if any package under `internal/fixtures` is named `ent`.
 - `TestCodegenFixtures` **writes into the repository tree** on purpose: generated ent code has to sit inside this module to resolve `github.com/githonllc/entapi` without a replace directive, and `t.TempDir()` is outside any module. The output is committed, so a clean checkout plus a test run leaves `git status` clean. **A dirty tree after `make check` means generation changed** — regenerate, never hand-edit anything under `internal/fixtures/<dir>/<dir>ent/`.
 - **`internal/fixtures` (plural) is the generator's output; `internal/fixture` (singular) is its target.** The singular one is a separate Go module holding the #22 spike: `ent/dto/` there is hand-written, compiled and exercised against SQLite, and it is the specification. Read it; never edit it — except for a mechanical migration every consumer also has to make, which is how #15 changed exactly one import line in six of its files.
-- **Four nested modules run under `make test-modules`, and each exists because a compile proof cannot answer its question.** They are separate modules because they need a SQL driver and this library must not have one.
+- **Five nested modules run under `make test-modules`, and each exists because a compile proof cannot answer its question.** They are separate modules because they need a SQL driver and this library must not have one.
   - `internal/fixture` — the #22 spike. It breaking is the signal that generated output has drifted from the hand-written target.
   - `internal/fixtures/wiring/e2e` — the behavioural half of the wiring fixture. Compiling proves the wiring type-checks; only this proves it returns the right page, and it carries #13's three-way missing-row / `UNIQUE` / `FOREIGN KEY` mapping proof against real SQLite.
   - `internal/fixtures/httpdemo/e2e` — the HTTP tracer bullet: all five endpoints, problem+json statuses, direct/Mount/StripPrefix composition, actor context, middleware short-circuiting and Excepted routes against real SQLite.
   - `internal/softdeleteproof` — the only evidence for #18's load-bearing claim: a direct `client.Doc.Query()`, with nothing generated in the call path, does not return deleted rows. A compile proof cannot tell "the predicate is generated" from "the predicate reaches the SQL".
+  - `internal/uniqueproof` — #74's dialect determinations against the **real** driver error types. It exists because a hand-written stand-in would prove only that the detector matches the stand-in: it takes `jackc/pgx/v5` (a genuine `*pgconn.PgError`, so the `SQLState()` probe is exercised, `23503` included as the negative) and `go-sql-driver/mysql` (a genuine `*mysql.MySQLError`, which is the negative case for the probe — `Number` and `SQLState` are fields, not methods — and the positive case for the `Error 1062` text). Those two drivers live here and nowhere else; the root module must stay free of them.
 - `internal/fixtures/edges/edgesent/orerr_contract_test.go` is one of the few hand-written files under a generated `<dir>ent/` directory. It must be in `package edgesent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database. The others include `basic/basicent/listresponse_shape_test.go`, `createexcepted/createexceptedent/create_family_test.go`, the two `httpdemo/httpdemoent/*_test.go` contract proofs, `presence/presenceent/account_presence_test.go`, `query/queryent/filter_contract_test.go`, `sensitive/sensitiveent/sensitive_wire_test.go` and `stale/staleent/trinket_dto.go`; `go build` ignores `_test.go` files, so only the last of those is visible to the codegen harness — and it is there precisely to prove cleanup leaves files it did not write alone.
 - The three nested modules that import a fixture package (`internal/fixtures/wiring/e2e`, `internal/fixtures/httpdemo/e2e`, `internal/softdeleteproof`) alias it back to `ent` in their imports. They are hand-written and read from the consumer's side, where the generated package really is named `ent`; the alias is spelled out, so goimports has nothing to resolve.
 

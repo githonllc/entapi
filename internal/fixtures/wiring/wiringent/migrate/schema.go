@@ -34,6 +34,7 @@ var (
 	AuthorsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "name", Type: field.TypeString, Unique: true},
+		{Name: "email", Type: field.TypeString, Nullable: true, Size: 64},
 	}
 	// AuthorsTable holds the schema information for the "authors" table.
 	AuthorsTable = &schema.Table{

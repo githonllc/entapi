@@ -19,6 +19,8 @@ type Author struct {
 	ID uuid.UUID `json:"id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
+	// Email holds the value of the "email" field.
+	Email string `json:"email,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the AuthorQuery when eager-loading is set.
 	Edges        AuthorEdges `json:"edges"`
@@ -48,7 +50,7 @@ func (*Author) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case author.FieldName:
+		case author.FieldName, author.FieldEmail:
 			values[i] = new(sql.NullString)
 		case author.FieldID:
 			values[i] = new(uuid.UUID)
@@ -78,6 +80,12 @@ func (a *Author) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
 			} else if value.Valid {
 				a.Name = value.String
+			}
+		case author.FieldEmail:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field email", values[i])
+			} else if value.Valid {
+				a.Email = value.String
 			}
 		default:
 			a.selectValues.Set(columns[i], values[i])
@@ -122,6 +130,9 @@ func (a *Author) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", a.ID))
 	builder.WriteString("name=")
 	builder.WriteString(a.Name)
+	builder.WriteString(", ")
+	builder.WriteString("email=")
+	builder.WriteString(a.Email)
 	builder.WriteByte(')')
 	return builder.String()
 }

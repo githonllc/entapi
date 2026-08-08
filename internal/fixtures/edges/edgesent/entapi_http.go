@@ -39,6 +39,11 @@ type APIHandler struct {
 
 // API builds the generated CRUD HTTP surface for client.
 func API(client *Client) *APIHandler {
+	if !ErrorMap.HasUniqueViolation() {
+		if f, ok := entapi.UniqueViolation(client.driver.Dialect()); ok {
+			ErrorMap = ErrorMap.WithUniqueViolation(f)
+		}
+	}
 	h := &APIHandler{
 		client:         client,
 		mux:            http.NewServeMux(),

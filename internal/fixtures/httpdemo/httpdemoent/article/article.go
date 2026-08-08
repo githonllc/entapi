@@ -41,6 +41,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	TitleValidator func(string) error
 	// DefaultSlug holds the default value on creation for the "slug" field.
 	DefaultSlug string
 	// DefaultID holds the default value on creation for the "id" field.

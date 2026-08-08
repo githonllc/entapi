@@ -100,7 +100,20 @@ func (au *ArticleUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (au *ArticleUpdate) check() error {
+	if v, ok := au.mutation.Title(); ok {
+		if err := article.TitleValidator(v); err != nil {
+			return &ValidationError{Name: "title", err: fmt.Errorf(`httpdemoent: validator failed for field "Article.title": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (au *ArticleUpdate) sqlSave(ctx context.Context) (n int, err error) {
+	if err := au.check(); err != nil {
+		return n, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(article.Table, article.Columns, sqlgraph.NewFieldSpec(article.FieldID, field.TypeUUID))
 	if ps := au.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -227,7 +240,20 @@ func (auo *ArticleUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (auo *ArticleUpdateOne) check() error {
+	if v, ok := auo.mutation.Title(); ok {
+		if err := article.TitleValidator(v); err != nil {
+			return &ValidationError{Name: "title", err: fmt.Errorf(`httpdemoent: validator failed for field "Article.title": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (auo *ArticleUpdateOne) sqlSave(ctx context.Context) (_node *Article, err error) {
+	if err := auo.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(article.Table, article.Columns, sqlgraph.NewFieldSpec(article.FieldID, field.TypeUUID))
 	id, ok := auo.mutation.ID()
 	if !ok {

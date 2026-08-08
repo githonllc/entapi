@@ -121,7 +121,7 @@ func (h *APIHandler) handleCreateJSONWidget(w http.ResponseWriter, r *http.Reque
 		case entapi.IsAlreadyExists(err):
 			status = http.StatusConflict
 		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
+			status = http.StatusUnprocessableEntity
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
@@ -156,8 +156,6 @@ func (h *APIHandler) handleGetJSONWidget(w http.ResponseWriter, r *http.Request)
 			status = http.StatusNotFound
 		case entapi.IsAlreadyExists(err):
 			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
@@ -246,7 +244,7 @@ func (h *APIHandler) handlePatchJSONWidget(w http.ResponseWriter, r *http.Reques
 		case entapi.IsAlreadyExists(err):
 			status = http.StatusConflict
 		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
+			status = http.StatusUnprocessableEntity
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
@@ -281,8 +279,6 @@ func (h *APIHandler) handleDeleteJSONWidget(w http.ResponseWriter, r *http.Reque
 			status = http.StatusNotFound
 		case entapi.IsAlreadyExists(deleteErr):
 			status = http.StatusConflict
-		case entapi.IsValidation(deleteErr):
-			status = http.StatusBadRequest
 		}
 		entapi.WriteProblem(w, status, http.StatusText(status), deleteErr)
 		return

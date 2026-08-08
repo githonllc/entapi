@@ -648,6 +648,7 @@ type AuthorMutation struct {
 	typ             string
 	id              *uuid.UUID
 	name            *string
+	email           *string
 	clearedFields   map[string]struct{}
 	articles        map[uuid.UUID]struct{}
 	removedarticles map[uuid.UUID]struct{}
@@ -797,6 +798,55 @@ func (m *AuthorMutation) ResetName() {
 	m.name = nil
 }
 
+// SetEmail sets the "email" field.
+func (m *AuthorMutation) SetEmail(s string) {
+	m.email = &s
+}
+
+// Email returns the value of the "email" field in the mutation.
+func (m *AuthorMutation) Email() (r string, exists bool) {
+	v := m.email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmail returns the old "email" field's value of the Author entity.
+// If the Author object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthorMutation) OldEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmail: %w", err)
+	}
+	return oldValue.Email, nil
+}
+
+// ClearEmail clears the value of the "email" field.
+func (m *AuthorMutation) ClearEmail() {
+	m.email = nil
+	m.clearedFields[author.FieldEmail] = struct{}{}
+}
+
+// EmailCleared returns if the "email" field was cleared in this mutation.
+func (m *AuthorMutation) EmailCleared() bool {
+	_, ok := m.clearedFields[author.FieldEmail]
+	return ok
+}
+
+// ResetEmail resets all changes to the "email" field.
+func (m *AuthorMutation) ResetEmail() {
+	m.email = nil
+	delete(m.clearedFields, author.FieldEmail)
+}
+
 // AddArticleIDs adds the "articles" edge to the Article entity by ids.
 func (m *AuthorMutation) AddArticleIDs(ids ...uuid.UUID) {
 	if m.articles == nil {
@@ -885,9 +935,12 @@ func (m *AuthorMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuthorMutation) Fields() []string {
-	fields := make([]string, 0, 1)
+	fields := make([]string, 0, 2)
 	if m.name != nil {
 		fields = append(fields, author.FieldName)
+	}
+	if m.email != nil {
+		fields = append(fields, author.FieldEmail)
 	}
 	return fields
 }
@@ -899,6 +952,8 @@ func (m *AuthorMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case author.FieldName:
 		return m.Name()
+	case author.FieldEmail:
+		return m.Email()
 	}
 	return nil, false
 }
@@ -910,6 +965,8 @@ func (m *AuthorMutation) OldField(ctx context.Context, name string) (ent.Value, 
 	switch name {
 	case author.FieldName:
 		return m.OldName(ctx)
+	case author.FieldEmail:
+		return m.OldEmail(ctx)
 	}
 	return nil, fmt.Errorf("unknown Author field %s", name)
 }
@@ -925,6 +982,13 @@ func (m *AuthorMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetName(v)
+		return nil
+	case author.FieldEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmail(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Author field %s", name)
@@ -955,7 +1019,11 @@ func (m *AuthorMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *AuthorMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(author.FieldEmail) {
+		fields = append(fields, author.FieldEmail)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -968,6 +1036,11 @@ func (m *AuthorMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *AuthorMutation) ClearField(name string) error {
+	switch name {
+	case author.FieldEmail:
+		m.ClearEmail()
+		return nil
+	}
 	return fmt.Errorf("unknown Author nullable field %s", name)
 }
 
@@ -977,6 +1050,9 @@ func (m *AuthorMutation) ResetField(name string) error {
 	switch name {
 	case author.FieldName:
 		m.ResetName()
+		return nil
+	case author.FieldEmail:
+		m.ResetEmail()
 		return nil
 	}
 	return fmt.Errorf("unknown Author field %s", name)

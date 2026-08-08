@@ -52,3 +52,18 @@ hand-write the target first). If the spike fails, fall back to the explicit
 - **Mixin-native hooks** — infeasible as established above.
 - **Keep the explicit call** — the honest fallback; retained as the spike's
   failure branch.
+
+## Addendum (2026-08-08, second adversarial round — v3 §12)
+
+- **Third spike scenario, adjudicated with the entrest comparison review:
+  coexistence with ent privacy.** Deny-by-default privacy rules must not
+  reject the soft-delete hook's own reads and writes. The design doc carried
+  this from day one; this ADR now does too.
+- **Mechanism constraint (findings X2/X3, verified against
+  `softdeleteent/client.go:69,191`):** at `init()` time no `*Client` exists,
+  and `hooks`/`inters` are per-instance state created fresh by `newConfig` —
+  there is no global registry an init can write into. "Hooks it via `init()`"
+  therefore concretely means: init populates an **indirection consulted at
+  mutation time** (e.g. a mixin-declared hook slot whose implementation
+  recovers the typed client via `m.Client()`). Whether that attachment point
+  holds is the spike's first question; the fallback is unchanged.

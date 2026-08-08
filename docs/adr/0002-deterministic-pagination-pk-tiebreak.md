@@ -8,6 +8,12 @@ concurrent writes) · **Date:** 2026-08-06 · **Tracking issue:** [#59](https://
 **Ratification constraint:** when the requested sort key *is* the primary key,
 the tiebreak is skipped — never `ORDER BY id, id`.
 
+> **Addendum (2026-08-08, second adversarial round — v3 §12 A4):** DESIGN-v3
+> makes `_sort` a multi-key list, so the constraint generalizes: the tiebreak
+> is skipped whenever the primary key appears at **any position** in the
+> requested sort list — never `ORDER BY id, …, id`. The single-key wording
+> above predates the list form; the generalized form governs.
+
 ## Context
 
 `{Entity}Order` (`templates/filter.tmpl`) returns `nil, nil` when the request

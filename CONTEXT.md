@@ -12,7 +12,7 @@ Ent 之上的 CRUD 面生成器：一次性 schema 声明 → 生成 DTO、查�
 _Avoid_: entity annotation, DomainConfig
 
 **沉默（Silence）**:
-字段的默认状态——零注解，HTTP 面形状完全由 ent 事实（Optional/Immutable/Default/Sensitive/类型）推导。
+字段的默认状态——零注解，HTTP 面形状完全由 ent 事实（Optional/Nillable/Immutable/Default/Sensitive/类型）推导。
 _Avoid_: default scopes
 
 **偏离（Deviation）**:

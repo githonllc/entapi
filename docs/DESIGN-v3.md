@@ -5,7 +5,8 @@
 > 为准。
 
 > **状态：拷问会话裁决完毕（2026-08-07）；跨家族对抗评审完毕、评审触发的
-> 复裁亦全部落定（2026-08-08，记录见 §10）；实现未开始。**
+> 复裁亦全部落定（2026-08-08，记录见 §10）；第二轮三席对抗评审
+> （codex + agy + fable）完毕（2026-08-08，记录见 §12）；实现未开始。**
 >
 > 本文是 `IDEAL.md`（设计虚构）与实现之间缺的那份设计：一次 grilling 会话
 > （逐分支拷问、每题附推荐、owner 逐项拍板）的净残留。方法与 DESIGN-v2 相同的
@@ -615,7 +616,7 @@ runtime 装配机制，不是 Mount。
 
 ## 11. 定稿后增补（2026-08-08，owner 裁决）
 
-两项在定稿与评审之后追加的裁决，均已同步进 `DESIGN-v3-final.md`：
+三项在定稿与评审之后追加的裁决，均已同步进 `DESIGN-v3-final.md`：
 
 1. **模块改名 `entdomain` → `entapi`**（ADR-0011，已执行）。动机：v3 删光了
    全部 domain 命名的符号后，模块名成了唯一残留的误导——"domain"（DDD 语境
@@ -641,6 +642,104 @@ runtime 装配机制，不是 Mount。
    `Routes()` 逐路由包裹，身份经 context 传递；④ 偷师清单七项进 §5
    backlog，其中 ErrorHandler 观测钩子（第 3 步、已分类结果、观测/替换
    两档、全局+op）形态定稿。
+
+## 12. 第二轮对抗评审记录（2026-08-08，三席）
+
+第一轮（§10）与 §11 增补之后的一轮，评审对象以 `DESIGN-v3-final.md` 为主。
+三席、只读、证伪指令、并集合并（不投票）：席位 1 **Codex GPT-5.6**（effort
+high）攻新机制可行性；席位 2 **Gemini 3.1 Pro**（agy，plan 模式）攻边界与
+前提；席位 3 **Fable**（独立上下文）攻跨文档一致性。裁决规则派发前落盘
+（并集、单席发现由 orchestrator 回源码核实、owner 取向裁决设围栏不重开）；
+brief 围住 §10 已处置的 11 条，靶子锁定 §11 增补与定稿内容。三席发现集
+互不重叠（预期内），无显式互相否定，未动用第三模型仲裁。
+
+### 12.1 证实并已折进 final（14 条）
+
+| # | 席位 | 发现 | 核实锚点 | 落点 |
+|---|---|---|---|---|
+| X1 | Codex | gin/echo 路由模式是 `:id` 不是 `{id}`，`SetPathValue` 适配器必须含模式语法转换；两家对 `%2F` 编码路径段的解码语义亦与 stdlib 不同（gin 默认 404） | gin v1.11 / echo v4.13 源码 | final §2.5 |
+| X2/X3 | Codex | 生成 init() 运行时无任何 `*Client` 实例可挂，且 hooks/inters 是每实例状态（`newConfig` 每次新建）、无全局注册表——"init 挂到 client"字面不可行；可行形状是 init 填充 mutation 期被咨询的间接层 | `softdeleteent/client.go:69,191`；`RegisterSoftDelete` 挂实例（`entapi_softdelete.go:28-31`） | final §4.3 spike 加问 + ADR-0010 addendum |
+| X4 | Codex | lib/pq 的 `SQLState()` v1.10.6 才加入——"pgx/lib/pq 均实现"缺版本条件 | 亲测 v1.10.5 源码 0 命中、v1.10.6 命中 | final §4.2 |
+| X5 | Codex | 返回类型若字面是 `http.Handler` 接口，`.With`/`.Mount`/`.Routes` 均不可编译 | Go method sets | final §2.1 措辞改 `*API` |
+| X7 | Codex | "全 Immutable"拒绝行漏同类死路：可变字段全被 `ReadOnly` 排除同样产出空 PATCH 端点 | ent `MutableFields` 只排 Immutable（`gen/type.go:552`） | final §1.4 行一般化 |
+| X8 | Codex | 附录 User 未声明 ID → ent 默认 `int`，`Patch` 签名却收 `uuid.UUID`，编译不过 | `intident/counter_wiring.go:102` 实证 int 形状 | final 附录补 `field.UUID` |
+| A4 | agy | final"PK tiebreak 永远追加在末尾"与 ADR-0002 批准约束（排序键=PK 时跳过，永不 `ORDER BY id, id`）冲突；多字段 `_sort` 需推广为"PK 出现在任一位置即跳过" | ADR-0002 Ratification constraint | final §3.2 |
+| A6 | agy | 字段级五词标在 edge 上静默失效（fails open），矩阵无此行 | 五词是字段级注解，edge 侧无读取路径 | final §1.4 补拒绝行 |
+| A7 | agy | 查询三维度标记 × `Except(OpList)` 是死标记——参数生成了、端点不存在，矩阵沉默 | §9.2 政策的机械推论（同空 PATCH 先例） | final §1.4 补拒绝行 |
+| A8 | agy | `DisallowUnknownFields` 的错误是裸字符串 `json: unknown field %q`，`field` 成员靠解析非契约文本 | encoding/json 源码 | final §2.3 入档容错 |
+| F1 | Fable | final 头部索引漏 ADR-0011 与 v3 §11；§4.1 无 legacy marker 永久识别的痕迹（该语义已实现） | `cleanup.go:20-26,141` | final 头部 + §4.1 |
+| F2 | Fable | ADR-0010 只列两个 spike 场景，final §4.3 要求三个（privacy 共存）——"冲突时以 ADR 为准"使陈旧 ADR 合法收缩 spike | ADR-0010:33-34 vs final §4.3/§4.4 边界 5 | ADR-0010 addendum |
+| F3 | Fable | §11 写"两项"实列三项 | 本文 §11 | v3 §11 已修 |
+| F5 | Fable | `CONTEXT.md` 沉默词条的 ent 事实清单漏 `Nillable`（final 与 ADR-0006 均含） | CONTEXT.md:15 vs final:29 | CONTEXT.md 已修 |
+
+### 12.2 评审触发的推导裁决（机械推导自既有政策；owner 可否决）
+
+1. **`_q` 打在零 Searchable 字段的实体 → 400**（A5 的问题形态）——与
+   `_sort` 非法字段同则：显式报错不静默吞（ADR-0001/0005 精神）;
+2. **nil 定制点的拒绝形态 = 构造期 panic**（X6）——链式签名无错误通道，
+   程序员错误按 stdlib 惯例（`http.Handle` nil 同型）panic;
+3. **时间值线格式 = RFC 3339**（A1 的残核）——与 encoding/json 的
+   `time.Time` 一致，值内无逗号，不触 `in:`/`between:` 的逗号限制；
+   评审举证的 RFC1123 逗号冲突因此不成立，但格式此前确实未言明;
+4. ~~**`_size` 非正值 → 默认 20**（A3 的边界半边）——runtime 现状
+   （`runtime/query.go:47-50`）如实入档，钳制即修复。~~
+   **HTTP 层半边被 §12.5 的 arbitrate 裁决推翻**：查询串显式 `_size=0`/负值
+   改判 400（线值预留）；Go 层修复语义（`Limit()` 永不返回 0）保留。
+
+### 12.3 反驳与放弃（留档不删）
+
+- **A10（反驳）**："OpenAPI 3.1 移除了 `nullable: true`，设计依赖 3.0 语义"
+  ——设计从未写 `nullable: true`；3.1 的 `type: [T, "null"]` 数组形态正是
+  选 3.1 的理由（v3 §5.1"映射干净"指的就是它）;
+- **A11（反驳）**："A Expand B 时 B 自己的 Expand 静默死亡"——Summary 不带边
+  是 #25 已断言的有意上界（"三层树回来一层深，代价被断言不被粉饰"）；
+  B 的 Expand 在 B 自己的端点上照常生效，没有静默死亡;
+- **A2（放弃，已裁决）**：string 字段拼错算子静默成字面值——§10.3.4 复裁
+  已接受的代价，不重开;
+- **A9（放弃，defer 区）**：软删除后第二次 DELETE 返回 404 而非幂等 204——
+  软删除 HTTP 语义在显式 defer 清单内；404 与 GET 对已删行的行为一致，
+  非缺陷，随 defer 项一并考虑。
+
+### 12.4 提交 owner（不折进 final）
+
+1. **F4**：`With` = Functional Options 是约束性裁决但无 ADR 记录——
+   final 头部"约束性决策的单条记录在 ADR"的主张因此有缺口，建议补 ADR-0012;
+2. **Q1**：ADR-0008 的文件名（`brain-swap`）与正文"Swapping a brain"/"slot"
+   是被否决词表（换脑/槽位）的英文形态；ADR-0011 只围栏了旧 ADR 正文的
+   模块名，比喻词是否翻新未裁决;
+3. **A3 残核**：count-only 场景（`_size=0` 只取 `total`）是否值得
+   backlog 席位。
+
+### 12.5 §12.4 三项的 arbitrate 结果（2026-08-08，owner 委托）
+
+两席（Codex GPT-5.6 攻可行性 + Gemini 3.1 Pro 攻前提）、裁决规则派发前
+落盘；①② 冲突，按规则派独立上下文 Opus 只审事实（不投票）。
+
+- **③ count-only（已裁决并执行，两席一致）**：显式 `_size=0`/负值在 HTTP
+  解析层 400，`0` 的线值预留给未来 count-only；feature 进 backlog（final
+  §5.8）。Codex 的两条实现护栏一并采纳：不改 `ListRequest.Limit()` 的 Go
+  语义（`query.go:71` "never returns zero" 不变量护住 `:78` 的除法）、
+  presence 由 HTTP 解析层区分。决定性事实：先发布钳制再改义 = 破坏已依赖
+  钳制的消费者，pre-release 预留免费；无统一 REST 惯例可依（OData `$top=0`
+  = 零行，JSON:API 要求正数报错——两家先例本身就分裂）;
+- **① With 语义的 ADR 落点（呈 owner，附推荐）**：Opus 加审判定为取向之争
+  ——Codex 的"one decision per file"（README.md:3 属实）是反捆绑规则，
+  但五个 ADR 已有 addendum 记后续裁决的先例；双方共享的错误前提是
+  "只在 §2.2 = 未记录"（ADR-0008:5 的 Design 指针已可达）。真缺口只是
+  final 头部"约束性决策单条记录在 ADR"的主张。推荐 **ADR-0012 独立成文**
+  （With 的 last-wins/nil-panic 是独立的兼容性契约，与 0008 的拓扑主题
+  不同轴），0008 加一行交叉引用。**Owner 终裁（同日）：ADR-0012，已执行**
+  （`0012-with-composes-as-functional-options.md` + 索引行 + 0008 交叉
+  引用 + final 头部范围改 0006–0012）;
+- **② ADR-0008 词汇（呈 owner，前提已澄清）**：Opus 加审判定这是**被错误
+  提交给 panel 的问题**——仓库没有任何规则禁英文形态（`CONTEXT.md:42` 的
+  slot 禁令限定中文语境；ADR-0011:56 的"keep original prose"经 commit
+  实证只围栏模块名：a435544/697a8cc 改写了 DESIGN-v3.md 里的被否决词汇，
+  而该文件同在 0011:55 的历史名单里）。两席一致不改名、不改正文；剩余
+  微问题（顶部加一行词表注记 vs 完全不动）取决于 owner 是否把中文词表
+  否决延伸到英文隐喻——本就是 Q1，维持呈 owner。**Owner 终裁（同日）：
+  不延伸，完全不动**——词汇权威在 CONTEXT.md，历史 ADR 保持原貌，
+  Q1 就此关闭。
 
 ## 附录 A：样例——账号系统的 User
 

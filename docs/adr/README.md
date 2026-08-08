@@ -24,6 +24,7 @@ the ADR carries the decision and its rationale.
 | [0009](0009-rfc9457-errors-bare-success.md) | Errors are RFC 9457 problem+json; success responses are bare | **Accepted** | — |
 | [0010](0010-softdelete-registration-generated-init.md) | Soft-delete registration: generated init in the consumer's package, never Mount | **Accepted** (spike-gated) | — |
 | [0011](0011-rename-module-to-entapi.md) | Rename the module: entdomain → entapi | **Accepted** (executed) | — |
+| [0012](0012-with-composes-as-functional-options.md) | `With` composes as functional options: last-wins, nil panics | **Accepted** | — |
 
 0006–0010 record the DESIGN-v3 adjudications (grilling session 2026-08-07/08 +
 one cross-family adversarial review round; process log in `../DESIGN-v3.md`,

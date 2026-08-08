@@ -65,6 +65,9 @@ and #16/#29 established that customisation inside generated types
 - **Endpoint-level `http.HandlerFunc` slots** — that is the external door's
   job; merging the doors would discard generated binding/validation.
 
+> Cross-reference: the combination semantics of `With` (variadic ≡ chained,
+> last-wins, nil panics at construction) are recorded in ADR-0012.
+
 ## Addendum (2026-08-08): the route manifest
 
 `API(client)` registers its endpoints from a **data-shaped manifest** and

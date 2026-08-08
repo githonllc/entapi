@@ -56,10 +56,17 @@ func patchFields(node *gen.Type) []*gen.Field {
 	return fields
 }
 
-// responseFields returns fields that can be used in responses
+// responseFields returns fields that can be used in responses.
+//
+// Ent's Sensitive fact narrows the annotation's response scope: a field the
+// schema marks Sensitive never reaches either response tier. See doc.go's
+// migration note for the old annotation knob that existed but was never read.
 func responseFields(node *gen.Type) []*gen.Field {
 	var fields []*gen.Field
 	for _, field := range node.Fields {
+		if field.Sensitive() {
+			continue
+		}
 		if annotation := getDomainFieldAnnotation(field); annotation != nil {
 			if hasDomainScope(field, ScopeResponse) {
 				fields = append(fields, field)

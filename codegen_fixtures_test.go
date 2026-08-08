@@ -83,6 +83,7 @@ type fixtureCase struct {
 var fixtures = []fixtureCase{
 	{dir: "basic"},
 	{dir: "fieldshapes"},
+	{dir: "sensitive"},
 	{dir: "immutable", wantGenErr: []string{"Doc.origin", "Doc.source", "Immutable()", `scope "update"`, "SetOrigin", "SetSource"}},
 	{dir: "edges"},
 	// "intid" was a REFUSAL case until #29. Its entity has ent's default int

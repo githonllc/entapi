@@ -752,6 +752,10 @@ T3 已经全部落地。三处偏离，都是有意的：
 
 ## 迁移注记
 
+**行为变更：** Ent 标记为 `Sensitive()` 的字段不再出现在 `{Entity}Response` 或
+`{Entity}Summary` 中。这关闭了带响应 scope 的敏感字段仍被生成并序列化的泄漏；create
+与 patch 请求保持不变。
+
 以下符号曾经存在于本 module，现已删除，且**没有兼容别名**——一个保留耦合的别名，比破坏
 更糟。
 
@@ -762,7 +766,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 | `{Entity}EntToResponse` | `New{Entity}Response`，它返回 error 而不是在错误时返回 nil |
 | `Apply{Entity}CreateRequest`、`Apply{Entity}UpdateRequest`（自由函数） | `Valid{Entity}…Request.Apply` |
 | `Cursor`、`PageInfo`、`EncodeCursor`、`DecodeCursor`、`ListRequest.Cursor` | 无——分页只有 offset |
-| `DomainField.Sensitive`、`AsSensitive` | 不给字段 `ScopeResponse` |
+| `DomainField.Sensitive`、`AsSensitive` | 在 ent schema 里给字段标 `Sensitive()`——它会被从两层响应结构体中一律剔除，与 scope 无关；或者不给它 `ScopeResponse` |
 | `DomainField.UniqueLookup`、`.RangeLookup`、`.Validation` | `AsFilterable()`（运算符从 ent 的 `$field.Ops` 导出）；`Validate()` |
 | `DomainConfig.EntityName` | 无——没有读者 |
 | 运行时符号住在根包 | 全部搬到 `github.com/githonllc/entapi/runtime` |

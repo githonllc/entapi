@@ -45,6 +45,15 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 			pkgPath:   fixtureEntPkgPath("fieldshapes"),
 		},
 		{
+			// A response-only JSON field carrying []time.Time whose ent schema
+			// marks it Sensitive.
+			// When that field disappears from the response surface, the "time"
+			// import it alone required must disappear with it.
+			name:      "sensitive",
+			schemaDir: fixtureSchemaDir(root, "sensitive"),
+			pkgPath:   fixtureEntPkgPath("sensitive"),
+		},
+		{
 			// Edges, and — through Secret — an entity with no response-scoped
 			// field at all. The response and summary types are emitted for it
 			// anyway, carrying only the ID, so the ID's import is needed on a

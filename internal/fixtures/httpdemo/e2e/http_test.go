@@ -332,6 +332,10 @@ func TestRoutesShapeOrderAndCopyIsolation(t *testing.T) {
 		{http.MethodPost, "/audit_logs"},
 		{http.MethodGet, "/audit_logs/{id}"},
 		{http.MethodPatch, "/audit_logs/{id}"},
+		// The generated document, last: it is appended after every entity's
+		// routes, so its position is a fact about registration order rather
+		// than an accident of the schema (#76).
+		{http.MethodGet, "/openapi.yaml"},
 	}
 	api := ent.API(newClient(t))
 	routes := api.Routes()

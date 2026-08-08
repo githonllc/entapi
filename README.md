@@ -138,10 +138,15 @@ func main() {
 }
 ```
 
-`WithEntAPIPackage` is the **only** option. It rewrites the runtime path the
+There are three options. `WithEntAPIPackage` rewrites the runtime path the
 generated files import, and its default is already
 `github.com/githonllc/entapi/runtime`, so it matters only if you vendored a
-copy. `NewExtension(cfg)` takes an `*ExtensionConfig` directly and is nil-safe.
+copy. `WithOpenAPITitle` and `WithOpenAPIVersion` set `info.title` and
+`info.version` of the generated `openapi.yaml`; unset they default to the ent
+package name plus `" API"` and to `0.0.0`. The version is deliberately NOT read
+from a git tag — generation must not depend on working-tree state, or a clean
+checkout stops staying clean across a test run. `NewExtension(cfg)` takes an
+`*ExtensionConfig` directly and is nil-safe.
 
 The extension installs exactly one `gen.Hook`. `Templates()` returns only the
 soft-delete `config/init/fields/*` partial; every standalone output is rendered
@@ -149,8 +154,8 @@ and written by the hook.
 
 > **Implementation:** `extension.go` — `Extension`, `ExtensionConfig`,
 > `NewExtension`, `NewExtensionWithOptions`, `Option`, `WithEntAPIPackage`,
-> `defaultEntAPIPackage`, `Hooks`, `Templates`, `Annotations`, `Options`,
-> `ConfigAnnotation`
+> `WithOpenAPITitle`, `WithOpenAPIVersion`, `defaultEntAPIPackage`, `Hooks`,
+> `Templates`, `Annotations`, `Options`, `ConfigAnnotation`
 
 ## The annotation model
 
@@ -243,12 +248,14 @@ single switch is skipped entirely and produces no EntAPI files.
 | `{entity}_wiring.go` | `Get{E}`, `List{Es}`, `Create{E}`, `Patch{E}`, `Delete{E}`, `DeleteBatch{Es}` |
 | `{entity}_handler.go` | reachable `{Op}{E}Fn` types and three-step bind → call → write handlers |
 
-Plus three files per schema, each with its own emission condition:
+Plus five files per schema, each with its own emission condition:
 
 | File | Emitted when | Declares |
 |---|---|---|
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
 | `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Routes`, `ServeHTTP`, `Mount` and the route manifest |
+| `openapi.yaml` | at least one entity produced wiring | the OpenAPI 3.1 document describing every generated endpoint |
+| `entapi_openapi.go` | at least one entity produced wiring | the `//go:embed` of that document and the unexported handler serving it |
 | `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
 
 The soft-delete condition is independent of `api.Resource()`: an entity that is
@@ -265,8 +272,11 @@ entity name can collide with one — see
 
 > **Implementation:** `extension.go` — `generatePerTypeFiles`, `perTypeFileName`,
 > `renderDTOFile`, `renderFilterFile`, `renderWiringFile`, `renderHandlerFile`,
-> `renderErrorMapFile`, `renderHTTPFile`, `renderSoftDeleteFile`, `pendingFile`;
-> `cleanup.go` — `errorMapFileName`, `httpFileName`, `softDeleteFileName`;
+> `renderErrorMapFile`, `renderHTTPFile`, `renderOpenAPIFile`,
+> `renderOpenAPIEmbedFile`, `renderSoftDeleteFile`, `pendingFile`;
+> `cleanup.go` — `errorMapFileName`, `httpFileName`, `openapiFileName`,
+> `openapiEmbedFileName`, `softDeleteFileName`, `isCleanupCandidate`;
+> `funcs_openapi.go` — the document's YAML shaping helpers;
 > `funcs_scope.go` — `isResource`;
 > `funcs_softdelete.go` — `softDeleteTypes`; authoritative symbol list:
 > `schema_conflicts.go` — `derivedEntityDecls`
@@ -326,6 +336,7 @@ Each non-Excepted Resource gets exactly these Go 1.22 patterns:
 | `GET /articles/{id}` | bare resource, 200 |
 | `PATCH /articles/{id}` | bare resource, 200 |
 | `DELETE /articles/{id}` | empty body, 204 |
+| `GET /openapi.yaml` | the generated document, 200, `application/yaml` |
 
 Errors are RFC 9457 `application/problem+json`; `WriteProblem` emits
 `type: "about:blank"`, title, status and detail, plus `field` when the chain
@@ -342,6 +353,61 @@ knob**. Unknown keys are compared against the generated create/patch tag data,
 so an immutable PATCH key is rejected by name rather than silently discarded.
 
 `WithActor` and `ActorFrom` carry authentication state through middleware.
+
+### The generated OpenAPI document
+
+`ent/openapi.yaml` is generated beside the code and committed with it, so the
+exposed surface shows up in a pull request diff and is reviewed like anything
+else. `entapi_openapi.go` embeds the same bytes and serves them at
+`GET /openapi.yaml`, which is why what is on disk and what is served cannot
+drift apart.
+
+It is a **derived** document, not a second description: paths and methods come
+from the same `resourceOps` the route manifest is built from, so an `Except`ed
+operation is absent from both at once; response schemas come from the same
+selector the DTOs do, so an Ent `Sensitive()` field cannot reappear in one; and
+each filter parameter's operator prefixes come from the field's own generated
+allow-list.
+
+Three decisions are worth knowing before you read it:
+
+- **No `servers` entry, and paths carry no prefix.** The mount prefix is a
+  deployment fact — `http.StripPrefix` runs in your `main`, long after
+  generation, and one build can serve at `/api/v1` and at the bare root at the
+  same time. 3.1's default is a relative `/`, which is the one entry that
+  cannot lie.
+- **Filter parameters are `type: string`** with a `pattern` and a description.
+  That is the price of the operator-in-value wire format: `gt:5` is not an
+  integer. The description carries what OpenAPI cannot express — the
+  operator prefixes the field accepts, and that repeating a parameter ANDs the
+  resulting predicates.
+- **`GET /openapi.yaml` is in `Routes()` but is not described by the
+  document.** It is in the manifest so you can wrap or drop it with the same
+  loop you use for the CRUD routes; it is not in the document because it is not
+  part of the resource surface.
+
+The first line is the ownership marker in comment form, and cleanup deletes a
+stale document by that marker like any other generated file. Deleting the line
+takes the file out of cleanup's deletion candidates, so it survives once the
+document stops being generated — it does **not** stop the next generation from
+overwriting it, because the writer renames the freshly rendered bytes into place
+without ever reading what is there. If you need a `servers` entry, a prefix, or
+anything else this generator refuses to guess, do not edit the generated
+document: keep your own copy under your own name, build your router from
+`Routes()` while skipping or replacing the `GET /openapi.yaml` row, and serve
+yours there. (`Routes()` returns a copy, so `ServeHTTP` and `Mount` still serve
+the generated one; the skip has to happen in a router you register yourself.)
+
+**Upgrade hazard:** `ent/openapi.yaml` is an entirely ordinary file name, so a
+consumer who already keeps a hand-written document at that path will have it
+silently overwritten by the first generation after upgrading — move it aside
+before you upgrade.
+
+One honest residue: unlike every other generated file, the document has no
+syntax gate before it reaches disk. The standard library has no YAML parser, so
+a template bug lands and is caught afterwards — by the fixture assertions and
+by the OpenAPI 3.1 validator in `internal/fixtures/httpdemo/e2e`, which is a
+nested module precisely so that validator dependency stays out of this one.
 
 ### Registering exported routes
 
@@ -847,13 +913,20 @@ marker.
 
 The scan is **top-level only** (`os.ReadDir`, not `filepath.Walk`) and skips
 directory entries — ent's generated subpackages (`<entity>/`, `predicate/`,
-`migrate/`, …) live below the target and are never candidates. A file without
+`migrate/`, …) live below the target and are never candidates. Its candidates
+are the target's `.go` files plus exactly one name, `openapi.yaml`: that is the
+only artifact this extension writes that is not Go source, and widening the
+suffix to all YAML would put a consumer's own documents inside the deletion
+surface for nothing. A file without
 the marker is left alone and **logged** with the reason; ent's own `Code
 generated by ent, DO NOT EDIT.` deliberately does not match.
 
-> **The marker line is your escape hatch.** To take ownership of a generated
-> file, delete its first line. Conversely, a file you copied out of the generated
-> output and forgot to strip the header from **will be deleted**.
+> **The marker line is your escape hatch — from cleanup.** Delete a generated
+> file's first line and cleanup stops treating it as a deletion candidate, so
+> your copy survives once that file is no longer generated. It does **not**
+> protect the file while it still is: every generation renames fresh bytes over
+> the path without reading what is there. Conversely, a file you copied out of
+> the generated output and forgot to strip the header from **will be deleted**.
 > ([ADR-0004](docs/adr/0004-cleanup-ownership-by-marker.md))
 
 > **Implementation:** `extension.go` — `generatePerTypeFiles` (the two-phase

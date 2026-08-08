@@ -18,6 +18,8 @@ const (
 	FieldRank = "rank"
 	// FieldSlug holds the string denoting the slug field in the database.
 	FieldSlug = "slug"
+	// FieldInternalNote holds the string denoting the internal_note field in the database.
+	FieldInternalNote = "internal_note"
 	// Table holds the table name of the article in the database.
 	Table = "articles"
 )
@@ -28,6 +30,7 @@ var Columns = []string{
 	FieldTitle,
 	FieldRank,
 	FieldSlug,
+	FieldInternalNote,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -70,4 +73,9 @@ func ByRank(opts ...sql.OrderTermOption) OrderOption {
 // BySlug orders the results by the slug field.
 func BySlug(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSlug, opts...).ToFunc()
+}
+
+// ByInternalNote orders the results by the internal_note field.
+func ByInternalNote(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInternalNote, opts...).ToFunc()
 }

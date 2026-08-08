@@ -54,6 +54,20 @@ func (ac *ArticleCreate) SetNillableSlug(s *string) *ArticleCreate {
 	return ac
 }
 
+// SetInternalNote sets the "internal_note" field.
+func (ac *ArticleCreate) SetInternalNote(s string) *ArticleCreate {
+	ac.mutation.SetInternalNote(s)
+	return ac
+}
+
+// SetNillableInternalNote sets the "internal_note" field if the given value is not nil.
+func (ac *ArticleCreate) SetNillableInternalNote(s *string) *ArticleCreate {
+	if s != nil {
+		ac.SetInternalNote(*s)
+	}
+	return ac
+}
+
 // SetID sets the "id" field.
 func (ac *ArticleCreate) SetID(u uuid.UUID) *ArticleCreate {
 	ac.mutation.SetID(u)
@@ -172,6 +186,10 @@ func (ac *ArticleCreate) createSpec() (*Article, *sqlgraph.CreateSpec) {
 	if value, ok := ac.mutation.Slug(); ok {
 		_spec.SetField(article.FieldSlug, field.TypeString, value)
 		_node.Slug = value
+	}
+	if value, ok := ac.mutation.InternalNote(); ok {
+		_spec.SetField(article.FieldInternalNote, field.TypeString, value)
+		_node.InternalNote = value
 	}
 	return _node, _spec
 }

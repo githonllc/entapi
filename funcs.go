@@ -32,6 +32,7 @@ import (
 //   - funcs_codegen.go:    code generation helpers
 //   - funcs_imports.go:    import specs the emitted files must declare
 //   - funcs_http.go:       HTTP operations, paths, id parsing and imports
+//   - funcs_openapi.go:    the OpenAPI document's YAML shaping helpers
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		// Import declaration
@@ -51,8 +52,20 @@ func templateFuncs() template.FuncMap {
 		"responseEdges":   responseEdges,
 		"edgeJSONKey":     edgeJSONKey,
 		"hasCreateFamily": hasCreateFamily,
+		"isResource":      isResource,
 		"resourceOps":     resourceOps,
 		"routePath":       routePath,
+
+		// The OpenAPI document (funcs_openapi.go). Everything here shapes
+		// derived facts into YAML; nothing here decides what the facts are.
+		"yamlQuote":                   yamlQuote,
+		"openapiSchema":               openapiSchema,
+		"openapiRequiredCreateFields": openapiRequiredCreateFields,
+		"openapiPathGroups":           openapiPathGroups,
+		"openapiFilterParams":         openapiFilterParams,
+		"openapiReservedParams":       openapiReservedParams,
+		"openapiErrorStatuses":        openapiErrorStatuses,
+		"openapiProblemStatuses":      openapiProblemStatuses,
 
 		// Request presence model
 		"isCreatePointer":  isCreatePointer,

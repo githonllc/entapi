@@ -24,6 +24,16 @@ var errorMapTemplate = mustLoadTemplate("errors")
 // httpTemplate is the graph-level APIHandler and route manifest template.
 var httpTemplate = mustLoadTemplate("http")
 
+// openapiTemplate is the graph-level OpenAPI 3.1 document. It is the only
+// template in this package whose output is not Go source, which is why
+// renderOpenAPIFile skips formatFile: goimports would refuse to parse YAML and
+// abort every generation run.
+var openapiTemplate = mustLoadTemplate("openapi")
+
+// openapiEmbedTemplate embeds the document above and serves it. It is ordinary
+// Go and goes through the formatter like everything else.
+var openapiEmbedTemplate = mustLoadTemplate("openapi_embed")
+
 // softDeleteTemplate is the soft-delete traverser and delete-rewriting hook.
 // Unlike every other template here it is rendered once per GRAPH, not once per
 // type: it is a single type switch over the entities embedding

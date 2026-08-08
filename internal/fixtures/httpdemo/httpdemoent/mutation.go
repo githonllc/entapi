@@ -39,6 +39,7 @@ type ArticleMutation struct {
 	rank          *int
 	addrank       *int
 	slug          *string
+	internal_note *string
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*Article, error)
@@ -291,6 +292,55 @@ func (m *ArticleMutation) ResetSlug() {
 	m.slug = nil
 }
 
+// SetInternalNote sets the "internal_note" field.
+func (m *ArticleMutation) SetInternalNote(s string) {
+	m.internal_note = &s
+}
+
+// InternalNote returns the value of the "internal_note" field in the mutation.
+func (m *ArticleMutation) InternalNote() (r string, exists bool) {
+	v := m.internal_note
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInternalNote returns the old "internal_note" field's value of the Article entity.
+// If the Article object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ArticleMutation) OldInternalNote(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInternalNote is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInternalNote requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInternalNote: %w", err)
+	}
+	return oldValue.InternalNote, nil
+}
+
+// ClearInternalNote clears the value of the "internal_note" field.
+func (m *ArticleMutation) ClearInternalNote() {
+	m.internal_note = nil
+	m.clearedFields[article.FieldInternalNote] = struct{}{}
+}
+
+// InternalNoteCleared returns if the "internal_note" field was cleared in this mutation.
+func (m *ArticleMutation) InternalNoteCleared() bool {
+	_, ok := m.clearedFields[article.FieldInternalNote]
+	return ok
+}
+
+// ResetInternalNote resets all changes to the "internal_note" field.
+func (m *ArticleMutation) ResetInternalNote() {
+	m.internal_note = nil
+	delete(m.clearedFields, article.FieldInternalNote)
+}
+
 // Where appends a list predicates to the ArticleMutation builder.
 func (m *ArticleMutation) Where(ps ...predicate.Article) {
 	m.predicates = append(m.predicates, ps...)
@@ -325,7 +375,7 @@ func (m *ArticleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ArticleMutation) Fields() []string {
-	fields := make([]string, 0, 3)
+	fields := make([]string, 0, 4)
 	if m.title != nil {
 		fields = append(fields, article.FieldTitle)
 	}
@@ -334,6 +384,9 @@ func (m *ArticleMutation) Fields() []string {
 	}
 	if m.slug != nil {
 		fields = append(fields, article.FieldSlug)
+	}
+	if m.internal_note != nil {
+		fields = append(fields, article.FieldInternalNote)
 	}
 	return fields
 }
@@ -349,6 +402,8 @@ func (m *ArticleMutation) Field(name string) (ent.Value, bool) {
 		return m.Rank()
 	case article.FieldSlug:
 		return m.Slug()
+	case article.FieldInternalNote:
+		return m.InternalNote()
 	}
 	return nil, false
 }
@@ -364,6 +419,8 @@ func (m *ArticleMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldRank(ctx)
 	case article.FieldSlug:
 		return m.OldSlug(ctx)
+	case article.FieldInternalNote:
+		return m.OldInternalNote(ctx)
 	}
 	return nil, fmt.Errorf("unknown Article field %s", name)
 }
@@ -393,6 +450,13 @@ func (m *ArticleMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSlug(v)
+		return nil
+	case article.FieldInternalNote:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInternalNote(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Article field %s", name)
@@ -442,6 +506,9 @@ func (m *ArticleMutation) ClearedFields() []string {
 	if m.FieldCleared(article.FieldRank) {
 		fields = append(fields, article.FieldRank)
 	}
+	if m.FieldCleared(article.FieldInternalNote) {
+		fields = append(fields, article.FieldInternalNote)
+	}
 	return fields
 }
 
@@ -459,6 +526,9 @@ func (m *ArticleMutation) ClearField(name string) error {
 	case article.FieldRank:
 		m.ClearRank()
 		return nil
+	case article.FieldInternalNote:
+		m.ClearInternalNote()
+		return nil
 	}
 	return fmt.Errorf("unknown Article nullable field %s", name)
 }
@@ -475,6 +545,9 @@ func (m *ArticleMutation) ResetField(name string) error {
 		return nil
 	case article.FieldSlug:
 		m.ResetSlug()
+		return nil
+	case article.FieldInternalNote:
+		m.ResetInternalNote()
 		return nil
 	}
 	return fmt.Errorf("unknown Article field %s", name)

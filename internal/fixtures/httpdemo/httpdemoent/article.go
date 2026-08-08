@@ -22,7 +22,9 @@ type Article struct {
 	// Rank holds the value of the "rank" field.
 	Rank *int `json:"rank,omitempty"`
 	// Slug holds the value of the "slug" field.
-	Slug         string `json:"slug,omitempty"`
+	Slug string `json:"slug,omitempty"`
+	// InternalNote holds the value of the "internal_note" field.
+	InternalNote string `json:"-"`
 	selectValues sql.SelectValues
 }
 
@@ -33,7 +35,7 @@ func (*Article) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case article.FieldRank:
 			values[i] = new(sql.NullInt64)
-		case article.FieldTitle, article.FieldSlug:
+		case article.FieldTitle, article.FieldSlug, article.FieldInternalNote:
 			values[i] = new(sql.NullString)
 		case article.FieldID:
 			values[i] = new(uuid.UUID)
@@ -76,6 +78,12 @@ func (a *Article) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field slug", values[i])
 			} else if value.Valid {
 				a.Slug = value.String
+			}
+		case article.FieldInternalNote:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field internal_note", values[i])
+			} else if value.Valid {
+				a.InternalNote = value.String
 			}
 		default:
 			a.selectValues.Set(columns[i], values[i])
@@ -123,6 +131,8 @@ func (a *Article) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("slug=")
 	builder.WriteString(a.Slug)
+	builder.WriteString(", ")
+	builder.WriteString("internal_note=<sensitive>")
 	builder.WriteByte(')')
 	return builder.String()
 }

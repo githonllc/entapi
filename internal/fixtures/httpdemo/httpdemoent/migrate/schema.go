@@ -14,6 +14,7 @@ var (
 		{Name: "title", Type: field.TypeString, Unique: true, Size: 64},
 		{Name: "rank", Type: field.TypeInt, Nullable: true},
 		{Name: "slug", Type: field.TypeString, Default: "generated"},
+		{Name: "internal_note", Type: field.TypeString, Nullable: true},
 	}
 	// ArticlesTable holds the schema information for the "articles" table.
 	ArticlesTable = &schema.Table{

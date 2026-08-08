@@ -30,6 +30,12 @@ func (Article) Fields() []ent.Field {
 		field.String("slug").
 			Default("generated").
 			Immutable(),
+		// Settable, never returned. It is what makes the generated document's
+		// claim checkable in both directions: absent from every *Response and
+		// *Summary schema, present in the create and patch request schemas.
+		field.String("internal_note").
+			Optional().
+			Sensitive(),
 	}
 }
 

@@ -53,6 +53,18 @@ const errorMapFileName = "entapi_errors.go"
 // httpFileName holds the graph-level APIHandler and route manifest.
 const httpFileName = "entapi_http.go"
 
+// openapiFileName is the generated OpenAPI 3.1 document — the one artifact this
+// extension writes that is not Go source. It is committed with the rest of the
+// output, so the exposed surface shows up in a pull request diff.
+//
+// It is a bare name rather than a prefixed one because it is the file a human
+// looks for, and it cannot collide with ent's output, which is Go only.
+const openapiFileName = "openapi.yaml"
+
+// openapiEmbedFileName holds the //go:embed of the document above and the
+// handler that serves it. Same entapi_ prefix rule as the other graph files.
+const openapiEmbedFileName = "entapi_openapi.go"
+
 // removeStaleArtifacts deletes files this extension wrote on an earlier run and
 // did not write on this one — the entity lost its annotations, was deleted from
 // the schema outright, or the template that produced the file was removed from
@@ -90,7 +102,7 @@ func removeStaleArtifacts(dir string, written map[string]bool) error {
 		return fmt.Errorf("failed to scan %s for stale generated files: %w", dir, err)
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+		if entry.IsDir() || !isCleanupCandidate(entry.Name()) {
 			continue
 		}
 		if err := removeIfStale(dir, entry.Name(), written); err != nil {
@@ -98,6 +110,21 @@ func removeStaleArtifacts(dir string, written map[string]bool) error {
 		}
 	}
 	return nil
+}
+
+// isCleanupCandidate narrows the scan to the shapes this extension can write.
+//
+// Everything it emits is Go source, with one exception: openapi.yaml (#76).
+// Before that exception existed the scan was `.go`-suffixed, which would have
+// left a stale document alive in a consumer's tree forever — no run would ever
+// have considered it.
+//
+// The exception is an EXACT NAME, not a `.yaml` suffix class. Widening it to
+// every YAML file would put a consumer's own marked document — a checked-in
+// golden copy, a hand-maintained spec quoting a generated header — inside the
+// deletion surface for no gain, since this extension writes exactly one.
+func isCleanupCandidate(name string) bool {
+	return strings.HasSuffix(name, ".go") || name == openapiFileName
 }
 
 // removeIfStale applies both rules to one candidate path.

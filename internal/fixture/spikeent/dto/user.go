@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -413,18 +414,22 @@ var userSortable = map[string]func(...sql.OrderTermOption) user.OrderOption{
 var UserSortKeys = []string{"name", "created_at"}
 
 func UserOrder(r entapi.ListRequest) ([]user.OrderOption, error) {
-	key, desc, err := r.SortKey(UserSortKeys, "created_at")
-	if err != nil {
-		return nil, err
+	if len(r.Sort) == 0 {
+		r.Sort = []entapi.SortSpec{{Key: "created_at"}}
 	}
-	by, ok := userSortable[key]
-	if !ok {
-		return nil, nil
+	order := make([]user.OrderOption, 0, len(r.Sort))
+	for _, spec := range r.Sort {
+		by, ok := userSortable[spec.Key]
+		if !ok {
+			return nil, fmt.Errorf("%w: cannot sort by %q; legal keys: %s", entapi.ErrValidation, spec.Key, strings.Join(UserSortKeys, ", "))
+		}
+		dir := sql.OrderAsc()
+		if spec.Desc {
+			dir = sql.OrderDesc()
+		}
+		order = append(order, by(dir))
 	}
-	if desc {
-		return []user.OrderOption{by(sql.OrderDesc())}, nil
-	}
-	return []user.OrderOption{by(sql.OrderAsc())}, nil
+	return order, nil
 }
 
 // ════════════════════════════════════════════════════════════════════════════

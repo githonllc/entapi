@@ -20,7 +20,7 @@ const (
 	// FieldBody holds the string denoting the body field in the database.
 	FieldBody = "body"
 	// FieldRef holds the string denoting the ref field in the database.
-	FieldRef = "ref"
+	FieldRef = "reference"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldScore holds the string denoting the score field in the database.

@@ -16,90 +16,52 @@ import (
 {{- $pkg := $.Package }}
 {{- $queryFields := queryFields $ }}
 {{- $searchFields := searchFields $ }}
+{{- $parseFields := parseFields $ }}
+{{- $unfilterableFields := unfilterableFields $ }}
 
-// ============================================================================
-// Query surface for {{ $.Name }} — filters, free-text search and the sort
-// allow-list. They are three dimensions of one list endpoint, not three
-// features, so they are one artifact.
-//
-// Every field below carries at least one query-dimension word. A field with no
-// Searchable, Filterable or Sortable word is absent from all three, and there
-// is no runtime switch that can bring it back.
-// ============================================================================
-
-// {{ $.Name }}Filter is the structured query surface for {{ $.Name }}.
-//
-// One parameter per operator per Filterable field, with the operator set taken
-// from ent's own per-type table ($field.Ops) rather than from a curated
-// selection: emitting an operator costs nothing here, whereas adding one later
-// means changing a template, regenerating and possibly breaking a URL contract
-// consumers already depend on. Substring-class operators (_contains,
-// _icontains, _ieq, _suffix) additionally require api.Searchable() on the field —
-// see docs/adr/0005.
-//
-// Every parameter is a pointer or a slice, because "absent" and "the zero
-// value" are different requests.
+// {{ $.Name }}Filter is the typed query representation for {{ $.Name }}.
+// Repeated URL parameters occupy repeated slots and Predicates ANDs them.
 type {{ $.Name }}Filter struct {
-{{- range $f := $queryFields }}
-{{- if isFilterable $f }}
-	// {{ $f.StorageKey }}: {{ $f.Type }}{{ if $f.Optional }}, optional{{ end }}
-{{- range $p := filterParams $f }}
-{{- if eq $p.Kind "null" }}
-	// IsNil and NotNil are one boolean question. Emitting them as two
-	// parameters would admit a request that contradicts itself.
+{{- range $pf := $parseFields }}
+	// {{ $pf.Field.StorageKey }}: {{ $pf.Field.Type }}{{ if $pf.Field.Optional }}, optional{{ end }}
+{{- range $p := $pf.Params }}
+	{{ $p.Field }} {{ $p.Type }} `json:"{{ $p.Tag }},omitempty"`
 {{- end }}
-	{{ $p.Field }} {{ $p.Type }} `form:"{{ $p.Tag }}" json:"{{ $p.Tag }},omitempty"`
-{{- end }}
-{{ end }}
 {{- end }}
 {{- if $searchFields }}
-	// Free-text search across the Searchable fields:
-	// {{ range $f := $queryFields }}{{ if isSearchable $f }}{{ $f.StorageKey }} {{ end }}{{ end }}
-	// One input, matched disjunctively, then ANDed with everything above.
-	Q *string `form:"q" json:"q,omitempty"`
+	// Q is the single free-text term matched across Searchable fields.
+	Q *string `json:"_q,omitempty"`
 {{- end }}
 }
 
-// Predicates converts the filter into ent predicates.
-//
-// The result is applied with Where(...), which combines conjunctively, so every
-// parameter the caller set narrows the result further. The free-text term is
-// the one disjunction: it ORs across the searchable fields and joins the rest
-// as a single conjunct.
-//
-// A nil receiver yields no predicates, so an endpoint with no filter bound does
-// not need a branch of its own.
+// Predicates converts the typed filter into conjunctive ent predicates.
 func (f *{{ $.Name }}Filter) Predicates() []predicate.{{ $.Name }} {
 	if f == nil {
 		return nil
 	}
 	var ps []predicate.{{ $.Name }}
-{{- range $f := $queryFields }}
-{{- if isFilterable $f }}
-{{- range $p := filterParams $f }}
+{{- range $pf := $parseFields }}
+{{- range $p := $pf.Params }}
 {{- if eq $p.Kind "one" }}
-	entapi.AppendIf(&ps, f.{{ $p.Field }}, {{ $pkg }}.{{ $p.Pred }})
+	entapi.AppendEach(&ps, f.{{ $p.Field }}, {{ $pkg }}.{{ $p.Pred }})
 {{- else if eq $p.Kind "many" }}
-	entapi.AppendIfSlice(&ps, f.{{ $p.Field }}, {{ $pkg }}.{{ $p.Pred }})
+	entapi.AppendEachSlice(&ps, f.{{ $p.Field }}, {{ $pkg }}.{{ $p.Pred }})
 {{- else }}
-	if f.{{ $p.Field }} != nil {
-		if *f.{{ $p.Field }} {
-			ps = append(ps, {{ $pkg }}.{{ $f.StructField }}IsNil())
+	for _, isNull := range f.{{ $p.Field }} {
+		if isNull {
+			ps = append(ps, {{ $pkg }}.{{ $pf.Name }}IsNil())
 		} else {
-			ps = append(ps, {{ $pkg }}.{{ $f.StructField }}NotNil())
+			ps = append(ps, {{ $pkg }}.{{ $pf.Name }}NotNil())
 		}
 	}
-{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
 {{- if $searchFields }}
 	if f.Q != nil && *f.Q != "" {
 		ps = append(ps, {{ $pkg }}.Or(
-{{- range $f := $queryFields }}
-{{- if isSearchable $f }}
+{{- range $f := $searchFields }}
 			{{ $pkg }}.{{ $f.StructField }}Contains(*f.Q),
-{{- end }}
 {{- end }}
 		))
 	}
@@ -107,10 +69,196 @@ func (f *{{ $.Name }}Filter) Predicates() []predicate.{{ $.Name }} {
 	return ps
 }
 
-// {{ camelCase $.Name }}SortOptions maps an allowed sort key to ent's own order
-// builder for that column. It is unexported: the mapping is reached through
-// {{ $.Name }}Order, which checks the key first.
+{{- range $pf := $parseFields }}
+
+func parse{{ $.Name }}{{ $pf.Name }}QueryValue(raw, whole string) ({{ $pf.Field.Type }}, error) {
+{{- if eq $pf.ParseKind "string" }}
+	return {{ $pf.Conversion }}, nil
+{{- else if eq $pf.ParseKind "enum" }}
+	switch raw {
+{{- range $value := $pf.Enums }}
+	case {{ printf "%q" $value }}:
+		return {{ $pf.Conversion }}, nil
+{{- end }}
+	default:
+		var zero {{ $pf.Field.Type }}
+		return zero, fmt.Errorf("%w: field %q value %q is not an enum member; legal members: %s", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, strings.Join([]string{
+{{- range $value := $pf.Enums }}
+			{{ printf "%q" $value }},
+{{- end }}
+		}, ", "))
+	}
+{{- else if eq $pf.ParseKind "bool" }}
+	parsed, err := strconv.ParseBool(raw)
+	if err != nil {
+		var zero {{ $pf.Field.Type }}
+		return zero, fmt.Errorf("%w: field %q value %q is not a bool: %v", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, err)
+	}
+	return {{ $pf.Conversion }}, nil
+{{- else if eq $pf.ParseKind "int" }}
+	parsed, err := strconv.ParseInt(raw, 10, {{ $pf.Bits }})
+	if err != nil {
+		var zero {{ $pf.Field.Type }}
+		return zero, fmt.Errorf("%w: field %q value %q is not a valid {{ $pf.Field.Type }}: %v", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, err)
+	}
+	return {{ $pf.Conversion }}, nil
+{{- else if eq $pf.ParseKind "uint" }}
+	parsed, err := strconv.ParseUint(raw, 10, {{ $pf.Bits }})
+	if err != nil {
+		var zero {{ $pf.Field.Type }}
+		return zero, fmt.Errorf("%w: field %q value %q is not a valid {{ $pf.Field.Type }}: %v", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, err)
+	}
+	return {{ $pf.Conversion }}, nil
+{{- else if eq $pf.ParseKind "float" }}
+	parsed, err := strconv.ParseFloat(raw, {{ $pf.Bits }})
+	if err != nil {
+		var zero {{ $pf.Field.Type }}
+		return zero, fmt.Errorf("%w: field %q value %q is not a valid {{ $pf.Field.Type }}: %v", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, err)
+	}
+	return {{ $pf.Conversion }}, nil
+{{- else if eq $pf.ParseKind "time" }}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		var zero {{ $pf.Field.Type }}
+		return zero, fmt.Errorf("%w: field %q value %q is not RFC 3339: %v", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, err)
+	}
+	return {{ $pf.Conversion }}, nil
+{{- else if eq $pf.ParseKind "text" }}
+	var parsed {{ $pf.Field.Type }}
+	if err := encoding.TextUnmarshaler(&parsed).UnmarshalText([]byte(raw)); err != nil {
+		return parsed, fmt.Errorf("%w: field %q value %q is invalid: %v", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, err)
+	}
+	return {{ $pf.Conversion }}, nil
+{{- else }}
+	var zero {{ $pf.Field.Type }}
+	return zero, fmt.Errorf("%w: field %q cannot parse query values", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}")
+{{- end }}
+}
+{{- end }}
+
+// Parse{{ $.Name }}Query parses the complete URL query contract in sorted-key
+// order. Runtime code owns lexical grammar; this generated switch owns the
+// field-local operator set, conversion and predicate slots.
+func Parse{{ $.Name }}Query(q url.Values) (*{{ $.Name }}Filter, entapi.ListRequest, error) {
+	f := &{{ $.Name }}Filter{}
+	var request entapi.ListRequest
+	keys := make([]string, 0, len(q))
+	for key := range q {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		values := q[key]
+		reserved, recognized, err := entapi.ReservedQueryValue(key, values)
+		if err != nil {
+			return nil, entapi.ListRequest{}, err
+		}
+		if recognized {
+			switch key {
+			case "_sort":
+				request.Sort, err = entapi.ParseSortSpecs(reserved)
+			case "_page":
+				request.Page, err = entapi.ParsePageParam(key, reserved)
+			case "_size":
+				request.Size, err = entapi.ParsePageParam(key, reserved)
+			case "_q":
+{{- if $searchFields }}
+				term := reserved
+				f.Q = &term
+{{- else }}
+				err = fmt.Errorf("%w: _q value %q is invalid because {{ $.Name }} has no Searchable fields", entapi.ErrValidation, reserved)
+{{- end }}
+			}
+			if err != nil {
+				return nil, entapi.ListRequest{}, err
+			}
+			continue
+		}
+		if strings.HasPrefix(key, "_") {
+			return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown reserved query parameter %q", entapi.ErrValidation, key)
+		}
+		switch key {
+{{- range $pf := $parseFields }}
+		case "{{ $pf.Field.StorageKey }}":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+{{- range $op := $pf.Operators }}
+				case "{{ $op.Prefix }}":
+{{- end }}
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "{{ $pf.Allowed }}")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+{{- range $op := $pf.Operators }}
+				case "{{ $op.Prefix }}":
+{{- if eq $op.Kind "null" }}
+					if raw != "" {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "{{ $pf.Allowed }}")
+					}
+					f.{{ $op.Field }} = append(f.{{ $op.Field }}, {{ $op.BoolValue }})
+{{- else if eq $op.Kind "many" }}
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]{{ $pf.Field.Type }}, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parse{{ $.Name }}{{ $pf.Name }}QueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.{{ $op.Field }} = append(f.{{ $op.Field }}, parsedValues)
+{{- else if eq $op.Kind "between" }}
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parse{{ $.Name }}{{ $pf.Name }}QueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parse{{ $.Name }}{{ $pf.Name }}QueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.{{ $op.Field }} = append(f.{{ $op.Field }}, lower)
+					f.{{ $op.SecondField }} = append(f.{{ $op.SecondField }}, upper)
+{{- else }}
+					parsed, parseErr := parse{{ $.Name }}{{ $pf.Name }}QueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.{{ $op.Field }} = append(f.{{ $op.Field }}, parsed)
+{{- end }}
+{{- end }}
+				}
+			}
+{{- end }}
+		default:
+			switch key {
+{{- range $f := $unfilterableFields }}
+			case "{{ $f.StorageKey }}":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+{{- end }}
+			default:
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown query field %q with value %q", entapi.ErrValidation, key, values)
+			}
+		}
+	}
+	return f, request, nil
+}
+
 var {{ camelCase $.Name }}SortOptions = map[string]func(...sql.OrderTermOption) {{ $pkg }}.OrderOption{
+	"{{ $.ID.StorageKey }}": {{ $pkg }}.{{ $.ID.OrderName }},
 {{- range $f := $queryFields }}
 {{- if isSortable $f }}
 	"{{ $f.StorageKey }}": {{ $pkg }}.{{ $f.OrderName }},
@@ -118,61 +266,38 @@ var {{ camelCase $.Name }}SortOptions = map[string]func(...sql.OrderTermOption) 
 {{- end }}
 }
 
-// {{ $.Name }}SortKeys is the sort allow-list: exactly the fields annotated
-// Sortable, and nothing else.
-//
-// This is the load-bearing part of the query surface. An unchecked sort field
-// is an injection site, an unindexed-scan trigger and — combined with paging —
-// an ordering oracle over columns the caller was never meant to read. An entity
-// that marks nothing is orderable by nothing, which is the safe end of the
-// default rather than an oversight.
+// {{ $.Name }}SortKeys is the complete sort allow-list. The primary key is
+// naturally Sortable; every other key requires api.Sortable().
 var {{ $.Name }}SortKeys = []string{
+	"{{ $.ID.StorageKey }}",
 {{- range $f := $queryFields }}{{ if isSortable $f }}"{{ $f.StorageKey }}", {{ end }}{{ end }}
 }
 
-// {{ $.Name }}Order turns a list request into ent order options.
-//
-// The caller's string is checked against {{ $.Name }}SortKeys and then thrown
-// away: what reaches the query is the order builder ent generated for that
-// column, looked up by an already-validated key. No caller-supplied string is
-// ever interpolated into SQL.
-//
-// A key outside the allow-list is a validation error, not a silent fallback —
-// a request to sort by a column that is out of bounds has no correct answer,
-// and quietly serving a differently-ordered page is worse than refusing.
-//
-// There is still no default sort COLUMN. Which column to order by when the
-// caller names none is a policy the schema does not contain, so generation does
-// not invent one; a consumer that wants a default passes SortBy itself.
-//
-// Every result nevertheless ends with the primary key (ADR-0002). Offset
-// pagination is only correct over a TOTAL order: LIMIT/OFFSET over a result set
-// that is unordered, or ordered by a column with ties, lets rows repeat or
-// vanish between pages with zero concurrent writes. The primary key is unique,
-// so appending it turns any prefix order into a total one — that is the whole
-// correctness argument.
-//
-// The primary-key term is a determinism floor, not a default sort: the response
-// does not claim an ordering the caller never requested, it merely stops being
-// random. The tiebreak follows the requested direction so that a descending
-// walk stays descending, and it is skipped when the requested key IS the
-// primary key, since ORDER BY id, id says nothing the first term did not.
+// {{ $.Name }}Order is the single sort allow-list seam.
 func {{ $.Name }}Order(r entapi.ListRequest) ([]{{ $pkg }}.OrderOption, error) {
-	key, desc, err := r.SortKey({{ $.Name }}SortKeys, "")
-	if err != nil {
-		return nil, err
-	}
-	dir := sql.OrderAsc()
-	if desc {
-		dir = sql.OrderDesc()
-	}
-	by, ok := {{ camelCase $.Name }}SortOptions[key]
-	if !ok {
+	if len(r.Sort) == 0 {
 		return []{{ $pkg }}.OrderOption{ {{ $pkg }}.{{ $.ID.OrderName }}(sql.OrderAsc()) }, nil
 	}
-	order := []{{ $pkg }}.OrderOption{by(dir)}
-	if key != "{{ $.ID.StorageKey }}" {
-		order = append(order, {{ $pkg }}.{{ $.ID.OrderName }}(dir))
+	order := make([]{{ $pkg }}.OrderOption, 0, len(r.Sort)+1)
+	idPresent := false
+	lastDir := sql.OrderAsc()
+	for _, spec := range r.Sort {
+		by, ok := {{ camelCase $.Name }}SortOptions[spec.Key]
+		if !ok {
+			return nil, fmt.Errorf("%w: cannot sort by %q; legal keys: %s", entapi.ErrValidation, spec.Key, strings.Join({{ $.Name }}SortKeys, ", "))
+		}
+		dir := sql.OrderAsc()
+		if spec.Desc {
+			dir = sql.OrderDesc()
+		}
+		order = append(order, by(dir))
+		lastDir = dir
+		if spec.Key == "{{ $.ID.StorageKey }}" {
+			idPresent = true
+		}
+	}
+	if !idPresent {
+		order = append(order, {{ $pkg }}.{{ $.ID.OrderName }}(lastDir))
 	}
 	return order, nil
 }

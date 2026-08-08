@@ -16,11 +16,15 @@ package queryent
 
 import (
 	"errors"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
+
+	"github.com/google/uuid"
 
 	"github.com/githonllc/entapi/internal/fixtures/query/queryent/predicate"
 	"github.com/githonllc/entapi/internal/fixtures/query/queryent/record"
@@ -63,21 +67,20 @@ func predicateFns(ps []predicate.Record) []func(*sql.Selector) {
 // TestSortAllowListIsExactlyTheAnnotatedFields pins both directions: only
 // Sortable fields are in it, and every Sortable field is.
 func TestSortAllowListIsExactlyTheAnnotatedFields(t *testing.T) {
-	want := []string{"title", "created_at"}
+	want := []string{"id", "title", "created_at"}
 	if !reflect.DeepEqual(RecordSortKeys, want) {
 		t.Errorf("RecordSortKeys = %v, want %v", RecordSortKeys, want)
 	}
 }
 
-// TestUnmarkedEntityHasAnEmptySortAllowList is the safe end of the default. An
-// entity nobody marked is orderable by nothing at all, rather than by
-// everything the preset builders happened to touch.
-func TestUnmarkedEntityHasAnEmptySortAllowList(t *testing.T) {
-	if len(PlainSortKeys) != 0 {
-		t.Errorf("PlainSortKeys = %v, want empty: Plain marks no field sortable", PlainSortKeys)
+// TestUnmarkedEntityGetsOnlyThePrimaryKeyQuerySurface pins the annotation-free
+// ID behaviour without exposing any unmarked non-ID field.
+func TestUnmarkedEntityGetsOnlyThePrimaryKeyQuerySurface(t *testing.T) {
+	if want := []string{"id"}; !reflect.DeepEqual(PlainSortKeys, want) {
+		t.Errorf("PlainSortKeys = %v, want %v: the primary key is naturally sortable", PlainSortKeys, want)
 	}
-	if n := reflect.TypeOf(PlainFilter{}).NumField(); n != 0 {
-		t.Errorf("PlainFilter has %d field(s), want 0: Plain marks no field filterable or searchable", n)
+	if n := reflect.TypeOf(PlainFilter{}).NumField(); n != 8 {
+		t.Errorf("PlainFilter has %d field(s), want 8 primary-key operator slots", n)
 	}
 }
 
@@ -90,20 +93,24 @@ func TestSortRejectsAnythingOutsideTheAllowList(t *testing.T) {
 		"note",                         // exists, query-scoped, but not marked sortable
 		"body",                         // exists, searchable, but not marked sortable
 		"status",                       // exists, filterable, but not marked sortable
-		"id",                           // exists, and is not in the allow-list either
 		"nonexistent",                  // does not exist
 		"created_at; DROP TABLE users", // not a column name
 		"created_at) OR 1=1--",         // not a column name
 		"(SELECT secret FROM records)", // not a column name
 	} {
 		t.Run(key, func(t *testing.T) {
-			opts, err := RecordOrder(entapi.ListRequest{SortBy: key})
+			opts, err := RecordOrder(entapi.ListRequest{Sort: []entapi.SortSpec{{Key: key}}})
 
 			if !errors.Is(err, entapi.ErrValidation) {
-				t.Fatalf("RecordOrder(SortBy=%q) error = %v, want one wrapping entapi.ErrValidation", key, err)
+				t.Fatalf("RecordOrder(Sort=%q) error = %v, want one wrapping entapi.ErrValidation", key, err)
 			}
 			if len(opts) != 0 {
-				t.Fatalf("RecordOrder(SortBy=%q) returned %d order option(s) alongside the error", key, len(opts))
+				t.Fatalf("RecordOrder(Sort=%q) returned %d order option(s) alongside the error", key, len(opts))
+			}
+			for _, legal := range RecordSortKeys {
+				if !strings.Contains(err.Error(), legal) {
+					t.Errorf("error %q does not list legal sort key %q", err, legal)
+				}
 			}
 
 			// The load-bearing assertion: nothing the caller wrote reaches the
@@ -130,16 +137,14 @@ func TestSortRejectsAnythingOutsideTheAllowList(t *testing.T) {
 // term the page boundaries cut through ties nondeterministically.
 func TestSortAcceptsAnAllowedKeyInBothDirections(t *testing.T) {
 	for _, tc := range []struct {
-		order   string
+		name    string
 		wantDsc bool
 	}{
-		{order: ""},
-		{order: "asc"},
-		{order: "desc", wantDsc: true},
-		{order: "DESC", wantDsc: true},
+		{name: "asc"},
+		{name: "desc", wantDsc: true},
 	} {
-		t.Run("created_at/"+tc.order, func(t *testing.T) {
-			opts, err := RecordOrder(entapi.ListRequest{SortBy: "created_at", Order: tc.order})
+		t.Run("created_at/"+tc.name, func(t *testing.T) {
+			opts, err := RecordOrder(entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "created_at", Desc: tc.wantDsc}}})
 			if err != nil {
 				t.Fatalf("RecordOrder: unexpected error %v", err)
 			}
@@ -162,9 +167,47 @@ func TestSortAcceptsAnAllowedKeyInBothDirections(t *testing.T) {
 				wantDesc = 2
 			}
 			if got := strings.Count(query, "DESC"); got != wantDesc {
-				t.Errorf("order %q produced %d DESC term(s), want %d: %s", tc.order, got, wantDesc, query)
+				t.Errorf("order %q produced %d DESC term(s), want %d: %s", tc.name, got, wantDesc, query)
 			}
 		})
+	}
+}
+
+func TestMultiKeySortHonoursEveryTermAndTiebreakAnywhere(t *testing.T) {
+	opts, err := RecordOrder(entapi.ListRequest{Sort: []entapi.SortSpec{
+		{Key: "created_at", Desc: true},
+		{Key: "id"},
+		{Key: "title", Desc: true},
+	}})
+	if err != nil {
+		t.Fatalf("RecordOrder: %v", err)
+	}
+	if len(opts) != 3 {
+		t.Fatalf("got %d terms, want the three requested terms and no duplicate id tiebreak", len(opts))
+	}
+	query := selectorSQL(orderFns(opts)...)
+	createdAt := strings.Index(query, "`"+record.FieldCreatedAt+"` DESC")
+	id := strings.Index(query, "`"+record.FieldID+"`")
+	title := strings.Index(query, "`"+record.FieldTitle+"` DESC")
+	if createdAt < 0 || id < createdAt || title < id {
+		t.Fatalf("multi-key order is not created_at desc, id asc, title desc: %s", query)
+	}
+	if strings.Count(query, "`"+record.FieldID+"`") != 1 {
+		t.Fatalf("id was appended twice even though it appeared in the middle: %s", query)
+	}
+}
+
+func TestPrimaryKeyIsNaturallySortable(t *testing.T) {
+	opts, err := RecordOrder(entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "id", Desc: true}}})
+	if err != nil {
+		t.Fatalf("RecordOrder(id): %v", err)
+	}
+	if len(opts) != 1 {
+		t.Fatalf("RecordOrder(id) returned %d terms, want exactly one", len(opts))
+	}
+	query := selectorSQL(orderFns(opts)...)
+	if !strings.Contains(query, "`"+record.FieldID+"` DESC") {
+		t.Fatalf("id descending did not reach SQL: %s", query)
 	}
 }
 
@@ -219,21 +262,26 @@ func TestNoSortRequestedOrdersByID(t *testing.T) {
 // on ref ever asked for it.
 func TestOperatorCoverageFollowsTheClassRule(t *testing.T) {
 	want := map[string]int{
-		"title":      13, // stringOps (11) + EqualFold + ContainsFold
-		"ref":        10, // the same 13 minus the 4 substring ops, plus the collapsed null question
+		"id":         8,  // numericOps; the primary key is naturally Filterable
+		"title":      12, // stringOps plus ContainsFold, minus EqualFold (no wire spelling)
+		"reference":  10, // Go field Ref; every wire surface follows StorageKey
 		"status":     4,  // enumOps
 		"score":      9,  // numericOps (8) + IsNil/NotNil collapsed into one
 		"created_at": 8,  // numericOps
-		"q":          1,  // the free-text input: one for the whole entity
+		"_q":         1,  // the free-text input: one for the whole entity
 	}
 
 	got := map[string]int{}
 	rt := reflect.TypeOf(RecordFilter{})
 	for i := 0; i < rt.NumField(); i++ {
-		tag := rt.Field(i).Tag.Get("form")
-		if tag == "" {
-			t.Fatalf("RecordFilter.%s carries no form tag", rt.Field(i).Name)
+		if form := rt.Field(i).Tag.Get("form"); form != "" {
+			t.Errorf("RecordFilter.%s retains retired form tag %q", rt.Field(i).Name, form)
 		}
+		tag := rt.Field(i).Tag.Get("json")
+		if tag == "" {
+			t.Fatalf("RecordFilter.%s carries no json tag", rt.Field(i).Name)
+		}
+		tag = strings.TrimSuffix(tag, ",omitempty")
 		matched := false
 		for key := range want {
 			if tag == key || strings.HasPrefix(tag, key+"_") {
@@ -252,10 +300,13 @@ func TestOperatorCoverageFollowsTheClassRule(t *testing.T) {
 
 	// The counts say how many; these say which. A count alone would pass if the
 	// split had merely renamed a parameter rather than withheld a class.
-	for _, present := range []string{"TitleContains", "TitleContainsFold", "TitleEqualFold", "TitleHasSuffix"} {
+	for _, present := range []string{"TitleContains", "TitleContainsFold", "TitleHasSuffix"} {
 		if _, ok := rt.FieldByName(present); !ok {
 			t.Errorf("RecordFilter.%s is missing; title is Filterable AND Searchable, which is what earns the substring class", present)
 		}
+	}
+	if _, ok := rt.FieldByName("TitleEqualFold"); ok {
+		t.Error("RecordFilter.TitleEqualFold exists; EqualFold has no wire spelling and must fall out of the vocabulary intersection")
 	}
 	for _, absent := range []string{"RefContains", "RefContainsFold", "RefEqualFold", "RefHasSuffix"} {
 		if _, ok := rt.FieldByName(absent); ok {
@@ -282,11 +333,14 @@ func TestUnmarkedFieldsAreAbsentFromTheFilter(t *testing.T) {
 	rt := reflect.TypeOf(RecordFilter{})
 	for i := 0; i < rt.NumField(); i++ {
 		name := rt.Field(i).Name
-		for _, forbidden := range []string{"Note", "Secret", "Body", "ID"} {
+		for _, forbidden := range []string{"Note", "Secret", "Body"} {
 			if strings.HasPrefix(name, forbidden) {
 				t.Errorf("RecordFilter.%s exists, but %q is not marked filterable", name, forbidden)
 			}
 		}
+	}
+	if _, ok := rt.FieldByName("ID"); !ok {
+		t.Error("RecordFilter.ID is absent; the primary key must be naturally Filterable")
 	}
 }
 
@@ -304,11 +358,10 @@ func TestNullQuestionIsOneParameter(t *testing.T) {
 		}
 	}
 
-	isNull, notNull := true, false
-	if q := selectorSQL(predicateFns((&RecordFilter{ScoreIsNull: &isNull}).Predicates())...); !strings.Contains(q, "IS NULL") {
+	if q := selectorSQL(predicateFns((&RecordFilter{ScoreIsNull: []bool{true}}).Predicates())...); !strings.Contains(q, "IS NULL") {
 		t.Errorf("score_is_null=true did not produce IS NULL: %s", q)
 	}
-	if q := selectorSQL(predicateFns((&RecordFilter{ScoreIsNull: &notNull}).Predicates())...); !strings.Contains(q, "NOT NULL") {
+	if q := selectorSQL(predicateFns((&RecordFilter{ScoreIsNull: []bool{false}}).Predicates())...); !strings.Contains(q, "NOT NULL") {
 		t.Errorf("score_is_null=false did not produce IS NOT NULL: %s", q)
 	}
 }
@@ -318,9 +371,7 @@ func TestNullQuestionIsOneParameter(t *testing.T) {
 // ────────────────────────────────────────────────────────────────────────────
 
 func TestFiltersCombineConjunctively(t *testing.T) {
-	title := "release"
-	status := record.StatusLive
-	f := &RecordFilter{TitleContains: &title, Status: &status}
+	f := &RecordFilter{TitleContains: []string{"release"}, Status: []record.Status{record.StatusLive}}
 
 	query := selectorSQL(predicateFns(f.Predicates())...)
 	for _, want := range []string{record.FieldTitle, record.FieldStatus, "AND"} {
@@ -335,8 +386,7 @@ func TestFiltersCombineConjunctively(t *testing.T) {
 
 func TestFreeTextSearchOrsWithinItselfAndAndsWithTheRest(t *testing.T) {
 	term := "release"
-	status := record.StatusLive
-	f := &RecordFilter{Q: &term, Status: &status}
+	f := &RecordFilter{Q: &term, Status: []record.Status{record.StatusLive}}
 
 	query := selectorSQL(predicateFns(f.Predicates())...)
 	if !strings.Contains(query, " OR ") {
@@ -372,4 +422,195 @@ func TestEmptyFilterProducesNoPredicates(t *testing.T) {
 	if ps := (&RecordFilter{Q: &blank}).Predicates(); len(ps) != 0 {
 		t.Errorf("an empty free-text term produced %d predicate(s)", len(ps))
 	}
+}
+
+func parseRecord(t *testing.T, values url.Values) (*RecordFilter, entapi.ListRequest) {
+	t.Helper()
+	f, r, err := ParseRecordQuery(values)
+	if err != nil {
+		t.Fatalf("ParseRecordQuery(%v): %v", values, err)
+	}
+	return f, r
+}
+
+func requireQueryValidation(t *testing.T, values url.Values, wants ...string) {
+	t.Helper()
+	_, _, err := ParseRecordQuery(values)
+	if !errors.Is(err, entapi.ErrValidation) {
+		t.Fatalf("ParseRecordQuery(%v) error = %v, want ErrValidation", values, err)
+	}
+	for _, want := range wants {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestParseRule1BareEmptyIsIgnoredButExplicitEqIsReal(t *testing.T) {
+	f, _ := parseRecord(t, url.Values{"title": {"", "eq:"}})
+	if !reflect.DeepEqual(f.Title, []string{""}) {
+		t.Fatalf("Title = %#v, want one explicit empty equality", f.Title)
+	}
+}
+
+func TestParseRule2BareValueMeansEquality(t *testing.T) {
+	f, _ := parseRecord(t, url.Values{"title": {"release"}})
+	if !reflect.DeepEqual(f.Title, []string{"release"}) {
+		t.Fatalf("Title = %#v, want bare equality", f.Title)
+	}
+	query := selectorSQL(predicateFns(f.Predicates())...)
+	if strings.Contains(query, "LIKE") || !strings.Contains(query, "=") {
+		t.Fatalf("bare equality rendered as a pattern operator: %s", query)
+	}
+}
+
+func TestParseRule3AllowedPrefixAppliesItsOperator(t *testing.T) {
+	f, _ := parseRecord(t, url.Values{"score": {"gt:30"}})
+	if !reflect.DeepEqual(f.ScoreGT, []int{30}) {
+		t.Fatalf("ScoreGT = %#v, want [30]", f.ScoreGT)
+	}
+}
+
+func TestParseRule4KnownButDisallowedPrefixIsValidationError(t *testing.T) {
+	requireQueryValidation(t, url.Values{"reference": {"like:scan"}}, "reference", "like:scan", "legal operators", "prefix")
+}
+
+func TestParseRule5UnknownPrefixFallsBackToWholeEqualityLiteral(t *testing.T) {
+	f, _ := parseRecord(t, url.Values{"title": {"12:30"}})
+	if !reflect.DeepEqual(f.Title, []string{"12:30"}) {
+		t.Fatalf("Title = %#v, want the whole value as equality literal", f.Title)
+	}
+	requireQueryValidation(t, url.Values{"score": {"12:30"}}, "score", "12:30")
+}
+
+func TestParseRule6ExplicitEqEscapesOperatorLookingLiterals(t *testing.T) {
+	f, _ := parseRecord(t, url.Values{"title": {"eq:like:scan"}})
+	if !reflect.DeepEqual(f.Title, []string{"like:scan"}) {
+		t.Fatalf("Title = %#v, want [like:scan]", f.Title)
+	}
+}
+
+func TestParseRecordQueryCoversEveryOperatorClass(t *testing.T) {
+	id1 := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	id2 := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	f, r := parseRecord(t, url.Values{
+		"id":         {"in:" + id1.String() + "," + id2.String()},
+		"title":      {"ne:x", "gt:a", "ge:b", "lt:y", "le:z", "like:mid", "ilike:FOLD", "prefix:pre", "suffix:suf"},
+		"reference":  {"prefix:left"},
+		"status":     {"in:draft,live", "not_in:draft"},
+		"score":      {"is_null:", "not_null:", "from:10", "to:90", "between:20,80"},
+		"created_at": {"eq:2026-08-08T12:34:56Z"},
+		"_q":         {"needle"},
+		"_sort":      {"created_at:desc,id"},
+		"_page":      {"2"},
+		"_size":      {"1001"},
+	})
+	if len(f.IDIn) != 1 || !reflect.DeepEqual(f.IDIn[0], []uuid.UUID{id1, id2}) {
+		t.Errorf("IDIn = %#v", f.IDIn)
+	}
+	if len(f.TitleNEQ) != 1 || len(f.TitleGT) != 1 || len(f.TitleGTE) != 1 || len(f.TitleLT) != 1 || len(f.TitleLTE) != 1 || len(f.TitleContains) != 1 || len(f.TitleContainsFold) != 1 || len(f.TitleHasPrefix) != 1 || len(f.TitleHasSuffix) != 1 {
+		t.Errorf("string operator slots were not all populated: %+v", f)
+	}
+	if !reflect.DeepEqual(f.ScoreIsNull, []bool{true, false}) || !reflect.DeepEqual(f.ScoreGTE, []int{10, 20}) || !reflect.DeepEqual(f.ScoreLTE, []int{90, 80}) {
+		t.Errorf("null/range slots = null:%v gte:%v lte:%v", f.ScoreIsNull, f.ScoreGTE, f.ScoreLTE)
+	}
+	wantTime := time.Date(2026, 8, 8, 12, 34, 56, 0, time.UTC)
+	if !reflect.DeepEqual(f.CreatedAt, []time.Time{wantTime}) {
+		t.Errorf("CreatedAt = %v, want %v", f.CreatedAt, wantTime)
+	}
+	if f.Q == nil || *f.Q != "needle" || r.Page != 2 || r.Size != 1001 || len(r.Sort) != 2 {
+		t.Errorf("reserved params = Q:%v request:%+v", f.Q, r)
+	}
+	if len(f.Predicates()) != 21 {
+		t.Errorf("Predicates() = %d, want 21 independent predicates", len(f.Predicates()))
+	}
+}
+
+func TestRepeatedFilterParamsAndMerge(t *testing.T) {
+	f, _ := parseRecord(t, url.Values{
+		"score":  {"gt:30", "le:50"},
+		"status": {"eq:draft", "eq:live"},
+	})
+	if len(f.Predicates()) != 4 {
+		t.Fatalf("Predicates() = %d, want four ANDed occurrences", len(f.Predicates()))
+	}
+	query := selectorSQL(predicateFns(f.Predicates())...)
+	if strings.Count(query, " AND ") < 3 || strings.Count(query, record.FieldStatus) != 2 {
+		t.Fatalf("repeated filters did not remain independent AND predicates: %s", query)
+	}
+}
+
+func TestBareWildcardsRemainEqualityLiterals(t *testing.T) {
+	f, _ := parseRecord(t, url.Values{"title": {"*literal?"}})
+	query := selectorSQL(predicateFns(f.Predicates())...)
+	if strings.Contains(query, "LIKE") {
+		t.Fatalf("bare wildcards were translated to LIKE: %s", query)
+	}
+}
+
+func TestBetweenRequiresTwoValuesAndDoesNotReorder(t *testing.T) {
+	requireQueryValidation(t, url.Values{"score": {"between:1"}}, "score", "between:1", "exactly two")
+	requireQueryValidation(t, url.Values{"score": {"between:1,2,3"}}, "score", "between:1,2,3", "exactly two")
+	f, _ := parseRecord(t, url.Values{"score": {"between:50,30"}})
+	if !reflect.DeepEqual(f.ScoreGTE, []int{50}) || !reflect.DeepEqual(f.ScoreLTE, []int{30}) {
+		t.Fatalf("between reordered endpoints: gte=%v lte=%v", f.ScoreGTE, f.ScoreLTE)
+	}
+}
+
+func TestParseRecordQueryValidationPaths(t *testing.T) {
+	cases := []struct {
+		name   string
+		values url.Values
+		wants  []string
+	}{
+		{name: "numeric", values: url.Values{"score": {"gt:abc"}}, wants: []string{"score", "gt:abc"}},
+		{name: "enum", values: url.Values{"status": {"eq:missing"}}, wants: []string{"status", "missing", "draft", "live"}},
+		{name: "uuid", values: url.Values{"id": {"eq:not-a-uuid"}}, wants: []string{"id", "not-a-uuid"}},
+		{name: "size non-numeric", values: url.Values{"_size": {"many"}}, wants: []string{"_size", "many", "integer"}},
+		{name: "size zero", values: url.Values{"_size": {"0"}}, wants: []string{"_size", "0", "count-only"}},
+		{name: "size negative", values: url.Values{"_size": {"-1"}}, wants: []string{"_size", "-1"}},
+		{name: "page non-numeric", values: url.Values{"_page": {"next"}}, wants: []string{"_page", "next", "integer"}},
+		{name: "page zero", values: url.Values{"_page": {"0"}}, wants: []string{"_page", "0"}},
+		{name: "page negative", values: url.Values{"_page": {"-1"}}, wants: []string{"_page", "-1"}},
+		{name: "sort direction", values: url.Values{"_sort": {"created_at:sideways"}}, wants: []string{"_sort", "sideways", "asc", "desc"}},
+		{name: "null operator value", values: url.Values{"score": {"is_null:true"}}, wants: []string{"score", "is_null:true", "with a value"}},
+		{name: "unknown field", values: url.Values{"unknown": {"x"}}, wants: []string{"unknown"}},
+		{name: "Go name is not a wire alias", values: url.Values{"ref": {"prefix:x"}}, wants: []string{"ref", "unknown"}},
+		{name: "non-filterable field", values: url.Values{"body": {"x"}}, wants: []string{"body", "not Filterable"}},
+		{name: "unknown reserved", values: url.Values{"_limit": {"10"}}, wants: []string{"_limit"}},
+		{name: "duplicate reserved", values: url.Values{"_sort": {"id", "title"}}, wants: []string{"_sort", "exactly once"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) { requireQueryValidation(t, tc.values, tc.wants...) })
+	}
+}
+
+func TestQOnResourceWithoutSearchableFieldsIsValidationError(t *testing.T) {
+	_, _, err := ParsePlainQuery(url.Values{"_q": {"scan"}})
+	if !errors.Is(err, entapi.ErrValidation) || !strings.Contains(err.Error(), "_q") || !strings.Contains(err.Error(), "Searchable") {
+		t.Fatalf("ParsePlainQuery(_q) error = %v", err)
+	}
+}
+
+func TestUnknownSortFieldIsRejectedOnlyByRecordOrder(t *testing.T) {
+	_, request := parseRecord(t, url.Values{"_sort": {"missing"}})
+	if _, err := RecordOrder(request); !errors.Is(err, entapi.ErrValidation) || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("RecordOrder error = %v", err)
+	}
+}
+
+func TestParsedIDSortDoesNotAppendATiebreak(t *testing.T) {
+	_, request := parseRecord(t, url.Values{"_sort": {"created_at,id"}})
+	opts, err := RecordOrder(request)
+	if err != nil {
+		t.Fatalf("RecordOrder: %v", err)
+	}
+	query := selectorSQL(orderFns(opts)...)
+	if strings.Count(query, "`"+record.FieldID+"`") != 1 {
+		t.Fatalf("id was appended despite already appearing in _sort: %s", query)
+	}
+}
+
+func TestQueryKeysAreVisitedInSortedOrder(t *testing.T) {
+	requireQueryValidation(t, url.Values{"z_unknown": {"x"}, "a_unknown": {"y"}}, "a_unknown")
 }

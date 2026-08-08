@@ -53,7 +53,7 @@ import (
 type RecordCreateRequest struct {
 	Title  string         `json:"title"`
 	Body   string         `json:"body"`
-	Ref    *string        `json:"ref,omitempty"`
+	Ref    *string        `json:"reference,omitempty"`
 	Status *record.Status `json:"status,omitempty"`
 	Score  *int           `json:"score,omitempty"`
 	Note   *string        `json:"note,omitempty"`
@@ -72,7 +72,7 @@ type RecordCreateRequest struct {
 // recordCreateRequestTags is the canonical JSON key of every field on
 // RecordCreateRequest, in declaration order. UnmarshalJSON needs the tags as
 // data, not as struct tags, to tell a case variant from an unrelated key.
-var recordCreateRequestTags = []string{"title", "body", "ref", "status", "score", "note", "secret"}
+var recordCreateRequestTags = []string{"title", "body", "reference", "status", "score", "note", "secret"}
 
 // UnmarshalJSON records presence, then decodes normally.
 //
@@ -138,8 +138,8 @@ func (r *RecordCreateRequest) HasTitle() bool { return r.has("title") }
 // HasBody reports whether the payload carried "body".
 func (r *RecordCreateRequest) HasBody() bool { return r.has("body") }
 
-// HasRef reports whether the payload carried "ref".
-func (r *RecordCreateRequest) HasRef() bool { return r.has("ref") }
+// HasRef reports whether the payload carried "reference".
+func (r *RecordCreateRequest) HasRef() bool { return r.has("reference") }
 
 // HasStatus reports whether the payload carried "status".
 func (r *RecordCreateRequest) HasStatus() bool { return r.has("status") }
@@ -222,7 +222,7 @@ func (v *ValidRecordCreateRequest) Apply(b *RecordCreate) *RecordCreate {
 type RecordPatchRequest struct {
 	Title  *string        `json:"title,omitempty"`
 	Body   *string        `json:"body,omitempty"`
-	Ref    *string        `json:"ref,omitempty"`
+	Ref    *string        `json:"reference,omitempty"`
 	Status *record.Status `json:"status,omitempty"`
 	Score  *int           `json:"score,omitempty"`
 	Note   *string        `json:"note,omitempty"`
@@ -233,7 +233,7 @@ type RecordPatchRequest struct {
 
 // recordPatchRequestTags is the canonical JSON key of every field on
 // RecordPatchRequest, in declaration order.
-var recordPatchRequestTags = []string{"title", "body", "ref", "status", "score", "note", "secret"}
+var recordPatchRequestTags = []string{"title", "body", "reference", "status", "score", "note", "secret"}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from
@@ -280,8 +280,8 @@ func (r *RecordPatchRequest) HasTitle() bool { return r.has("title") }
 // HasBody reports whether the payload carried "body".
 func (r *RecordPatchRequest) HasBody() bool { return r.has("body") }
 
-// HasRef reports whether the payload carried "ref".
-func (r *RecordPatchRequest) HasRef() bool { return r.has("ref") }
+// HasRef reports whether the payload carried "reference".
+func (r *RecordPatchRequest) HasRef() bool { return r.has("reference") }
 
 // HasStatus reports whether the payload carried "status".
 func (r *RecordPatchRequest) HasStatus() bool { return r.has("status") }
@@ -383,7 +383,7 @@ type RecordSummary struct {
 	ID        uuid.UUID     `json:"id"`
 	Title     string        `json:"title"`
 	Body      string        `json:"body"`
-	Ref       *string       `json:"ref,omitempty"`
+	Ref       *string       `json:"reference,omitempty"`
 	Status    record.Status `json:"status"`
 	Score     *int          `json:"score,omitempty"`
 	CreatedAt time.Time     `json:"created_at"`
@@ -418,7 +418,7 @@ type RecordResponse struct {
 	ID        uuid.UUID     `json:"id"`
 	Title     string        `json:"title"`
 	Body      string        `json:"body"`
-	Ref       *string       `json:"ref,omitempty"`
+	Ref       *string       `json:"reference,omitempty"`
 	Status    record.Status `json:"status"`
 	Score     *int          `json:"score,omitempty"`
 	CreatedAt time.Time     `json:"created_at"`

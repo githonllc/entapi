@@ -1,10 +1,5 @@
 package entapi
 
-import (
-	"fmt"
-	"strings"
-)
-
 const (
 	// DefaultPageSize is the number of items per page used when a request does
 	// not ask for one, or asks for a non-positive one.
@@ -44,48 +39,18 @@ const (
 // [ListPage] calls. There is deliberately no defaulting method to forget — a
 // zero Size cannot reach a query.
 //
-// The validate struct tags deliberately carry no rules. A tag cannot reference
-// a constant and cannot express a case-insensitive comparison, so every rule
-// spelled there is a second spelling that can only drift away from the code
-// enforcing it — as max=100 had already drifted from [MaxPageSize]=1000, and
-// oneof=asc desc from [ListRequest.SortKey]'s EqualFold. [ListRequest.Validate],
-// [ListRequest.Limit] and [ListRequest.Offset] are the homes.
-type ListRequest struct {
-	Size   int    `json:"size,omitempty" form:"size"`
-	Page   int    `json:"page,omitempty" form:"page"`
-	SortBy string `json:"sort_by,omitempty" form:"sort_by"`
-	Order  string `json:"order,omitempty" form:"order"`
+// URL parsing is deliberately not expressed through form tags. Generated
+// Parse{Entity}Query functions own the wire contract, while Limit and Offset
+// keep the Go-layer repair semantics used by direct callers.
+type SortSpec struct {
+	Key  string `json:"key"`
+	Desc bool   `json:"desc,omitempty"`
 }
 
-// Validate reports input that nothing downstream can silently repair. Errors
-// wrap [ErrValidation].
-//
-// It deliberately says nothing about Size or Page. [ListRequest.Limit] and
-// [ListRequest.Offset] normalise those on the only path into [ListPage], so a
-// second opinion here would be a bypassable duplicate of a bound that is
-// already enforced — and the two used to disagree, one clamping and one
-// rejecting. A consumer that wants an oversized request to be a client error
-// compares Size against [MaxPageSize] itself.
-//
-// Order is different: nothing repairs it. [ListRequest.SortKey] reads an
-// unrecognised value as ascending rather than failing, so an unnoticed typo
-// silently reverses the results.
-//
-// The comparison is case-insensitive because SortKey's is, and SortKey is what
-// decides the direction — it sits on the only path into [ListPage] and applies
-// whether or not anyone validates. Validate rejects exactly what SortKey will
-// not honour, and no more: "DESC" sorts descending, so refusing it here would
-// be this type disagreeing with itself.
-func (r *ListRequest) Validate() error {
-	if r == nil {
-		return fmt.Errorf("%w: list request cannot be nil", ErrValidation)
-	}
-
-	if r.Order != "" && !strings.EqualFold(r.Order, "asc") && !strings.EqualFold(r.Order, "desc") {
-		return fmt.Errorf("%w: order must be 'asc' or 'desc', got %q", ErrValidation, r.Order)
-	}
-
-	return nil
+type ListRequest struct {
+	Size int        `json:"size,omitempty"`
+	Page int        `json:"page,omitempty"`
+	Sort []SortSpec `json:"sort,omitempty"`
 }
 
 // Ptr returns a pointer to the given value.

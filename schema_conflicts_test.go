@@ -115,6 +115,22 @@ func TestCheckGraphConflicts_FilterableAndSortableCapabilities(t *testing.T) {
 	requireConflict(t, got, "Record.metadata", "Filterable", "no predicates", "Sortable", "not comparable")
 }
 
+func TestCheckGraphConflicts_FilterableValueMustBeParseable(t *testing.T) {
+	opaque := newField("opaque", &field.TypeInfo{Type: field.TypeBytes, Ident: "[]byte"}, fieldPtr(api.Filterable()))
+	node := newTestType("Record", opaque)
+
+	got := conflictText(t, node)
+	requireConflict(t, got, "Record.opaque", "Filterable", "wire value", "encoding.TextUnmarshaler")
+}
+
+func TestCheckGraphConflicts_PrimaryKeyValueMustBeParseable(t *testing.T) {
+	node := newTestType("Record", newStringField("title", nil))
+	node.ID = newField("id", &field.TypeInfo{Type: field.TypeBytes, Ident: "[]byte"}, nil)
+
+	got := conflictText(t, node)
+	requireConflict(t, got, "Record.id", "primary key", "wire value", "encoding.TextUnmarshaler")
+}
+
 func TestCheckGraphConflicts_ExpandTargetMustBeResource(t *testing.T) {
 	target := &gen.Type{Name: "User", ID: newIntField("id", nil), Fields: []*gen.Field{newStringField("name", nil)}}
 	node := newTestType("Post", newStringField("title", nil))

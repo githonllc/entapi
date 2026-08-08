@@ -22,12 +22,14 @@ func (Article) Annotations() []schema.Annotation {
 
 ```go
 // handler.go —— 你得到这个
-page, err := ent.ListArticles(ctx, client, filter, req)   // GET /articles?title_contains=go&sort_by=title
+filter, req, err := ent.ParseArticleQuery(r.URL.Query()) // GET /articles?title=like:go&_sort=title
+page, err := ent.ListArticles(ctx, client, filter, req)
 art,  err := ent.CreateArticle(ctx, client, validReq)     // POST /articles
 ```
 
-这两行之间，生成器写出了带三态存在性的 `ArticleCreateRequest`、每个 ent 派生操作符一个
-参数的 `ArticleFilter`、排序白名单、带预加载计划的 `ArticleResponse`，以及错误分类。
+这两行之间，生成器写出了带三态存在性的 `ArticleCreateRequest`、把 query 解析为强类型
+`ArticleFilter` 的 `ParseArticleQuery`、多键排序白名单、带预加载计划的 `ArticleResponse`，
+以及错误分类。
 
 > ### 状态：v0，从未发布过版本
 >
@@ -80,7 +82,7 @@ go get github.com/githonllc/entapi
 |---|---|---|
 | `github.com/githonllc/entapi` | 你的 `entc.go`；嵌软删除的 schema | `Extension`、`SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | 你的 **schema** 文件 | `Resource`、`Hidden`、`ReadOnly`、`Searchable`、`Filterable`、`Sortable`、`Expand` |
-| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`、`ErrorMapper`、`AppendIf`、`Ptr`/`PtrOrNil`/`PtrNilSafe`、`WithSoftDeleted`/`WithHardDelete` |
+| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`、`ErrorMapper`、`AppendEach`、`Ptr`/`PtrOrNil`/`PtrNilSafe`、`WithSoftDeleted`/`WithHardDelete` |
 
 这个切分是承重的，不是整洁癖：根包用 `//go:embed` 内嵌五个模板，并在**包初始化时**把五份
 全部从内嵌文件系统里读出来，读不到就 panic。只要 import 根包，这件事就会发生，无论你是否
@@ -212,7 +214,7 @@ func (Post) Edges() []ent.Edge {
 | 文件 | 声明 |
 |---|---|
 | `{entity}_dto.go` | `{E}CreateRequest`、`{E}PatchRequest` 及各自的 `Valid…` 类型与 `Apply`；`{E}Response`、`{E}Summary` 及构造器；`{E}QueryWithResponseEdges`；`{E}ListResponse` 与 `New{E}ListResponse` |
-| `{entity}_filter.go` | `{E}Filter` 及其 `Predicates()`、`{E}SortKeys`、`{E}Order` |
+| `{entity}_filter.go` | `{E}Filter`、`Parse{E}Query`、`Predicates()`、`{E}SortKeys`、`{E}Order` |
 | `{entity}_wiring.go` | `Get{E}`、`List{Es}`、`Create{E}`、`Patch{E}`、`Delete{E}`、`DeleteBatch{Es}` |
 
 外加每个 schema 两个文件，各自有独立的发射条件：
@@ -352,98 +354,76 @@ return c.JSON(200, ent.NewArticleListResponse(page))
 
 ## 查询面
 
-三个互相独立的维度，每个都按字段 opt-in。
+生成的入口是：
+
+```go
+filter, req, err := ent.ParseArticleQuery(r.URL.Query())
+```
+
+它把 wire 解析成现有 `ListArticles` 签名使用的强类型 `ArticleFilter` 与
+`entapi.ListRequest`。字段参数名始终取 Ent 的 storage key，而不是 Go 字段名。
 
 ### 结构化过滤——`api.Filterable()`
 
-**ent** 为该类型派生的每个操作符对应一个参数；本包从不维护自己的操作符表，只维护一张
-**命名**表（哪个操作符叫什么后缀）。线上名字是字段的**存储 key** 加后缀，`form:` 与
-`json:` 共用：
+wire 采用 `field=op:value`，只在第一个冒号处分割；无前缀值就是等值：
 
-| 后缀 | |
+```text
+?title=ilike:go&score=gt:30&score=le:50&status=in:draft,published
+```
+
+| 写法 | 谓词 |
 |---|---|
-| *（无）* | `EQ`——等值参数就是字段本身的名字 |
-| `_neq` `_in` `_not_in` `_gt` `_gte` `_lt` `_lte` | 比较类，来自 ent |
-| `_prefix` | 左锚定 `LIKE`——走索引 |
-| `_contains` `_icontains` `_suffix` `_ieq` | **子串类，见下** |
-| `_is_null` | 一个 `*bool`，把 `IsNil`/`NotNil` 合并 |
+| 无前缀、`eq:` | 等值 |
+| `ne:` | 不等 |
+| `gt:` `ge:` `lt:` `le:` | 比较 |
+| `in:` `not_in:` | 逗号分隔的集合 |
+| `like:` `ilike:` `prefix:` `suffix:` | 字符串匹配 |
+| `is_null:` `not_null:` | 空值谓词 |
+| `from:` `to:` `between:a,b` | 闭区间语法糖 |
 
-一个只标了 `api.Filterable()` 的 optional `string` 字段得到十个参数：
+每个字段只得到 Ent 谓词与上述 wire 词汇的交集。`like:`、`ilike:`、`suffix:` 还要求
+`api.Searchable()`，`prefix:` 不要求。`_ieq` 没有 wire 写法。无前缀的 `*` 与 `?`
+仍是普通等值字面量，不会隐式变成 `LIKE`。
 
-```
-ref  ref_neq  ref_in  ref_not_in  ref_gt  ref_gte  ref_lt  ref_lte  ref_prefix  ref_is_null
-```
+解析严格按六条规则执行：空的无前缀值忽略，但空 `eq:` 有效；无冒号就是等值；字段允许的
+前缀应用该操作符；全局已知但字段不允许的前缀报校验错误；未知前缀把整个值回退为等值；
+显式 `eq:` 用来转义看似操作符的值。转换错误会点名字段和值并包裹
+`entapi.ErrValidation`。
 
-`IsNil` 与 `NotNil` 合并成一个 `*bool`，因为可空性是**一个**问题；拆成两个参数会允许一个
-自相矛盾的请求，而「is null AND is not null」没有诚实的答案。
-
-ent 认识而本包没有命名的操作符会被跳过，不会以错误的名字发射——今天不存在这样的操作符。
-
-### 子串类还需要 `api.Searchable()`
-
-`_contains`、`_icontains`、`_suffix`、`_ieq` 正是那些让 B-tree 索引失效的 `LIKE '%x%'`
-形态——与全文搜索那道门要挡住的成本画像完全相同。它们只在字段**同时**携带 `api.Searchable()`
-时才发射。
-
-`_ieq` 在*语义*上是精确匹配，但因其*成本*被划入昂贵类：没有函数索引时
-`LOWER(x) = LOWER(?)` 会全扫，和子串匹配一模一样。理由见
-[ADR-0005](docs/adr/0005-contains-operators-gated-by-searchable.md)。
+同一字段的重复参数形成多个独立且以 `AND` 连接的谓词，重复等值也一样。因此标量 filter
+槽位是 slice，`in:`/`not_in:` 槽位是 slice-of-slices。主键天然 Filterable，遵循相同规则，
+且永远没有仅 Searchable 才允许的操作符。
 
 ### 全文——`api.Searchable()`
 
-仅当至少有一个字段可搜索时才发射：单个 `q` 参数，作为一个跨全部可搜索字段的 `OR` 析取施加，
-并与其他一切 `AND`。为 nil **或空串**时跳过。一个标了 `api.Searchable()` 但没标
-`api.Filterable()` 的字段只贡献给 `q`，不会得到属于自己的结构化参数。
-
-一个什么都没标的实体得到 `type PlainFilter struct{}` 和 `var PlainSortKeys = []string{}`——
-空的，但存在，因为接线签名需要它们。
+`_q=value` 在所有 Searchable 字段之间做 `OR`，再与结构化过滤做 `AND`。资源没有任何
+Searchable 字段时传 `_q` 会报校验错误。只 Searchable、不 Filterable 的字段参与 `_q`，
+但作为裸字段参数会被拒绝。
 
 ### 排序——`api.Sortable()`
 
-`{E}SortKeys` 是白名单，`{E}Order` 是把请求翻译成 ent order option 的函数。白名单之外的
-`sort_by` 是 `entapi.ErrValidation`，绝不静默回退。通过校验的 key 随后被**丢弃**——进入
-查询的是 ent 为那一列生成的 order builder，从一张 `map[string]func(...) OrderOption` 里按
-已验证的 key 查出来。没有任何调用方字符串会被拼进 SQL。
+`_sort=created_at:desc,title,id` 生成有序的 `[]entapi.SortSpec`。`{E}Order` 是唯一的白名单
+校验点：非法 key 返回 `entapi.ErrValidation`，并列出全部合法 storage key。主键天然
+Sortable。除非主键已出现在列表任意位置，否则它会作为最后的确定性 tiebreak 追加；空排序
+等价于主键升序。
 
-**没有默认排序列**——你的 schema 里没有任何东西说明哪一列是天然的那一列，所以生成器不猜。
+### 分页与保留参数
 
-确定性是另一个问题，而它确实有一个由 schema 给出的答案。基于 offset 的分页在非全序上按构造
-就是错的：在**零并发写入**的情况下，行也可能在第 1 页和第 2 页之间重复或消失。所以每个
-生成的排序都以主键收尾：
-
-```go
-// 请求了排序：tiebreak 跟随请求的方向
-[]OrderOption{by(dir), ByID(dir)}       // 当请求的 key 就是主键时跳过追加
-// 什么都没请求：确定，且不声称自己是「默认排序」
-[]OrderOption{ByID(sql.OrderAsc())}
-```
-
-理由见 [ADR-0002](docs/adr/0002-deterministic-pagination-pk-tiebreak.md)。
-
-### 分页
-
-`entapi.ListRequest{Size, Page, SortBy, Order}`——零值可直接用，四个字段都带 `form:` 与
-`json:` tag。
-
-- `Limit()`：`Size <= 0` → 20（`DefaultPageSize`）；`Size > 1000` → 1000（`MaxPageSize`）；
-  否则原样。**钳制，绝不拒绝。**
-- `Offset()`：`Page <= 1` → 0；否则 `(Page-1) * Limit()`，并在乘法溢出时**饱和到
-  `math.MaxInt`** 而不是回绕成负数。
-- `Validate()` 对 `Size` 和 `Page` **一个字都不说**——它只检查 `Order`。如果你想让超界的
-  size 变成 4xx，自己和 `entapi.MaxPageSize` 比较。
-- `Page.Size` 报告的是**实际用掉的** size，所以钳制是可见的。
+恰好存在四个下划线保留参数：`_sort`、`_page`、`_size`、`_q`；别名与重复保留参数都拒绝。
+`_page`、`_size` 必须是正十进制整数。`_size=0` 保留给未来的 count-only 模式，目前报错；
+大于 1000 的值允许进入，随后由 `Limit()` 钳制。Go 层的零值修复语义不变：`Limit()` 永不
+返回 0，`Offset()` 把小于 1 的页码钳到 0。未知下划线参数、未知裸字段名、非 Filterable
+字段的裸参数都报校验错误。URL key 按排序后的顺序处理，保证第一个错误稳定。
 
 分页只有 offset 一种，`Page` 携带 `Data`、`Total`、`Page`、`Size`，没有别的。
 
-> **实现：** `funcs_filter.go` — `queryFields`、`isFilterable`、`isSearchable`、
-> `isSortable`、`searchFields`、`filterParam`、`filterParams`、`opTagSuffix`、
-> `substringOps`、`nullTagSuffix`、`filterImports`；
-> `runtime/types.go` — `ListRequest`、`Validate`、`DefaultPageSize`、`MaxPageSize`；
-> `runtime/query.go` — `Limit`、`Offset`、`SortKey`、`Page[R]`、`Query[Q,P,O,E]`、
-> `ListPage`；`runtime/filter.go` — `AppendIf`、`AppendIfSlice`；
-> `templates/filter.tmpl`；生成物样例：
-> `internal/fixtures/query/queryent/record_filter.go` — `RecordFilter`、`Predicates`、
-> `recordSortOptions`、`RecordSortKeys`、`RecordOrder`
+> **实现：** `funcs_filter.go` — `queryFields`、`parseFields`、`searchFields`、
+> 每字段操作符集合与转换表达式；`runtime/types.go` — `ListRequest`、`SortSpec`、
+> `DefaultPageSize`、`MaxPageSize`；`runtime/urlquery.go` — query 词法解析；
+> `runtime/query.go` — `Limit`、`Offset`、`Page[R]`、`Query[Q,P,O,E]`、`ListPage`；
+> `runtime/filter.go` — `AppendEach`、`AppendEachSlice`；`templates/filter.tmpl`；
+> 生成物样例：`internal/fixtures/query/queryent/record_filter.go` — `RecordFilter`、
+> `ParseRecordQuery`、`Predicates`、`recordSortOptions`、`RecordSortKeys`、`RecordOrder`
 
 ## 接线与错误映射
 
@@ -565,10 +545,11 @@ hook 都在软删除 hook 内层运行。
 | required-no-default 字段被 `Hidden`/`ReadOnly` 挡出 create，且未 `Except(OpCreate)` | Ent 无法从该请求插入行 |
 | PATCH 字段集为空且未 `Except(OpPatch)` | 公开 PATCH 面没有用途 |
 | 字段词挂在 edge，或 `Expand` 挂在 field | 词挂错了 schema 元素 |
-| 主键上出现任何 EntAPI 词 | ID 行为固定，未来查询白名单属于 #72 |
+| 主键上出现任何 EntAPI 词 | ID 已天然 Filterable 与 Sortable；其固定查询面不使用注解 |
 | `OpList` 被 except，同时字段带查询词 | 查询面已关闭 |
 | 在没有 `Contains` 的类型上标 `api.Searchable()` | 没有子串谓词可发射 |
 | 在没有操作符的类型上标 `api.Filterable()` | 过滤器组会静默无效 |
+| Filterable 字段或主键的类型无法解析 wire 文本 | 改用基础标量、enum、`time.Time` 或实现 `encoding.TextUnmarshaler` 的类型 |
 | 在不可比较类型上标 `api.Sortable()` | Ent 不生成 `ByX` |
 | 查询 storage key 以 `_` 开头 | 与保留查询控制项相撞 |
 | `api.Expand()` 指向非 resource | 目标 Summary 不存在 |
@@ -691,10 +672,11 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
    一个重复键会原样穿过 `MapError`，表现为 500。
 2. **`New{E}Response(nil)` 返回 `(nil, nil)`。** 不是错误。如果你把一次未命中的查询直接喂
    进它，拿到的是一对 nil，而不是 not-found。
-3. **`_contains` 需要 `api.Searchable()`。** 一个只标了 filterable 的字符串字段的四个子串参数
-   不会发射；form 与 JSON 绑定会丢弃未知 key 而不报错，所以 `?name_contains=x` 变成一个
-   *未过滤*的查询，而不是一个 400。
-4. **查询维度不会推导。** 没有查询词时，过滤器与排序白名单都为空。
+3. **`like:`、`ilike:` 与 `suffix:` 需要 `api.Searchable()`。** 用在只 Filterable 的
+   字符串字段时，它们是已知但不允许的操作符，生成 parser 返回 `ErrValidation`；`prefix:`
+   仍然可用。
+4. **只有主键的查询维度会推导。** 它天然 Filterable 与 Sortable；所有非 ID 字段仍需自己的
+   查询词。
 5. **全 Immutable 的 PATCH 会被拒绝**，除非 resource 写 `Except(api.OpPatch)`；请求类型与
    接线函数仍保留。
 6. **PATCH body 里出现的 `Immutable()` 字段会被 `encoding/json` 在任何验证器运行之前丢弃。**
@@ -705,8 +687,8 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
 8. **required 字段被挡出 create 会阻止生成**，除非 except create、改 optional 或给 default。
 9. **`DeleteBatch` 对匹配不到的 id 返回计数而非错误。** 那个 `int` 是你了解「实际存在多少
     个」的唯一途径；空列表删除零行，这是 ent 对无参 `IDIn` 的读法，不是这里写的守卫。
-10. **`Page.Size` 是钳制后的 size**，而一个超界的请求永远不是错误——`ListRequest.Validate()`
-    对 `Size` 和 `Page` 只字不提。
+10. **`Page.Size` 是钳制后的 size。** parser 拒绝零和负数 `_size`，接受大于 1000 的值，
+    随后由 `ListRequest.Limit()` 钳制。
 11. **`ErrorMap` 是普通包级变量，不带同步。** 请在构造 client 处赋值，不要在服务运行中改。
 12. **一个你复制并修改过的生成文件仍带着 marker**——清理会删掉它。请剥掉首行。
 
@@ -749,6 +731,20 @@ T3 已经全部落地。三处偏离，都是有意的：
 `{Entity}Summary` 中。这关闭了带响应 scope 的敏感字段仍被生成并序列化的泄漏；create
 与 patch 请求保持不变。
 
+**破坏性与行为变更（#72）：** query 解析从外部 form binding 迁移到生成的
+`Parse{Entity}Query`。两个 entigo 差异必须一起迁移：同一字段的重复参数现在生成多个以
+`AND` 连接的谓词，而非 `OR`/`IN`；无法转换的值现在返回 `ErrValidation`，而非静默跳过。
+此外 `_ieq` 在 v2 wire 中没有写法，已从查询面移除。
+
+| 旧写法 | Query wire v2 |
+|---|---|
+| `q=words` | `_q=words` |
+| `sort_by=created_at&order=desc` | `_sort=created_at:desc` |
+| `page=2&size=50` | `_page=2&_size=50` |
+| `score_gt=30` | `score=gt:30` |
+
+所有 v2 wire 名都使用字段的 storage key。先重新生成，再迁移调用方；新旧写法不会同时接受。
+
 以下符号曾经存在于本 module，现已删除，且**没有兼容别名**——一个保留耦合的别名，比破坏
 更糟。
 
@@ -765,6 +761,9 @@ T3 已经全部落地。三处偏离，都是有意的：
 | `DomainField.UniqueLookup`、`.RangeLookup`、`.Validation` | `api.Filterable()`（运算符从 Ent 的 `$field.Ops` 导出）；生成请求的 `Validate()` |
 | `DomainConfig.EntityName` | 无——没有读者 |
 | 运行时符号住在根包 | 全部搬到 `github.com/githonllc/entapi/runtime` |
+| `ListRequest.SortBy`、`ListRequest.Order`、`ListRequest.Validate`、`ListRequest.SortKey` | `ListRequest.Sort []SortSpec`；用生成的 `Parse{Entity}Query` 解析，在 `{Entity}Order` 校验 key |
+| `AppendIf`、`AppendIfSlice` | `AppendEach`、`AppendEachSlice`；filter 槽位为 slice，重复值以 `AND` 连接 |
+| query `form` tag | 生成的 `Parse{Entity}Query`；`ListRequest` v2 不带 form tag |
 
 ## 还可以读什么
 

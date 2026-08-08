@@ -24,14 +24,15 @@ func (Article) Annotations() []schema.Annotation {
 
 ```go
 // handler.go — you get this
-page, err := ent.ListArticles(ctx, client, filter, req)   // GET /articles?title_contains=go&sort_by=title
+filter, req, err := ent.ParseArticleQuery(r.URL.Query()) // GET /articles?title=like:go&_sort=title
+page, err := ent.ListArticles(ctx, client, filter, req)
 art,  err := ent.CreateArticle(ctx, client, validReq)     // POST /articles
 ```
 
 Between those two lines the generator wrote `ArticleCreateRequest` with
-three-state presence, `ArticleFilter` with one parameter per operator ent
-derives, a sort allow-list, `ArticleResponse` with its eager-load plan, and
-error classification.
+three-state presence, `ParseArticleQuery` with a typed `ArticleFilter`, a
+multi-key sort allow-list, `ArticleResponse` with its eager-load plan, and error
+classification.
 
 > ### Status: v0, never released
 >
@@ -89,7 +90,7 @@ packages are named `entapi`; the schema package is named `api`.
 |---|---|---|
 | `github.com/githonllc/entapi` | your `entc.go`; schemas that embed soft delete | `Extension`, `SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | your **schema** files | `Resource`, `Hidden`, `ReadOnly`, `Searchable`, `Filterable`, `Sortable`, `Expand` |
-| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, `ErrorMapper`, `AppendIf`, `Ptr`/`PtrOrNil`/`PtrNilSafe`, `WithSoftDeleted`/`WithHardDelete` |
+| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`, `ErrorMapper`, `AppendEach`, `Ptr`/`PtrOrNil`/`PtrNilSafe`, `WithSoftDeleted`/`WithHardDelete` |
 
 The split is load-bearing, not cosmetic. The root package embeds five templates
 with `//go:embed` and reads all five out of the embedded filesystem **at package
@@ -237,7 +238,7 @@ single switch is skipped entirely and produces no EntAPI files.
 | File | Declares |
 |---|---|
 | `{entity}_dto.go` | `{E}CreateRequest`, `{E}PatchRequest`, a `Valid…` counterpart and `Apply` for each; `{E}Response`, `{E}Summary` and their constructors; `{E}QueryWithResponseEdges`; `{E}ListResponse` and `New{E}ListResponse` |
-| `{entity}_filter.go` | `{E}Filter` with its `Predicates()`, `{E}SortKeys`, `{E}Order` |
+| `{entity}_filter.go` | `{E}Filter`, `Parse{E}Query`, `Predicates()`, `{E}SortKeys`, `{E}Order` |
 | `{entity}_wiring.go` | `Get{E}`, `List{Es}`, `Create{E}`, `Patch{E}`, `Delete{E}`, `DeleteBatch{Es}` |
 
 Plus two files per schema, each with its own emission condition:
@@ -400,113 +401,91 @@ so the tag half is pinned by a separate golden-JSON test.
 
 ## The query surface
 
-Three independent dimensions, each opt-in per field.
+The generated entry point is:
+
+```go
+filter, req, err := ent.ParseArticleQuery(r.URL.Query())
+```
+
+It parses the wire into the typed `ArticleFilter` and `entapi.ListRequest` used
+by the unchanged `ListArticles` signature. Field parameter names always use the
+Ent storage key, never the Go field name.
 
 ### Structured filtering — `api.Filterable()`
 
-One parameter per operator **ent** derives for that type. This package keeps no
-operator table of its own — only a **naming** table, deciding what each operator's
-suffix is called. Wire names are the field's **storage key** plus that suffix,
-shared by `form:` and `json:`:
+The wire is `field=op:value`, split on the first colon. A bare value is equality:
 
-| Suffix | |
+```text
+?title=ilike:go&score=gt:30&score=le:50&status=in:draft,published
+```
+
+| Spelling | Predicate |
 |---|---|
-| *(none)* | `EQ` — the equality parameter is the bare field name |
-| `_neq` `_in` `_not_in` `_gt` `_gte` `_lt` `_lte` | comparisons, from ent |
-| `_prefix` | left-anchored `LIKE` — uses an index |
-| `_contains` `_icontains` `_suffix` `_ieq` | **the substring class, see below** |
-| `_is_null` | one `*bool` collapsing `IsNil`/`NotNil` |
+| bare value, `eq:` | equality |
+| `ne:` | inequality |
+| `gt:` `ge:` `lt:` `le:` | comparisons |
+| `in:` `not_in:` | comma-separated membership |
+| `like:` `ilike:` `prefix:` `suffix:` | string matching |
+| `is_null:` `not_null:` | null predicates |
+| `from:` `to:` `between:a,b` | inclusive range sugar |
 
-An optional `string` field marked only `api.Filterable()` gets ten parameters:
+Each field receives only the intersection of Ent's predicates and this wire
+vocabulary. `like:`, `ilike:` and `suffix:` additionally require
+`api.Searchable()`; `prefix:` does not. `_ieq` has no wire spelling. Bare `*`
+and `?` remain equality literals and do not become implicit `LIKE` patterns.
 
-```
-ref  ref_neq  ref_in  ref_not_in  ref_gt  ref_gte  ref_lt  ref_lte  ref_prefix  ref_is_null
-```
+Parsing follows six ordered rules: an empty bare value is ignored but empty
+`eq:` is real; no colon means equality; an allowed prefix applies its operator;
+a known but disallowed prefix is validation failure; an unknown prefix falls
+back to whole-value equality; explicit `eq:` escapes operator-looking values.
+Conversion failures name the field and value and wrap `entapi.ErrValidation`.
 
-`IsNil` and `NotNil` collapse into one `*bool` because nullability is **one**
-question; two parameters would admit a self-contradicting request, and there is
-no honest answer to "is null AND is not null".
-
-An operator ent knows and this package has not named is skipped rather than
-emitted under a wrong name. There is no such operator today.
-
-### The substring class also needs `api.Searchable()`
-
-`_contains`, `_icontains`, `_suffix` and `_ieq` are precisely the `LIKE '%x%'`
-shapes that defeat a B-tree index — the same cost profile the free-text gate
-exists to withhold. They are emitted only when the field **also** carries
-`api.Searchable()`.
-
-`_ieq` is exact-match *semantically* but sits in the expensive class for its
-*cost*: without a functional index, `LOWER(x) = LOWER(?)` scans exactly like a
-substring match. Rationale in
-[ADR-0005](docs/adr/0005-contains-operators-gated-by-searchable.md).
+Repeated field parameters are separate `AND`ed predicates, including repeated
+equality. Consequently scalar filter slots are slices, and `in:`/`not_in:`
+slots are slices of slices. The primary key is always Filterable, uses the same
+rules, and never receives searchable-only operators.
 
 ### Free text — `api.Searchable()`
 
-Emitted only when at least one field is searchable: a single `q` parameter,
-applied as an `OR` disjunction across every searchable field and `AND`ed with
-everything else. Skipped when nil **or empty**. A field marked `api.Searchable()`
-but not `api.Filterable()` contributes to `q` only and gets no structured
-parameters of its own.
-
-An entity that marks nothing gets `type PlainFilter struct{}` and `var
-PlainSortKeys = []string{}` — empty, but present, because the wiring signatures
-need them.
+`_q=value` is an `OR` across searchable fields and is `AND`ed with structured
+filters. Supplying `_q` to an entity with no searchable fields is a validation
+failure. Searchable-only fields contribute to `_q` but are rejected as bare
+field parameters because they are not Filterable.
 
 ### Sorting — `api.Sortable()`
 
-`{E}SortKeys` is the allow-list and `{E}Order` is the function that turns a
-request into ent order options. A `sort_by` outside the allow-list is an
-`entapi.ErrValidation`, never a silent fallback. A key that passes is then
-**thrown away**: what reaches the query is the order builder ent generated for
-that column, looked up in a `map[string]func(...) OrderOption` by an
-already-validated key. No caller-supplied string is ever interpolated into SQL.
+`_sort=created_at:desc,title,id` produces an ordered `[]entapi.SortSpec`.
+`{E}Order` is the single allow-list seam: an illegal key is
+`entapi.ErrValidation` and names all legal storage keys. The primary key is
+always Sortable. It is appended as the final deterministic tiebreak unless it
+already appears anywhere in the list; an empty sort becomes primary-key
+ascending order.
 
-**There is no default sort column** — nothing in your schema says which column
-is the natural one, so generation does not invent one.
+### Pagination and reserved parameters
 
-Determinism is a separate question, and it does have a schema-given answer.
-Offset pagination over a non-total order is wrong by construction: rows can
-repeat or vanish between page 1 and page 2 with **zero concurrent writes**. So
-every generated order ends with the primary key:
-
-```go
-// a sort was requested: the tiebreak follows the requested direction
-[]OrderOption{by(dir), ByID(dir)}       // skipped when the requested key IS the primary key
-// nothing requested: deterministic, and not claiming to be a "default sort"
-[]OrderOption{ByID(sql.OrderAsc())}
-```
-
-Rationale in
-[ADR-0002](docs/adr/0002-deterministic-pagination-pk-tiebreak.md).
-
-### Pagination
-
-`entapi.ListRequest{Size, Page, SortBy, Order}` — usable at its zero value,
-all four fields carrying `form:` and `json:` tags.
-
-- `Limit()`: `Size <= 0` → 20 (`DefaultPageSize`); `Size > 1000` → 1000
-  (`MaxPageSize`); otherwise as given. **Clamps, never rejects.**
-- `Offset()`: `Page <= 1` → 0; otherwise `(Page-1) * Limit()`, **saturating to
-  `math.MaxInt`** on multiplication overflow rather than wrapping negative.
-- `Validate()` says **nothing** about `Size` or `Page` — it checks `Order` only.
-  If you want an oversized size to be a 4xx, compare against
-  `entapi.MaxPageSize` yourself.
-- `Page.Size` reports the size **actually used**, so clamping is visible.
+Exactly four underscore-prefixed parameters exist: `_sort`, `_page`, `_size`
+and `_q`; aliases and repeated reserved parameters are rejected. `_page` and
+`_size` are positive decimal integers. `_size=0` is reserved for a future
+count-only mode and currently fails validation; values above 1000 are accepted
+and `Limit()` clamps them. The Go-layer zero-value repair remains unchanged:
+`Limit()` never returns zero and `Offset()` clamps pages below one to zero.
+Unknown underscore parameters, unknown bare field names and non-Filterable bare
+field names fail validation. URL keys are processed in sorted order so the
+first reported error is deterministic.
 
 Pagination is offset-only. `Page` carries `Data`, `Total`, `Page`, `Size` and
 nothing else.
 
-> **Implementation:** `funcs_filter.go` — `queryFields`, `isFilterable`,
-> `isSearchable`, `isSortable`, `searchFields`, `filterParam`, `filterParams`,
-> `opTagSuffix`, `substringOps`, `nullTagSuffix`, `filterImports`;
-> `runtime/types.go` — `ListRequest`, `Validate`, `DefaultPageSize`,
-> `MaxPageSize`; `runtime/query.go` — `Limit`, `Offset`, `SortKey`, `Page[R]`,
-> `Query[Q,P,O,E]`, `ListPage`; `runtime/filter.go` — `AppendIf`,
-> `AppendIfSlice`; `templates/filter.tmpl`; generated example:
+> **Implementation:** `funcs_filter.go` — `queryFields`, `parseFields`,
+> `searchFields`, per-field operator sets and conversion expressions;
+> `runtime/types.go` — `ListRequest`, `SortSpec`, `DefaultPageSize`,
+> `MaxPageSize`; `runtime/urlquery.go` — lexical query parsing;
+> `runtime/query.go` — `Limit`, `Offset`, `Page[R]`, `Query[Q,P,O,E]`,
+> `ListPage`; `runtime/filter.go` — `AppendEach`, `AppendEachSlice`;
+> `templates/filter.tmpl`; generated example:
 > `internal/fixtures/query/queryent/record_filter.go` — `RecordFilter`,
-> `Predicates`, `recordSortOptions`, `RecordSortKeys`, `RecordOrder`
+> `ParseRecordQuery`, `Predicates`, `recordSortOptions`, `RecordSortKeys`,
+> `RecordOrder`
 
 ## Wiring and error mapping
 
@@ -645,10 +624,11 @@ The refusal matrix covers these contradictions:
 | A required-no-default field blocked from create by `Hidden` or `ReadOnly`, without `Except(OpCreate)` | Ent cannot insert the row from that request |
 | An empty PATCH field set without `Except(OpPatch)` | the public PATCH surface is useless |
 | A field word on an edge, or `Expand` on a field | the word is attached to the wrong schema element |
-| Any EntAPI word on the primary key | ID behaviour is fixed and #72 owns its future query whitelist |
+| Any EntAPI word on the primary key | ID is already Filterable and Sortable; its fixed query surface is annotation-free |
 | A query word while `OpList` is excepted | the query surface has been closed |
 | `api.Searchable()` on a type with no `Contains` | there is no substring predicate to emit |
 | `api.Filterable()` on a type with no operators | the filter group would silently do nothing |
+| A Filterable field or primary key whose type cannot parse wire text | use a basic scalar, enum, `time.Time`, or a type implementing `encoding.TextUnmarshaler` |
 | `api.Sortable()` on a non-comparable type | Ent generates no `ByX` order option |
 | A query storage key beginning with `_` | it collides with reserved query controls |
 | `api.Expand()` targeting a non-resource | the target Summary type does not exist |
@@ -799,12 +779,11 @@ Ordered by how quietly they hurt you.
    and surfaces as a 500.
 2. **`New{E}Response(nil)` returns `(nil, nil)`.** Not an error. Feed it a query
    that matched nothing and you get a pair of nils, not a not-found.
-3. **`_contains` requires `api.Searchable()`.** A string field marked filterable
-   only emits none of its four substring parameters; form and JSON binders drop
-   unknown keys without complaint, so `?name_contains=x` becomes an *unfiltered*
-   query rather than a 400.
-4. **No query dimension is inferred.** With no query words the filter and sort
-   allow-list are empty.
+3. **`like:`, `ilike:` and `suffix:` require `api.Searchable()`.** On a
+   Filterable-only string field they are known-but-disallowed operators, so the
+   generated parser returns `ErrValidation`; `prefix:` remains available.
+4. **Only the primary key's query dimensions are inferred.** It is always
+   Filterable and Sortable; every non-ID field still requires its own query word.
 5. **An all-immutable PATCH is refused** unless the resource writes
    `Except(api.OpPatch)`; the request type and wiring function still exist.
 6. **An `Immutable()` field in a PATCH body is discarded by `encoding/json`
@@ -820,8 +799,8 @@ Ordered by how quietly they hurt you.
     nothing.** That `int` is your only way to learn how many existed; an empty
     list deletes zero rows, which is ent's own reading of `IDIn` with no
     arguments rather than a guard written here.
-10. **`Page.Size` is the clamped size**, and an oversized request is never an
-    error — `ListRequest.Validate()` says nothing about `Size` or `Page`.
+10. **`Page.Size` is the clamped size.** The parser rejects zero and negative
+    `_size`, accepts values above 1000, and `ListRequest.Limit()` clamps them.
 11. **`ErrorMap` is a plain package-level variable with no synchronisation.**
     Assign it where the client is built, not while serving.
 12. **A generated file you copied and edited still carries the marker** —
@@ -877,6 +856,23 @@ with `client.Use`.
 leak where a response-scoped sensitive field was emitted; create and patch
 requests are unchanged.
 
+**Breaking and behaviour change (#72):** query parsing moved from external
+form binding to generated `Parse{Entity}Query`. Two entigo differences must be
+migrated together: a repeated field parameter now produces separate `AND`ed
+predicates rather than an `OR`/`IN`, and a value that cannot be converted now
+returns `ErrValidation` rather than being skipped. `_ieq` also has no v2 wire
+spelling and has been removed from the query surface.
+
+| Before | Query wire v2 |
+|---|---|
+| `q=words` | `_q=words` |
+| `sort_by=created_at&order=desc` | `_sort=created_at:desc` |
+| `page=2&size=50` | `_page=2&_size=50` |
+| `score_gt=30` | `score=gt:30` |
+
+All v2 wire names use the field storage key. Regenerate before changing callers;
+the old and new spellings are intentionally not accepted together.
+
 The following symbols once existed in this module and have been removed, with
 **no compatibility aliases** — an alias that preserves the coupling a change
 exists to remove is worse than the break.
@@ -894,6 +890,9 @@ exists to remove is worse than the break.
 | `DomainField.UniqueLookup`, `.RangeLookup`, `.Validation` | `api.Filterable()` (operators derive from Ent's `$field.Ops`); generated request `Validate()` |
 | `DomainConfig.EntityName` | nothing — it had no readers |
 | runtime symbols living in the root package | all moved to `github.com/githonllc/entapi/runtime` |
+| `ListRequest.SortBy`, `ListRequest.Order`, `ListRequest.Validate`, `ListRequest.SortKey` | `ListRequest.Sort []SortSpec`; parse with generated `Parse{Entity}Query`, validate keys in `{Entity}Order` |
+| `AppendIf`, `AppendIfSlice` | `AppendEach`, `AppendEachSlice`; filter slots are slices and repeated values are `AND`ed |
+| query `form` tags | generated `Parse{Entity}Query`; `ListRequest` v2 has no form tags |
 
 ## Further reading
 

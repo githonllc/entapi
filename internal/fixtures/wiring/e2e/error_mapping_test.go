@@ -174,7 +174,7 @@ func TestOperationsThatCannotSeeAMissingRow(t *testing.T) {
 	})
 
 	t.Run("ListNotes returns an empty page", func(t *testing.T) {
-		p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: ptr("absent")}, entapi.ListRequest{})
+		p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: []string{"absent"}}, entapi.ListRequest{})
 		if err != nil {
 			t.Fatalf("ListNotes: %v", err)
 		}

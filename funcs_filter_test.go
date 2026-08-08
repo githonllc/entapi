@@ -10,8 +10,8 @@ import (
 	"github.com/githonllc/entapi/api"
 )
 
-// paramNames projects filterParams onto the struct field names it produces, so
-// a failure names identifiers a reader can grep for.
+// paramNames projects filterParamsNamed onto the struct field names it
+// produces, so a failure names identifiers a reader can grep for.
 func paramNames(ps []filterParam) []string {
 	out := make([]string, len(ps))
 	for i, p := range ps {
@@ -83,9 +83,9 @@ func TestFilterParamsFollowEntsOperatorTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := paramNames(filterParams(tt.field))
+			got := paramNames(filterParamsNamed(tt.field, tt.field.StructField()))
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("filterParams(%s) = %v, want %v", tt.name, got, tt.want)
+				t.Errorf("filterParamsNamed(%s) = %v, want %v", tt.name, got, tt.want)
 			}
 		})
 	}
@@ -98,7 +98,7 @@ func TestFilterParamsCollapseTheNullPair(t *testing.T) {
 	f := newIntField("score", nil)
 	f.Optional = true
 
-	ps := filterParams(f)
+	ps := filterParamsNamed(f, f.StructField())
 	names := paramNames(ps)
 
 	for _, absent := range []string{"ScoreIsNil", "ScoreNotNil"} {
@@ -110,8 +110,8 @@ func TestFilterParamsCollapseTheNullPair(t *testing.T) {
 	}
 
 	last := ps[len(ps)-1]
-	if last.Field != "ScoreIsNull" || last.Tag != "score_is_null" || last.Type != "*bool" || last.Kind != "null" {
-		t.Errorf("collapsed null parameter = %+v, want {ScoreIsNull score_is_null *bool null}", last)
+	if last.Field != "ScoreIsNull" || last.Tag != "score_is_null" || last.Type != "[]bool" || last.Kind != "null" {
+		t.Errorf("collapsed null parameter = %+v, want {ScoreIsNull score_is_null []bool null}", last)
 	}
 	if last.Pred != "" {
 		t.Errorf("collapsed null parameter names a single predicate %q; it needs both IsNil and NotNil", last.Pred)
@@ -122,16 +122,17 @@ func TestFilterParamsCollapseTheNullPair(t *testing.T) {
 // template branches on Kind and a wrong Kind is a compile error in a
 // consumer's package rather than here.
 func TestFilterParamShapes(t *testing.T) {
-	ps := filterParams(newStringField("title", nil))
+	f := newStringField("title", nil)
+	ps := filterParamsNamed(f, f.StructField())
 	byName := map[string]filterParam{}
 	for _, p := range ps {
 		byName[p.Field] = p
 	}
 
-	if got := byName["Title"]; got.Kind != "one" || got.Type != "*string" || got.Pred != "TitleEQ" || got.Tag != "title" {
-		t.Errorf("equality parameter = %+v, want {Title title *string TitleEQ one}", got)
+	if got := byName["Title"]; got.Kind != "one" || got.Type != "[]string" || got.Pred != "TitleEQ" || got.Tag != "title" {
+		t.Errorf("equality parameter = %+v, want {Title title []string TitleEQ one}", got)
 	}
-	if got := byName["TitleIn"]; got.Kind != "many" || got.Type != "[]string" || got.Pred != "TitleIn" || got.Tag != "title_in" {
+	if got := byName["TitleIn"]; got.Kind != "many" || got.Type != "[][]string" || got.Pred != "TitleIn" || got.Tag != "title_in" {
 		t.Errorf("In parameter = %+v, want a variadic slice parameter", got)
 	}
 	if got := byName["TitleHasPrefix"]; got.Tag != "title_prefix" {
@@ -144,7 +145,7 @@ func TestFilterParamShapes(t *testing.T) {
 // moment a schema author set a custom storage key.
 func TestFilterParamTagsUseTheStorageKey(t *testing.T) {
 	f := newStringField("created_by", nil)
-	tags := paramTags(filterParams(f))
+	tags := paramTags(filterParamsNamed(f, f.StructField()))
 	if len(tags) == 0 {
 		t.Fatal("no parameters for a string field")
 	}
@@ -153,9 +154,9 @@ func TestFilterParamTagsUseTheStorageKey(t *testing.T) {
 	}
 }
 
-func TestFilterParamsOfNilField(t *testing.T) {
-	if got := filterParams(nil); got != nil {
-		t.Errorf("filterParams(nil) = %v, want nil", got)
+func TestFilterParamsNamedOfNilField(t *testing.T) {
+	if got := filterParamsNamed(nil, ""); got != nil {
+		t.Errorf("filterParamsNamed(nil, %q) = %v, want nil", "", got)
 	}
 }
 
@@ -210,14 +211,53 @@ func TestQueryFieldsSelectDimensionWords(t *testing.T) {
 	}
 }
 
+func TestParseFieldsIncludesPrimaryKeyAndFilterableFields(t *testing.T) {
+	id := newUUIDField("id", nil)
+	node := newTestType("Doc",
+		newStringField("title", fieldPtr(api.FieldAnnotation{Filterable: true, Searchable: true})),
+		newStringField("ref", fieldPtr(api.Filterable())),
+		newStringField("body", fieldPtr(api.Searchable())),
+	)
+	node.ID = id
+
+	got := parseFields(node)
+	if len(got) != 3 {
+		t.Fatalf("parseFields returned %d fields, want id, title, ref", len(got))
+	}
+	if got[0].Field != id || got[0].ParseKind != "text" {
+		t.Errorf("primary key parse field = %+v, want UUID id through TextUnmarshaler", got[0])
+	}
+	if got[1].Field.Name != "title" || got[2].Field.Name != "ref" {
+		t.Fatalf("parseFields order = %s, %s, %s", got[0].Field.Name, got[1].Field.Name, got[2].Field.Name)
+	}
+
+	if got, want := parseOperatorPrefixes(got[0].Operators), []string{"eq", "ne", "in", "not_in", "gt", "ge", "lt", "le", "from", "to", "between"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("uuid id operators = %v, want %v", got, want)
+	}
+	if got, want := parseOperatorPrefixes(got[1].Operators), []string{"eq", "ne", "in", "not_in", "gt", "ge", "lt", "le", "like", "prefix", "suffix", "from", "to", "between"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("searchable title operators = %v, want %v", got, want)
+	}
+	if got, want := parseOperatorPrefixes(got[2].Operators), []string{"eq", "ne", "in", "not_in", "gt", "ge", "lt", "le", "prefix", "from", "to", "between"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("filterable-only ref operators = %v, want %v", got, want)
+	}
+}
+
+func parseOperatorPrefixes(ops []parseOperator) []string {
+	out := make([]string, len(ops))
+	for i, op := range ops {
+		out[i] = op.Prefix
+	}
+	return out
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Imports.
 // ────────────────────────────────────────────────────────────────────────────
 
-// TestFilterImportsAreUnconditionalPlusFieldTypes pins that the three imports
+// TestFilterImportsAreUnconditionalPlusFieldTypes pins that the imports
 // the artifacts always use are always declared, including for an entity that
 // marks nothing — that entity still gets an (empty) filter type, an (empty)
-// allow-list and an Order function, and each names one of them.
+// user-marked allow-list and an Order function, and each names one of them.
 func TestFilterImportsAreUnconditionalPlusFieldTypes(t *testing.T) {
 	node := newTestType("Doc", newStringField("title", nil))
 	node.Config = &gen.Config{Package: "example.com/app/ent"}
@@ -227,6 +267,11 @@ func TestFilterImportsAreUnconditionalPlusFieldTypes(t *testing.T) {
 		`"entgo.io/ent/dialect/sql"`,
 		`"example.com/app/ent/doc"`,
 		`"example.com/app/ent/predicate"`,
+		`"fmt"`,
+		`"net/url"`,
+		`"sort"`,
+		`"strconv"`,
+		`"strings"`,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("filterImports (no filterable field) = %v, want %v", got, want)

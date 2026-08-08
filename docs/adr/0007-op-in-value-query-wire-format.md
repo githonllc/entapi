@@ -49,6 +49,8 @@ makes `?size=gt:30` ambiguous.
   cannot help because `r.URL.Query()` decodes before the parser runs.
 - Typos of operator prefixes on string fields silently become literals
   (rule 5); typed fields still fail value-parse to 400.
+- Bare `*` and `?` remain equality literals; null predicates are spelled
+  `is_null:` and `not_null:`, never `null:`.
 - `form` tags and the `sort_by`/`order`/`q` parameter pair retire;
   `ListRequest` v2 carries a sort-spec list.
 

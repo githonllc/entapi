@@ -6,14 +6,16 @@
 // exercised by a field whose expected operator set is known independently, from
 // entc/gen/func.go's fieldOps plus the sql storage driver's extra ops:
 //
-//	string          stringOps + EqualFold + ContainsFold   13 parameters
+//	string          stringOps + EqualFold + ContainsFold,
+//	                minus EqualFold (no wire spelling)      12 parameters
 //	enum            enumOps                                 4 parameters
 //	int, Optional   numericOps + the collapsed null question 8 + 1 parameters
 //	time.Time       numericOps                               8 parameters
 //
 // The class rule (ADR-0005) cuts across that table: those counts are what a
-// Filterable AND Searchable field earns. "ref" is the same string type marked
-// Filterable ONLY, so it earns 13 - 4 substring operators + the null question.
+// Filterable AND Searchable field earns. EqualFold produces no parameter because
+// it has no wire spelling. "ref" is the same string type marked Filterable ONLY,
+// so it earns 12 - 3 Searchable-gated operators = 9, plus the null question.
 //
 // Two fields exist to be ABSENT from the generated artifacts: "note" carries
 // no query word, and "secret" carries none either. Neither may be
@@ -54,6 +56,7 @@ func (Record) Fields() []ent.Field {
 		// substring parameter exists for this column (ADR-0005).
 		field.String("ref").
 			Optional().
+			StorageKey("reference").
 			Annotations(api.Filterable()),
 
 		// enum: four operators, and no substring predicate to generate.

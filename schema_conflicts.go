@@ -122,6 +122,12 @@ func nodeConflicts(node *gen.Type) []string {
 	if node.ID != nil && hasRawAnnotation(node.ID.Annotations, edgeAnnotationName) {
 		out = append(out, misplacedExpandConflict(node, node.ID))
 	}
+	if kind, _, _ := fieldParseConversion(node.ID); node.ID != nil && kind == "" {
+		out = append(out, fmt.Sprintf(
+			"%s.%s: the primary key is naturally Filterable, but type %q cannot parse a query wire value; use a basic scalar, enum, time.Time, or a type implementing encoding.TextUnmarshaler",
+			node.Name, node.ID.Name, node.ID.Type.String(),
+		))
+	}
 
 	for _, f := range node.Fields {
 		a := getFieldAnnotation(f)
@@ -338,6 +344,13 @@ func queryConflicts(node *gen.Type, f *gen.Field, a *api.FieldAnnotation) []stri
 		))
 	}
 
+	if kind, _, _ := fieldParseConversion(f); a.Filterable && len(f.Ops()) > 0 && kind == "" {
+		out = append(out, fmt.Sprintf(
+			"%s.%s: annotation marks the field Filterable and ent derives predicates, but type %q cannot parse a query wire value; use a basic scalar, enum, time.Time, or a type implementing encoding.TextUnmarshaler, or remove api.Filterable()",
+			node.Name, f.Name, f.Type.String(),
+		))
+	}
+
 	if a.Sortable && (f.Type == nil || !f.Type.Comparable()) {
 		out = append(out, fmt.Sprintf(
 			"%s.%s: annotation marks the field Sortable, but type %q is not comparable, so ent's order builders skip it "+
@@ -542,6 +555,7 @@ func derivedEntityDecls(node *gen.Type) []derivedName {
 		{"New" + n + "ListResponse", dto},
 		// templates/filter.tmpl
 		{n + "Filter", filter},
+		{"Parse" + n + "Query", filter},
 		{n + "SortKeys", filter},
 		{n + "Order", filter},
 		// templates/wiring.tmpl

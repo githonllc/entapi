@@ -5,171 +5,154 @@
 package queryent
 
 import (
+	"encoding"
+	"fmt"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/githonllc/entapi/internal/fixtures/query/queryent/predicate"
 	"github.com/githonllc/entapi/internal/fixtures/query/queryent/record"
 	entapi "github.com/githonllc/entapi/runtime"
+	"github.com/google/uuid"
 )
 
-// ============================================================================
-// Query surface for Record — filters, free-text search and the sort
-// allow-list. They are three dimensions of one list endpoint, not three
-// features, so they are one artifact.
-//
-// Every field below carries at least one query-dimension word. A field with no
-// Searchable, Filterable or Sortable word is absent from all three, and there
-// is no runtime switch that can bring it back.
-// ============================================================================
-
-// RecordFilter is the structured query surface for Record.
-//
-// One parameter per operator per Filterable field, with the operator set taken
-// from ent's own per-type table ($field.Ops) rather than from a curated
-// selection: emitting an operator costs nothing here, whereas adding one later
-// means changing a template, regenerating and possibly breaking a URL contract
-// consumers already depend on. Substring-class operators (_contains,
-// _icontains, _ieq, _suffix) additionally require api.Searchable() on the field —
-// see docs/adr/0005.
-//
-// Every parameter is a pointer or a slice, because "absent" and "the zero
-// value" are different requests.
+// RecordFilter is the typed query representation for Record.
+// Repeated URL parameters occupy repeated slots and Predicates ANDs them.
 type RecordFilter struct {
+	// id: uuid.UUID
+	ID      []uuid.UUID   `json:"id,omitempty"`
+	IDNEQ   []uuid.UUID   `json:"id_neq,omitempty"`
+	IDIn    [][]uuid.UUID `json:"id_in,omitempty"`
+	IDNotIn [][]uuid.UUID `json:"id_not_in,omitempty"`
+	IDGT    []uuid.UUID   `json:"id_gt,omitempty"`
+	IDGTE   []uuid.UUID   `json:"id_gte,omitempty"`
+	IDLT    []uuid.UUID   `json:"id_lt,omitempty"`
+	IDLTE   []uuid.UUID   `json:"id_lte,omitempty"`
 	// title: string
-	Title             *string  `form:"title" json:"title,omitempty"`
-	TitleNEQ          *string  `form:"title_neq" json:"title_neq,omitempty"`
-	TitleIn           []string `form:"title_in" json:"title_in,omitempty"`
-	TitleNotIn        []string `form:"title_not_in" json:"title_not_in,omitempty"`
-	TitleGT           *string  `form:"title_gt" json:"title_gt,omitempty"`
-	TitleGTE          *string  `form:"title_gte" json:"title_gte,omitempty"`
-	TitleLT           *string  `form:"title_lt" json:"title_lt,omitempty"`
-	TitleLTE          *string  `form:"title_lte" json:"title_lte,omitempty"`
-	TitleContains     *string  `form:"title_contains" json:"title_contains,omitempty"`
-	TitleHasPrefix    *string  `form:"title_prefix" json:"title_prefix,omitempty"`
-	TitleHasSuffix    *string  `form:"title_suffix" json:"title_suffix,omitempty"`
-	TitleEqualFold    *string  `form:"title_ieq" json:"title_ieq,omitempty"`
-	TitleContainsFold *string  `form:"title_icontains" json:"title_icontains,omitempty"`
-
-	// ref: string, optional
-	Ref          *string  `form:"ref" json:"ref,omitempty"`
-	RefNEQ       *string  `form:"ref_neq" json:"ref_neq,omitempty"`
-	RefIn        []string `form:"ref_in" json:"ref_in,omitempty"`
-	RefNotIn     []string `form:"ref_not_in" json:"ref_not_in,omitempty"`
-	RefGT        *string  `form:"ref_gt" json:"ref_gt,omitempty"`
-	RefGTE       *string  `form:"ref_gte" json:"ref_gte,omitempty"`
-	RefLT        *string  `form:"ref_lt" json:"ref_lt,omitempty"`
-	RefLTE       *string  `form:"ref_lte" json:"ref_lte,omitempty"`
-	RefHasPrefix *string  `form:"ref_prefix" json:"ref_prefix,omitempty"`
-	// IsNil and NotNil are one boolean question. Emitting them as two
-	// parameters would admit a request that contradicts itself.
-	RefIsNull *bool `form:"ref_is_null" json:"ref_is_null,omitempty"`
-
+	Title             []string   `json:"title,omitempty"`
+	TitleNEQ          []string   `json:"title_neq,omitempty"`
+	TitleIn           [][]string `json:"title_in,omitempty"`
+	TitleNotIn        [][]string `json:"title_not_in,omitempty"`
+	TitleGT           []string   `json:"title_gt,omitempty"`
+	TitleGTE          []string   `json:"title_gte,omitempty"`
+	TitleLT           []string   `json:"title_lt,omitempty"`
+	TitleLTE          []string   `json:"title_lte,omitempty"`
+	TitleContains     []string   `json:"title_contains,omitempty"`
+	TitleHasPrefix    []string   `json:"title_prefix,omitempty"`
+	TitleHasSuffix    []string   `json:"title_suffix,omitempty"`
+	TitleContainsFold []string   `json:"title_icontains,omitempty"`
+	// reference: string, optional
+	Ref          []string   `json:"reference,omitempty"`
+	RefNEQ       []string   `json:"reference_neq,omitempty"`
+	RefIn        [][]string `json:"reference_in,omitempty"`
+	RefNotIn     [][]string `json:"reference_not_in,omitempty"`
+	RefGT        []string   `json:"reference_gt,omitempty"`
+	RefGTE       []string   `json:"reference_gte,omitempty"`
+	RefLT        []string   `json:"reference_lt,omitempty"`
+	RefLTE       []string   `json:"reference_lte,omitempty"`
+	RefHasPrefix []string   `json:"reference_prefix,omitempty"`
+	RefIsNull    []bool     `json:"reference_is_null,omitempty"`
 	// status: record.Status
-	Status      *record.Status  `form:"status" json:"status,omitempty"`
-	StatusNEQ   *record.Status  `form:"status_neq" json:"status_neq,omitempty"`
-	StatusIn    []record.Status `form:"status_in" json:"status_in,omitempty"`
-	StatusNotIn []record.Status `form:"status_not_in" json:"status_not_in,omitempty"`
-
+	Status      []record.Status   `json:"status,omitempty"`
+	StatusNEQ   []record.Status   `json:"status_neq,omitempty"`
+	StatusIn    [][]record.Status `json:"status_in,omitempty"`
+	StatusNotIn [][]record.Status `json:"status_not_in,omitempty"`
 	// score: int, optional
-	Score      *int  `form:"score" json:"score,omitempty"`
-	ScoreNEQ   *int  `form:"score_neq" json:"score_neq,omitempty"`
-	ScoreIn    []int `form:"score_in" json:"score_in,omitempty"`
-	ScoreNotIn []int `form:"score_not_in" json:"score_not_in,omitempty"`
-	ScoreGT    *int  `form:"score_gt" json:"score_gt,omitempty"`
-	ScoreGTE   *int  `form:"score_gte" json:"score_gte,omitempty"`
-	ScoreLT    *int  `form:"score_lt" json:"score_lt,omitempty"`
-	ScoreLTE   *int  `form:"score_lte" json:"score_lte,omitempty"`
-	// IsNil and NotNil are one boolean question. Emitting them as two
-	// parameters would admit a request that contradicts itself.
-	ScoreIsNull *bool `form:"score_is_null" json:"score_is_null,omitempty"`
-
+	Score       []int   `json:"score,omitempty"`
+	ScoreNEQ    []int   `json:"score_neq,omitempty"`
+	ScoreIn     [][]int `json:"score_in,omitempty"`
+	ScoreNotIn  [][]int `json:"score_not_in,omitempty"`
+	ScoreGT     []int   `json:"score_gt,omitempty"`
+	ScoreGTE    []int   `json:"score_gte,omitempty"`
+	ScoreLT     []int   `json:"score_lt,omitempty"`
+	ScoreLTE    []int   `json:"score_lte,omitempty"`
+	ScoreIsNull []bool  `json:"score_is_null,omitempty"`
 	// created_at: time.Time
-	CreatedAt      *time.Time  `form:"created_at" json:"created_at,omitempty"`
-	CreatedAtNEQ   *time.Time  `form:"created_at_neq" json:"created_at_neq,omitempty"`
-	CreatedAtIn    []time.Time `form:"created_at_in" json:"created_at_in,omitempty"`
-	CreatedAtNotIn []time.Time `form:"created_at_not_in" json:"created_at_not_in,omitempty"`
-	CreatedAtGT    *time.Time  `form:"created_at_gt" json:"created_at_gt,omitempty"`
-	CreatedAtGTE   *time.Time  `form:"created_at_gte" json:"created_at_gte,omitempty"`
-	CreatedAtLT    *time.Time  `form:"created_at_lt" json:"created_at_lt,omitempty"`
-	CreatedAtLTE   *time.Time  `form:"created_at_lte" json:"created_at_lte,omitempty"`
-
-	// Free-text search across the Searchable fields:
-	// title body
-	// One input, matched disjunctively, then ANDed with everything above.
-	Q *string `form:"q" json:"q,omitempty"`
+	CreatedAt      []time.Time   `json:"created_at,omitempty"`
+	CreatedAtNEQ   []time.Time   `json:"created_at_neq,omitempty"`
+	CreatedAtIn    [][]time.Time `json:"created_at_in,omitempty"`
+	CreatedAtNotIn [][]time.Time `json:"created_at_not_in,omitempty"`
+	CreatedAtGT    []time.Time   `json:"created_at_gt,omitempty"`
+	CreatedAtGTE   []time.Time   `json:"created_at_gte,omitempty"`
+	CreatedAtLT    []time.Time   `json:"created_at_lt,omitempty"`
+	CreatedAtLTE   []time.Time   `json:"created_at_lte,omitempty"`
+	// Q is the single free-text term matched across Searchable fields.
+	Q *string `json:"_q,omitempty"`
 }
 
-// Predicates converts the filter into ent predicates.
-//
-// The result is applied with Where(...), which combines conjunctively, so every
-// parameter the caller set narrows the result further. The free-text term is
-// the one disjunction: it ORs across the searchable fields and joins the rest
-// as a single conjunct.
-//
-// A nil receiver yields no predicates, so an endpoint with no filter bound does
-// not need a branch of its own.
+// Predicates converts the typed filter into conjunctive ent predicates.
 func (f *RecordFilter) Predicates() []predicate.Record {
 	if f == nil {
 		return nil
 	}
 	var ps []predicate.Record
-	entapi.AppendIf(&ps, f.Title, record.TitleEQ)
-	entapi.AppendIf(&ps, f.TitleNEQ, record.TitleNEQ)
-	entapi.AppendIfSlice(&ps, f.TitleIn, record.TitleIn)
-	entapi.AppendIfSlice(&ps, f.TitleNotIn, record.TitleNotIn)
-	entapi.AppendIf(&ps, f.TitleGT, record.TitleGT)
-	entapi.AppendIf(&ps, f.TitleGTE, record.TitleGTE)
-	entapi.AppendIf(&ps, f.TitleLT, record.TitleLT)
-	entapi.AppendIf(&ps, f.TitleLTE, record.TitleLTE)
-	entapi.AppendIf(&ps, f.TitleContains, record.TitleContains)
-	entapi.AppendIf(&ps, f.TitleHasPrefix, record.TitleHasPrefix)
-	entapi.AppendIf(&ps, f.TitleHasSuffix, record.TitleHasSuffix)
-	entapi.AppendIf(&ps, f.TitleEqualFold, record.TitleEqualFold)
-	entapi.AppendIf(&ps, f.TitleContainsFold, record.TitleContainsFold)
-	entapi.AppendIf(&ps, f.Ref, record.RefEQ)
-	entapi.AppendIf(&ps, f.RefNEQ, record.RefNEQ)
-	entapi.AppendIfSlice(&ps, f.RefIn, record.RefIn)
-	entapi.AppendIfSlice(&ps, f.RefNotIn, record.RefNotIn)
-	entapi.AppendIf(&ps, f.RefGT, record.RefGT)
-	entapi.AppendIf(&ps, f.RefGTE, record.RefGTE)
-	entapi.AppendIf(&ps, f.RefLT, record.RefLT)
-	entapi.AppendIf(&ps, f.RefLTE, record.RefLTE)
-	entapi.AppendIf(&ps, f.RefHasPrefix, record.RefHasPrefix)
-	if f.RefIsNull != nil {
-		if *f.RefIsNull {
+	entapi.AppendEach(&ps, f.ID, record.IDEQ)
+	entapi.AppendEach(&ps, f.IDNEQ, record.IDNEQ)
+	entapi.AppendEachSlice(&ps, f.IDIn, record.IDIn)
+	entapi.AppendEachSlice(&ps, f.IDNotIn, record.IDNotIn)
+	entapi.AppendEach(&ps, f.IDGT, record.IDGT)
+	entapi.AppendEach(&ps, f.IDGTE, record.IDGTE)
+	entapi.AppendEach(&ps, f.IDLT, record.IDLT)
+	entapi.AppendEach(&ps, f.IDLTE, record.IDLTE)
+	entapi.AppendEach(&ps, f.Title, record.TitleEQ)
+	entapi.AppendEach(&ps, f.TitleNEQ, record.TitleNEQ)
+	entapi.AppendEachSlice(&ps, f.TitleIn, record.TitleIn)
+	entapi.AppendEachSlice(&ps, f.TitleNotIn, record.TitleNotIn)
+	entapi.AppendEach(&ps, f.TitleGT, record.TitleGT)
+	entapi.AppendEach(&ps, f.TitleGTE, record.TitleGTE)
+	entapi.AppendEach(&ps, f.TitleLT, record.TitleLT)
+	entapi.AppendEach(&ps, f.TitleLTE, record.TitleLTE)
+	entapi.AppendEach(&ps, f.TitleContains, record.TitleContains)
+	entapi.AppendEach(&ps, f.TitleHasPrefix, record.TitleHasPrefix)
+	entapi.AppendEach(&ps, f.TitleHasSuffix, record.TitleHasSuffix)
+	entapi.AppendEach(&ps, f.TitleContainsFold, record.TitleContainsFold)
+	entapi.AppendEach(&ps, f.Ref, record.RefEQ)
+	entapi.AppendEach(&ps, f.RefNEQ, record.RefNEQ)
+	entapi.AppendEachSlice(&ps, f.RefIn, record.RefIn)
+	entapi.AppendEachSlice(&ps, f.RefNotIn, record.RefNotIn)
+	entapi.AppendEach(&ps, f.RefGT, record.RefGT)
+	entapi.AppendEach(&ps, f.RefGTE, record.RefGTE)
+	entapi.AppendEach(&ps, f.RefLT, record.RefLT)
+	entapi.AppendEach(&ps, f.RefLTE, record.RefLTE)
+	entapi.AppendEach(&ps, f.RefHasPrefix, record.RefHasPrefix)
+	for _, isNull := range f.RefIsNull {
+		if isNull {
 			ps = append(ps, record.RefIsNil())
 		} else {
 			ps = append(ps, record.RefNotNil())
 		}
 	}
-	entapi.AppendIf(&ps, f.Status, record.StatusEQ)
-	entapi.AppendIf(&ps, f.StatusNEQ, record.StatusNEQ)
-	entapi.AppendIfSlice(&ps, f.StatusIn, record.StatusIn)
-	entapi.AppendIfSlice(&ps, f.StatusNotIn, record.StatusNotIn)
-	entapi.AppendIf(&ps, f.Score, record.ScoreEQ)
-	entapi.AppendIf(&ps, f.ScoreNEQ, record.ScoreNEQ)
-	entapi.AppendIfSlice(&ps, f.ScoreIn, record.ScoreIn)
-	entapi.AppendIfSlice(&ps, f.ScoreNotIn, record.ScoreNotIn)
-	entapi.AppendIf(&ps, f.ScoreGT, record.ScoreGT)
-	entapi.AppendIf(&ps, f.ScoreGTE, record.ScoreGTE)
-	entapi.AppendIf(&ps, f.ScoreLT, record.ScoreLT)
-	entapi.AppendIf(&ps, f.ScoreLTE, record.ScoreLTE)
-	if f.ScoreIsNull != nil {
-		if *f.ScoreIsNull {
+	entapi.AppendEach(&ps, f.Status, record.StatusEQ)
+	entapi.AppendEach(&ps, f.StatusNEQ, record.StatusNEQ)
+	entapi.AppendEachSlice(&ps, f.StatusIn, record.StatusIn)
+	entapi.AppendEachSlice(&ps, f.StatusNotIn, record.StatusNotIn)
+	entapi.AppendEach(&ps, f.Score, record.ScoreEQ)
+	entapi.AppendEach(&ps, f.ScoreNEQ, record.ScoreNEQ)
+	entapi.AppendEachSlice(&ps, f.ScoreIn, record.ScoreIn)
+	entapi.AppendEachSlice(&ps, f.ScoreNotIn, record.ScoreNotIn)
+	entapi.AppendEach(&ps, f.ScoreGT, record.ScoreGT)
+	entapi.AppendEach(&ps, f.ScoreGTE, record.ScoreGTE)
+	entapi.AppendEach(&ps, f.ScoreLT, record.ScoreLT)
+	entapi.AppendEach(&ps, f.ScoreLTE, record.ScoreLTE)
+	for _, isNull := range f.ScoreIsNull {
+		if isNull {
 			ps = append(ps, record.ScoreIsNil())
 		} else {
 			ps = append(ps, record.ScoreNotNil())
 		}
 	}
-	entapi.AppendIf(&ps, f.CreatedAt, record.CreatedAtEQ)
-	entapi.AppendIf(&ps, f.CreatedAtNEQ, record.CreatedAtNEQ)
-	entapi.AppendIfSlice(&ps, f.CreatedAtIn, record.CreatedAtIn)
-	entapi.AppendIfSlice(&ps, f.CreatedAtNotIn, record.CreatedAtNotIn)
-	entapi.AppendIf(&ps, f.CreatedAtGT, record.CreatedAtGT)
-	entapi.AppendIf(&ps, f.CreatedAtGTE, record.CreatedAtGTE)
-	entapi.AppendIf(&ps, f.CreatedAtLT, record.CreatedAtLT)
-	entapi.AppendIf(&ps, f.CreatedAtLTE, record.CreatedAtLTE)
+	entapi.AppendEach(&ps, f.CreatedAt, record.CreatedAtEQ)
+	entapi.AppendEach(&ps, f.CreatedAtNEQ, record.CreatedAtNEQ)
+	entapi.AppendEachSlice(&ps, f.CreatedAtIn, record.CreatedAtIn)
+	entapi.AppendEachSlice(&ps, f.CreatedAtNotIn, record.CreatedAtNotIn)
+	entapi.AppendEach(&ps, f.CreatedAtGT, record.CreatedAtGT)
+	entapi.AppendEach(&ps, f.CreatedAtGTE, record.CreatedAtGTE)
+	entapi.AppendEach(&ps, f.CreatedAtLT, record.CreatedAtLT)
+	entapi.AppendEach(&ps, f.CreatedAtLTE, record.CreatedAtLTE)
 	if f.Q != nil && *f.Q != "" {
 		ps = append(ps, record.Or(
 			record.TitleContains(*f.Q),
@@ -179,67 +162,837 @@ func (f *RecordFilter) Predicates() []predicate.Record {
 	return ps
 }
 
-// recordSortOptions maps an allowed sort key to ent's own order
-// builder for that column. It is unexported: the mapping is reached through
-// RecordOrder, which checks the key first.
+func parseRecordIDQueryValue(raw, whole string) (uuid.UUID, error) {
+	var parsed uuid.UUID
+	if err := encoding.TextUnmarshaler(&parsed).UnmarshalText([]byte(raw)); err != nil {
+		return parsed, fmt.Errorf("%w: field %q value %q is invalid: %v", entapi.ErrValidation, "id", whole, err)
+	}
+	return parsed, nil
+}
+
+func parseRecordTitleQueryValue(raw, whole string) (string, error) {
+	return string(raw), nil
+}
+
+func parseRecordRefQueryValue(raw, whole string) (string, error) {
+	return string(raw), nil
+}
+
+func parseRecordStatusQueryValue(raw, whole string) (record.Status, error) {
+	switch raw {
+	case "draft":
+		return record.Status(raw), nil
+	case "live":
+		return record.Status(raw), nil
+	default:
+		var zero record.Status
+		return zero, fmt.Errorf("%w: field %q value %q is not an enum member; legal members: %s", entapi.ErrValidation, "status", whole, strings.Join([]string{
+			"draft",
+			"live",
+		}, ", "))
+	}
+}
+
+func parseRecordScoreQueryValue(raw, whole string) (int, error) {
+	parsed, err := strconv.ParseInt(raw, 10, 0)
+	if err != nil {
+		var zero int
+		return zero, fmt.Errorf("%w: field %q value %q is not a valid int: %v", entapi.ErrValidation, "score", whole, err)
+	}
+	return int(parsed), nil
+}
+
+func parseRecordCreatedAtQueryValue(raw, whole string) (time.Time, error) {
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		var zero time.Time
+		return zero, fmt.Errorf("%w: field %q value %q is not RFC 3339: %v", entapi.ErrValidation, "created_at", whole, err)
+	}
+	return time.Time(parsed), nil
+}
+
+// ParseRecordQuery parses the complete URL query contract in sorted-key
+// order. Runtime code owns lexical grammar; this generated switch owns the
+// field-local operator set, conversion and predicate slots.
+func ParseRecordQuery(q url.Values) (*RecordFilter, entapi.ListRequest, error) {
+	f := &RecordFilter{}
+	var request entapi.ListRequest
+	keys := make([]string, 0, len(q))
+	for key := range q {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		values := q[key]
+		reserved, recognized, err := entapi.ReservedQueryValue(key, values)
+		if err != nil {
+			return nil, entapi.ListRequest{}, err
+		}
+		if recognized {
+			switch key {
+			case "_sort":
+				request.Sort, err = entapi.ParseSortSpecs(reserved)
+			case "_page":
+				request.Page, err = entapi.ParsePageParam(key, reserved)
+			case "_size":
+				request.Size, err = entapi.ParsePageParam(key, reserved)
+			case "_q":
+				term := reserved
+				f.Q = &term
+			}
+			if err != nil {
+				return nil, entapi.ListRequest{}, err
+			}
+			continue
+		}
+		if strings.HasPrefix(key, "_") {
+			return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown reserved query parameter %q", entapi.ErrValidation, key)
+		}
+		switch key {
+		case "id":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseRecordIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ID = append(f.ID, parsed)
+				case "ne":
+					parsed, parseErr := parseRecordIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDNEQ = append(f.IDNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]uuid.UUID, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordIDQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.IDIn = append(f.IDIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]uuid.UUID, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordIDQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.IDNotIn = append(f.IDNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseRecordIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGT = append(f.IDGT, parsed)
+				case "ge":
+					parsed, parseErr := parseRecordIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseRecordIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLT = append(f.IDLT, parsed)
+				case "le":
+					parsed, parseErr := parseRecordIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLTE = append(f.IDLTE, parsed)
+				case "from":
+					parsed, parseErr := parseRecordIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, parsed)
+				case "to":
+					parsed, parseErr := parseRecordIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLTE = append(f.IDLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseRecordIDQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseRecordIDQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, lower)
+					f.IDLTE = append(f.IDLTE, upper)
+				}
+			}
+		case "title":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "like":
+				case "prefix":
+				case "suffix":
+				case "ilike":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, like, prefix, suffix, ilike, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.Title = append(f.Title, parsed)
+				case "ne":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleNEQ = append(f.TitleNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]string, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordTitleQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.TitleIn = append(f.TitleIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]string, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordTitleQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.TitleNotIn = append(f.TitleNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleGT = append(f.TitleGT, parsed)
+				case "ge":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleGTE = append(f.TitleGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleLT = append(f.TitleLT, parsed)
+				case "le":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleLTE = append(f.TitleLTE, parsed)
+				case "like":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleContains = append(f.TitleContains, parsed)
+				case "prefix":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleHasPrefix = append(f.TitleHasPrefix, parsed)
+				case "suffix":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleHasSuffix = append(f.TitleHasSuffix, parsed)
+				case "ilike":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleContainsFold = append(f.TitleContainsFold, parsed)
+				case "from":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleGTE = append(f.TitleGTE, parsed)
+				case "to":
+					parsed, parseErr := parseRecordTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleLTE = append(f.TitleLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseRecordTitleQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseRecordTitleQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleGTE = append(f.TitleGTE, lower)
+					f.TitleLTE = append(f.TitleLTE, upper)
+				}
+			}
+		case "reference":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "prefix":
+				case "is_null":
+				case "not_null":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, prefix, is_null, not_null, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.Ref = append(f.Ref, parsed)
+				case "ne":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefNEQ = append(f.RefNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]string, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordRefQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.RefIn = append(f.RefIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]string, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordRefQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.RefNotIn = append(f.RefNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefGT = append(f.RefGT, parsed)
+				case "ge":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefGTE = append(f.RefGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefLT = append(f.RefLT, parsed)
+				case "le":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefLTE = append(f.RefLTE, parsed)
+				case "prefix":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefHasPrefix = append(f.RefHasPrefix, parsed)
+				case "is_null":
+					if raw != "" {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, prefix, is_null, not_null, from, to, between")
+					}
+					f.RefIsNull = append(f.RefIsNull, true)
+				case "not_null":
+					if raw != "" {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, prefix, is_null, not_null, from, to, between")
+					}
+					f.RefIsNull = append(f.RefIsNull, false)
+				case "from":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefGTE = append(f.RefGTE, parsed)
+				case "to":
+					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefLTE = append(f.RefLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseRecordRefQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseRecordRefQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RefGTE = append(f.RefGTE, lower)
+					f.RefLTE = append(f.RefLTE, upper)
+				}
+			}
+		case "status":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseRecordStatusQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.Status = append(f.Status, parsed)
+				case "ne":
+					parsed, parseErr := parseRecordStatusQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.StatusNEQ = append(f.StatusNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]record.Status, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordStatusQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.StatusIn = append(f.StatusIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]record.Status, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordStatusQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.StatusNotIn = append(f.StatusNotIn, parsedValues)
+				}
+			}
+		case "score":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "is_null":
+				case "not_null":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseRecordScoreQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.Score = append(f.Score, parsed)
+				case "ne":
+					parsed, parseErr := parseRecordScoreQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ScoreNEQ = append(f.ScoreNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]int, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordScoreQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.ScoreIn = append(f.ScoreIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]int, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordScoreQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.ScoreNotIn = append(f.ScoreNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseRecordScoreQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ScoreGT = append(f.ScoreGT, parsed)
+				case "ge":
+					parsed, parseErr := parseRecordScoreQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ScoreGTE = append(f.ScoreGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseRecordScoreQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ScoreLT = append(f.ScoreLT, parsed)
+				case "le":
+					parsed, parseErr := parseRecordScoreQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ScoreLTE = append(f.ScoreLTE, parsed)
+				case "is_null":
+					if raw != "" {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
+					}
+					f.ScoreIsNull = append(f.ScoreIsNull, true)
+				case "not_null":
+					if raw != "" {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
+					}
+					f.ScoreIsNull = append(f.ScoreIsNull, false)
+				case "from":
+					parsed, parseErr := parseRecordScoreQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ScoreGTE = append(f.ScoreGTE, parsed)
+				case "to":
+					parsed, parseErr := parseRecordScoreQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ScoreLTE = append(f.ScoreLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseRecordScoreQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseRecordScoreQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ScoreGTE = append(f.ScoreGTE, lower)
+					f.ScoreLTE = append(f.ScoreLTE, upper)
+				}
+			}
+		case "created_at":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseRecordCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAt = append(f.CreatedAt, parsed)
+				case "ne":
+					parsed, parseErr := parseRecordCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtNEQ = append(f.CreatedAtNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]time.Time, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordCreatedAtQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.CreatedAtIn = append(f.CreatedAtIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]time.Time, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseRecordCreatedAtQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.CreatedAtNotIn = append(f.CreatedAtNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseRecordCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtGT = append(f.CreatedAtGT, parsed)
+				case "ge":
+					parsed, parseErr := parseRecordCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtGTE = append(f.CreatedAtGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseRecordCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtLT = append(f.CreatedAtLT, parsed)
+				case "le":
+					parsed, parseErr := parseRecordCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtLTE = append(f.CreatedAtLTE, parsed)
+				case "from":
+					parsed, parseErr := parseRecordCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtGTE = append(f.CreatedAtGTE, parsed)
+				case "to":
+					parsed, parseErr := parseRecordCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtLTE = append(f.CreatedAtLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseRecordCreatedAtQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseRecordCreatedAtQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtGTE = append(f.CreatedAtGTE, lower)
+					f.CreatedAtLTE = append(f.CreatedAtLTE, upper)
+				}
+			}
+		default:
+			switch key {
+			case "body":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+			case "note":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+			case "secret":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+			default:
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown query field %q with value %q", entapi.ErrValidation, key, values)
+			}
+		}
+	}
+	return f, request, nil
+}
+
 var recordSortOptions = map[string]func(...sql.OrderTermOption) record.OrderOption{
+	"id":         record.ByID,
 	"title":      record.ByTitle,
 	"created_at": record.ByCreatedAt,
 }
 
-// RecordSortKeys is the sort allow-list: exactly the fields annotated
-// Sortable, and nothing else.
-//
-// This is the load-bearing part of the query surface. An unchecked sort field
-// is an injection site, an unindexed-scan trigger and — combined with paging —
-// an ordering oracle over columns the caller was never meant to read. An entity
-// that marks nothing is orderable by nothing, which is the safe end of the
-// default rather than an oversight.
-var RecordSortKeys = []string{"title", "created_at"}
+// RecordSortKeys is the complete sort allow-list. The primary key is
+// naturally Sortable; every other key requires api.Sortable().
+var RecordSortKeys = []string{
+	"id", "title", "created_at",
+}
 
-// RecordOrder turns a list request into ent order options.
-//
-// The caller's string is checked against RecordSortKeys and then thrown
-// away: what reaches the query is the order builder ent generated for that
-// column, looked up by an already-validated key. No caller-supplied string is
-// ever interpolated into SQL.
-//
-// A key outside the allow-list is a validation error, not a silent fallback —
-// a request to sort by a column that is out of bounds has no correct answer,
-// and quietly serving a differently-ordered page is worse than refusing.
-//
-// There is still no default sort COLUMN. Which column to order by when the
-// caller names none is a policy the schema does not contain, so generation does
-// not invent one; a consumer that wants a default passes SortBy itself.
-//
-// Every result nevertheless ends with the primary key (ADR-0002). Offset
-// pagination is only correct over a TOTAL order: LIMIT/OFFSET over a result set
-// that is unordered, or ordered by a column with ties, lets rows repeat or
-// vanish between pages with zero concurrent writes. The primary key is unique,
-// so appending it turns any prefix order into a total one — that is the whole
-// correctness argument.
-//
-// The primary-key term is a determinism floor, not a default sort: the response
-// does not claim an ordering the caller never requested, it merely stops being
-// random. The tiebreak follows the requested direction so that a descending
-// walk stays descending, and it is skipped when the requested key IS the
-// primary key, since ORDER BY id, id says nothing the first term did not.
+// RecordOrder is the single sort allow-list seam.
 func RecordOrder(r entapi.ListRequest) ([]record.OrderOption, error) {
-	key, desc, err := r.SortKey(RecordSortKeys, "")
-	if err != nil {
-		return nil, err
-	}
-	dir := sql.OrderAsc()
-	if desc {
-		dir = sql.OrderDesc()
-	}
-	by, ok := recordSortOptions[key]
-	if !ok {
+	if len(r.Sort) == 0 {
 		return []record.OrderOption{record.ByID(sql.OrderAsc())}, nil
 	}
-	order := []record.OrderOption{by(dir)}
-	if key != "id" {
-		order = append(order, record.ByID(dir))
+	order := make([]record.OrderOption, 0, len(r.Sort)+1)
+	idPresent := false
+	lastDir := sql.OrderAsc()
+	for _, spec := range r.Sort {
+		by, ok := recordSortOptions[spec.Key]
+		if !ok {
+			return nil, fmt.Errorf("%w: cannot sort by %q; legal keys: %s", entapi.ErrValidation, spec.Key, strings.Join(RecordSortKeys, ", "))
+		}
+		dir := sql.OrderAsc()
+		if spec.Desc {
+			dir = sql.OrderDesc()
+		}
+		order = append(order, by(dir))
+		lastDir = dir
+		if spec.Key == "id" {
+			idPresent = true
+		}
+	}
+	if !idPresent {
+		order = append(order, record.ByID(lastDir))
 	}
 	return order, nil
 }

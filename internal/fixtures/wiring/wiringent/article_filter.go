@@ -5,131 +5,118 @@
 package wiringent
 
 import (
+	"encoding"
+	"fmt"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/article"
 	"github.com/githonllc/entapi/internal/fixtures/wiring/wiringent/predicate"
 	entapi "github.com/githonllc/entapi/runtime"
+	"github.com/google/uuid"
 )
 
-// ============================================================================
-// Query surface for Article — filters, free-text search and the sort
-// allow-list. They are three dimensions of one list endpoint, not three
-// features, so they are one artifact.
-//
-// Every field below carries at least one query-dimension word. A field with no
-// Searchable, Filterable or Sortable word is absent from all three, and there
-// is no runtime switch that can bring it back.
-// ============================================================================
-
-// ArticleFilter is the structured query surface for Article.
-//
-// One parameter per operator per Filterable field, with the operator set taken
-// from ent's own per-type table ($field.Ops) rather than from a curated
-// selection: emitting an operator costs nothing here, whereas adding one later
-// means changing a template, regenerating and possibly breaking a URL contract
-// consumers already depend on. Substring-class operators (_contains,
-// _icontains, _ieq, _suffix) additionally require api.Searchable() on the field —
-// see docs/adr/0005.
-//
-// Every parameter is a pointer or a slice, because "absent" and "the zero
-// value" are different requests.
+// ArticleFilter is the typed query representation for Article.
+// Repeated URL parameters occupy repeated slots and Predicates ANDs them.
 type ArticleFilter struct {
+	// id: uuid.UUID
+	ID      []uuid.UUID   `json:"id,omitempty"`
+	IDNEQ   []uuid.UUID   `json:"id_neq,omitempty"`
+	IDIn    [][]uuid.UUID `json:"id_in,omitempty"`
+	IDNotIn [][]uuid.UUID `json:"id_not_in,omitempty"`
+	IDGT    []uuid.UUID   `json:"id_gt,omitempty"`
+	IDGTE   []uuid.UUID   `json:"id_gte,omitempty"`
+	IDLT    []uuid.UUID   `json:"id_lt,omitempty"`
+	IDLTE   []uuid.UUID   `json:"id_lte,omitempty"`
 	// title: string
-	Title             *string  `form:"title" json:"title,omitempty"`
-	TitleNEQ          *string  `form:"title_neq" json:"title_neq,omitempty"`
-	TitleIn           []string `form:"title_in" json:"title_in,omitempty"`
-	TitleNotIn        []string `form:"title_not_in" json:"title_not_in,omitempty"`
-	TitleGT           *string  `form:"title_gt" json:"title_gt,omitempty"`
-	TitleGTE          *string  `form:"title_gte" json:"title_gte,omitempty"`
-	TitleLT           *string  `form:"title_lt" json:"title_lt,omitempty"`
-	TitleLTE          *string  `form:"title_lte" json:"title_lte,omitempty"`
-	TitleContains     *string  `form:"title_contains" json:"title_contains,omitempty"`
-	TitleHasPrefix    *string  `form:"title_prefix" json:"title_prefix,omitempty"`
-	TitleHasSuffix    *string  `form:"title_suffix" json:"title_suffix,omitempty"`
-	TitleEqualFold    *string  `form:"title_ieq" json:"title_ieq,omitempty"`
-	TitleContainsFold *string  `form:"title_icontains" json:"title_icontains,omitempty"`
-
+	Title             []string   `json:"title,omitempty"`
+	TitleNEQ          []string   `json:"title_neq,omitempty"`
+	TitleIn           [][]string `json:"title_in,omitempty"`
+	TitleNotIn        [][]string `json:"title_not_in,omitempty"`
+	TitleGT           []string   `json:"title_gt,omitempty"`
+	TitleGTE          []string   `json:"title_gte,omitempty"`
+	TitleLT           []string   `json:"title_lt,omitempty"`
+	TitleLTE          []string   `json:"title_lte,omitempty"`
+	TitleContains     []string   `json:"title_contains,omitempty"`
+	TitleHasPrefix    []string   `json:"title_prefix,omitempty"`
+	TitleHasSuffix    []string   `json:"title_suffix,omitempty"`
+	TitleContainsFold []string   `json:"title_icontains,omitempty"`
 	// rank: int, optional
-	Rank      *int  `form:"rank" json:"rank,omitempty"`
-	RankNEQ   *int  `form:"rank_neq" json:"rank_neq,omitempty"`
-	RankIn    []int `form:"rank_in" json:"rank_in,omitempty"`
-	RankNotIn []int `form:"rank_not_in" json:"rank_not_in,omitempty"`
-	RankGT    *int  `form:"rank_gt" json:"rank_gt,omitempty"`
-	RankGTE   *int  `form:"rank_gte" json:"rank_gte,omitempty"`
-	RankLT    *int  `form:"rank_lt" json:"rank_lt,omitempty"`
-	RankLTE   *int  `form:"rank_lte" json:"rank_lte,omitempty"`
-	// IsNil and NotNil are one boolean question. Emitting them as two
-	// parameters would admit a request that contradicts itself.
-	RankIsNull *bool `form:"rank_is_null" json:"rank_is_null,omitempty"`
-
+	Rank       []int   `json:"rank,omitempty"`
+	RankNEQ    []int   `json:"rank_neq,omitempty"`
+	RankIn     [][]int `json:"rank_in,omitempty"`
+	RankNotIn  [][]int `json:"rank_not_in,omitempty"`
+	RankGT     []int   `json:"rank_gt,omitempty"`
+	RankGTE    []int   `json:"rank_gte,omitempty"`
+	RankLT     []int   `json:"rank_lt,omitempty"`
+	RankLTE    []int   `json:"rank_lte,omitempty"`
+	RankIsNull []bool  `json:"rank_is_null,omitempty"`
 	// created_at: time.Time
-	CreatedAt      *time.Time  `form:"created_at" json:"created_at,omitempty"`
-	CreatedAtNEQ   *time.Time  `form:"created_at_neq" json:"created_at_neq,omitempty"`
-	CreatedAtIn    []time.Time `form:"created_at_in" json:"created_at_in,omitempty"`
-	CreatedAtNotIn []time.Time `form:"created_at_not_in" json:"created_at_not_in,omitempty"`
-	CreatedAtGT    *time.Time  `form:"created_at_gt" json:"created_at_gt,omitempty"`
-	CreatedAtGTE   *time.Time  `form:"created_at_gte" json:"created_at_gte,omitempty"`
-	CreatedAtLT    *time.Time  `form:"created_at_lt" json:"created_at_lt,omitempty"`
-	CreatedAtLTE   *time.Time  `form:"created_at_lte" json:"created_at_lte,omitempty"`
-
-	// Free-text search across the Searchable fields:
-	// title
-	// One input, matched disjunctively, then ANDed with everything above.
-	Q *string `form:"q" json:"q,omitempty"`
+	CreatedAt      []time.Time   `json:"created_at,omitempty"`
+	CreatedAtNEQ   []time.Time   `json:"created_at_neq,omitempty"`
+	CreatedAtIn    [][]time.Time `json:"created_at_in,omitempty"`
+	CreatedAtNotIn [][]time.Time `json:"created_at_not_in,omitempty"`
+	CreatedAtGT    []time.Time   `json:"created_at_gt,omitempty"`
+	CreatedAtGTE   []time.Time   `json:"created_at_gte,omitempty"`
+	CreatedAtLT    []time.Time   `json:"created_at_lt,omitempty"`
+	CreatedAtLTE   []time.Time   `json:"created_at_lte,omitempty"`
+	// Q is the single free-text term matched across Searchable fields.
+	Q *string `json:"_q,omitempty"`
 }
 
-// Predicates converts the filter into ent predicates.
-//
-// The result is applied with Where(...), which combines conjunctively, so every
-// parameter the caller set narrows the result further. The free-text term is
-// the one disjunction: it ORs across the searchable fields and joins the rest
-// as a single conjunct.
-//
-// A nil receiver yields no predicates, so an endpoint with no filter bound does
-// not need a branch of its own.
+// Predicates converts the typed filter into conjunctive ent predicates.
 func (f *ArticleFilter) Predicates() []predicate.Article {
 	if f == nil {
 		return nil
 	}
 	var ps []predicate.Article
-	entapi.AppendIf(&ps, f.Title, article.TitleEQ)
-	entapi.AppendIf(&ps, f.TitleNEQ, article.TitleNEQ)
-	entapi.AppendIfSlice(&ps, f.TitleIn, article.TitleIn)
-	entapi.AppendIfSlice(&ps, f.TitleNotIn, article.TitleNotIn)
-	entapi.AppendIf(&ps, f.TitleGT, article.TitleGT)
-	entapi.AppendIf(&ps, f.TitleGTE, article.TitleGTE)
-	entapi.AppendIf(&ps, f.TitleLT, article.TitleLT)
-	entapi.AppendIf(&ps, f.TitleLTE, article.TitleLTE)
-	entapi.AppendIf(&ps, f.TitleContains, article.TitleContains)
-	entapi.AppendIf(&ps, f.TitleHasPrefix, article.TitleHasPrefix)
-	entapi.AppendIf(&ps, f.TitleHasSuffix, article.TitleHasSuffix)
-	entapi.AppendIf(&ps, f.TitleEqualFold, article.TitleEqualFold)
-	entapi.AppendIf(&ps, f.TitleContainsFold, article.TitleContainsFold)
-	entapi.AppendIf(&ps, f.Rank, article.RankEQ)
-	entapi.AppendIf(&ps, f.RankNEQ, article.RankNEQ)
-	entapi.AppendIfSlice(&ps, f.RankIn, article.RankIn)
-	entapi.AppendIfSlice(&ps, f.RankNotIn, article.RankNotIn)
-	entapi.AppendIf(&ps, f.RankGT, article.RankGT)
-	entapi.AppendIf(&ps, f.RankGTE, article.RankGTE)
-	entapi.AppendIf(&ps, f.RankLT, article.RankLT)
-	entapi.AppendIf(&ps, f.RankLTE, article.RankLTE)
-	if f.RankIsNull != nil {
-		if *f.RankIsNull {
+	entapi.AppendEach(&ps, f.ID, article.IDEQ)
+	entapi.AppendEach(&ps, f.IDNEQ, article.IDNEQ)
+	entapi.AppendEachSlice(&ps, f.IDIn, article.IDIn)
+	entapi.AppendEachSlice(&ps, f.IDNotIn, article.IDNotIn)
+	entapi.AppendEach(&ps, f.IDGT, article.IDGT)
+	entapi.AppendEach(&ps, f.IDGTE, article.IDGTE)
+	entapi.AppendEach(&ps, f.IDLT, article.IDLT)
+	entapi.AppendEach(&ps, f.IDLTE, article.IDLTE)
+	entapi.AppendEach(&ps, f.Title, article.TitleEQ)
+	entapi.AppendEach(&ps, f.TitleNEQ, article.TitleNEQ)
+	entapi.AppendEachSlice(&ps, f.TitleIn, article.TitleIn)
+	entapi.AppendEachSlice(&ps, f.TitleNotIn, article.TitleNotIn)
+	entapi.AppendEach(&ps, f.TitleGT, article.TitleGT)
+	entapi.AppendEach(&ps, f.TitleGTE, article.TitleGTE)
+	entapi.AppendEach(&ps, f.TitleLT, article.TitleLT)
+	entapi.AppendEach(&ps, f.TitleLTE, article.TitleLTE)
+	entapi.AppendEach(&ps, f.TitleContains, article.TitleContains)
+	entapi.AppendEach(&ps, f.TitleHasPrefix, article.TitleHasPrefix)
+	entapi.AppendEach(&ps, f.TitleHasSuffix, article.TitleHasSuffix)
+	entapi.AppendEach(&ps, f.TitleContainsFold, article.TitleContainsFold)
+	entapi.AppendEach(&ps, f.Rank, article.RankEQ)
+	entapi.AppendEach(&ps, f.RankNEQ, article.RankNEQ)
+	entapi.AppendEachSlice(&ps, f.RankIn, article.RankIn)
+	entapi.AppendEachSlice(&ps, f.RankNotIn, article.RankNotIn)
+	entapi.AppendEach(&ps, f.RankGT, article.RankGT)
+	entapi.AppendEach(&ps, f.RankGTE, article.RankGTE)
+	entapi.AppendEach(&ps, f.RankLT, article.RankLT)
+	entapi.AppendEach(&ps, f.RankLTE, article.RankLTE)
+	for _, isNull := range f.RankIsNull {
+		if isNull {
 			ps = append(ps, article.RankIsNil())
 		} else {
 			ps = append(ps, article.RankNotNil())
 		}
 	}
-	entapi.AppendIf(&ps, f.CreatedAt, article.CreatedAtEQ)
-	entapi.AppendIf(&ps, f.CreatedAtNEQ, article.CreatedAtNEQ)
-	entapi.AppendIfSlice(&ps, f.CreatedAtIn, article.CreatedAtIn)
-	entapi.AppendIfSlice(&ps, f.CreatedAtNotIn, article.CreatedAtNotIn)
-	entapi.AppendIf(&ps, f.CreatedAtGT, article.CreatedAtGT)
-	entapi.AppendIf(&ps, f.CreatedAtGTE, article.CreatedAtGTE)
-	entapi.AppendIf(&ps, f.CreatedAtLT, article.CreatedAtLT)
-	entapi.AppendIf(&ps, f.CreatedAtLTE, article.CreatedAtLTE)
+	entapi.AppendEach(&ps, f.CreatedAt, article.CreatedAtEQ)
+	entapi.AppendEach(&ps, f.CreatedAtNEQ, article.CreatedAtNEQ)
+	entapi.AppendEachSlice(&ps, f.CreatedAtIn, article.CreatedAtIn)
+	entapi.AppendEachSlice(&ps, f.CreatedAtNotIn, article.CreatedAtNotIn)
+	entapi.AppendEach(&ps, f.CreatedAtGT, article.CreatedAtGT)
+	entapi.AppendEach(&ps, f.CreatedAtGTE, article.CreatedAtGTE)
+	entapi.AppendEach(&ps, f.CreatedAtLT, article.CreatedAtLT)
+	entapi.AppendEach(&ps, f.CreatedAtLTE, article.CreatedAtLTE)
 	if f.Q != nil && *f.Q != "" {
 		ps = append(ps, article.Or(
 			article.TitleContains(*f.Q),
@@ -138,67 +125,623 @@ func (f *ArticleFilter) Predicates() []predicate.Article {
 	return ps
 }
 
-// articleSortOptions maps an allowed sort key to ent's own order
-// builder for that column. It is unexported: the mapping is reached through
-// ArticleOrder, which checks the key first.
+func parseArticleIDQueryValue(raw, whole string) (uuid.UUID, error) {
+	var parsed uuid.UUID
+	if err := encoding.TextUnmarshaler(&parsed).UnmarshalText([]byte(raw)); err != nil {
+		return parsed, fmt.Errorf("%w: field %q value %q is invalid: %v", entapi.ErrValidation, "id", whole, err)
+	}
+	return parsed, nil
+}
+
+func parseArticleTitleQueryValue(raw, whole string) (string, error) {
+	return string(raw), nil
+}
+
+func parseArticleRankQueryValue(raw, whole string) (int, error) {
+	parsed, err := strconv.ParseInt(raw, 10, 0)
+	if err != nil {
+		var zero int
+		return zero, fmt.Errorf("%w: field %q value %q is not a valid int: %v", entapi.ErrValidation, "rank", whole, err)
+	}
+	return int(parsed), nil
+}
+
+func parseArticleCreatedAtQueryValue(raw, whole string) (time.Time, error) {
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		var zero time.Time
+		return zero, fmt.Errorf("%w: field %q value %q is not RFC 3339: %v", entapi.ErrValidation, "created_at", whole, err)
+	}
+	return time.Time(parsed), nil
+}
+
+// ParseArticleQuery parses the complete URL query contract in sorted-key
+// order. Runtime code owns lexical grammar; this generated switch owns the
+// field-local operator set, conversion and predicate slots.
+func ParseArticleQuery(q url.Values) (*ArticleFilter, entapi.ListRequest, error) {
+	f := &ArticleFilter{}
+	var request entapi.ListRequest
+	keys := make([]string, 0, len(q))
+	for key := range q {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		values := q[key]
+		reserved, recognized, err := entapi.ReservedQueryValue(key, values)
+		if err != nil {
+			return nil, entapi.ListRequest{}, err
+		}
+		if recognized {
+			switch key {
+			case "_sort":
+				request.Sort, err = entapi.ParseSortSpecs(reserved)
+			case "_page":
+				request.Page, err = entapi.ParsePageParam(key, reserved)
+			case "_size":
+				request.Size, err = entapi.ParsePageParam(key, reserved)
+			case "_q":
+				term := reserved
+				f.Q = &term
+			}
+			if err != nil {
+				return nil, entapi.ListRequest{}, err
+			}
+			continue
+		}
+		if strings.HasPrefix(key, "_") {
+			return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown reserved query parameter %q", entapi.ErrValidation, key)
+		}
+		switch key {
+		case "id":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseArticleIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.ID = append(f.ID, parsed)
+				case "ne":
+					parsed, parseErr := parseArticleIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDNEQ = append(f.IDNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]uuid.UUID, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseArticleIDQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.IDIn = append(f.IDIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]uuid.UUID, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseArticleIDQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.IDNotIn = append(f.IDNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseArticleIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGT = append(f.IDGT, parsed)
+				case "ge":
+					parsed, parseErr := parseArticleIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseArticleIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLT = append(f.IDLT, parsed)
+				case "le":
+					parsed, parseErr := parseArticleIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLTE = append(f.IDLTE, parsed)
+				case "from":
+					parsed, parseErr := parseArticleIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, parsed)
+				case "to":
+					parsed, parseErr := parseArticleIDQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDLTE = append(f.IDLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseArticleIDQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseArticleIDQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.IDGTE = append(f.IDGTE, lower)
+					f.IDLTE = append(f.IDLTE, upper)
+				}
+			}
+		case "title":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "like":
+				case "prefix":
+				case "suffix":
+				case "ilike":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, like, prefix, suffix, ilike, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.Title = append(f.Title, parsed)
+				case "ne":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleNEQ = append(f.TitleNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]string, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseArticleTitleQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.TitleIn = append(f.TitleIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]string, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseArticleTitleQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.TitleNotIn = append(f.TitleNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleGT = append(f.TitleGT, parsed)
+				case "ge":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleGTE = append(f.TitleGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleLT = append(f.TitleLT, parsed)
+				case "le":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleLTE = append(f.TitleLTE, parsed)
+				case "like":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleContains = append(f.TitleContains, parsed)
+				case "prefix":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleHasPrefix = append(f.TitleHasPrefix, parsed)
+				case "suffix":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleHasSuffix = append(f.TitleHasSuffix, parsed)
+				case "ilike":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleContainsFold = append(f.TitleContainsFold, parsed)
+				case "from":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleGTE = append(f.TitleGTE, parsed)
+				case "to":
+					parsed, parseErr := parseArticleTitleQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleLTE = append(f.TitleLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseArticleTitleQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseArticleTitleQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.TitleGTE = append(f.TitleGTE, lower)
+					f.TitleLTE = append(f.TitleLTE, upper)
+				}
+			}
+		case "rank":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "is_null":
+				case "not_null":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseArticleRankQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.Rank = append(f.Rank, parsed)
+				case "ne":
+					parsed, parseErr := parseArticleRankQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RankNEQ = append(f.RankNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]int, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseArticleRankQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.RankIn = append(f.RankIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]int, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseArticleRankQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.RankNotIn = append(f.RankNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseArticleRankQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RankGT = append(f.RankGT, parsed)
+				case "ge":
+					parsed, parseErr := parseArticleRankQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RankGTE = append(f.RankGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseArticleRankQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RankLT = append(f.RankLT, parsed)
+				case "le":
+					parsed, parseErr := parseArticleRankQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RankLTE = append(f.RankLTE, parsed)
+				case "is_null":
+					if raw != "" {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
+					}
+					f.RankIsNull = append(f.RankIsNull, true)
+				case "not_null":
+					if raw != "" {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
+					}
+					f.RankIsNull = append(f.RankIsNull, false)
+				case "from":
+					parsed, parseErr := parseArticleRankQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RankGTE = append(f.RankGTE, parsed)
+				case "to":
+					parsed, parseErr := parseArticleRankQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RankLTE = append(f.RankLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseArticleRankQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseArticleRankQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.RankGTE = append(f.RankGTE, lower)
+					f.RankLTE = append(f.RankLTE, upper)
+				}
+			}
+		case "created_at":
+			for _, whole := range values {
+				if whole == "" {
+					continue
+				}
+				op, raw, explicit := entapi.SplitOp(whole)
+				if !explicit {
+					op = "eq"
+				}
+				switch op {
+				case "eq":
+				case "ne":
+				case "in":
+				case "not_in":
+				case "gt":
+				case "ge":
+				case "lt":
+				case "le":
+				case "from":
+				case "to":
+				case "between":
+				default:
+					if entapi.KnownQueryOperator(op) {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, from, to, between")
+					}
+					op, raw = "eq", whole
+				}
+				switch op {
+				case "eq":
+					parsed, parseErr := parseArticleCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAt = append(f.CreatedAt, parsed)
+				case "ne":
+					parsed, parseErr := parseArticleCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtNEQ = append(f.CreatedAtNEQ, parsed)
+				case "in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]time.Time, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseArticleCreatedAtQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.CreatedAtIn = append(f.CreatedAtIn, parsedValues)
+				case "not_in":
+					parts := strings.Split(raw, ",")
+					parsedValues := make([]time.Time, 0, len(parts))
+					for _, part := range parts {
+						parsed, parseErr := parseArticleCreatedAtQueryValue(part, whole)
+						if parseErr != nil {
+							return nil, entapi.ListRequest{}, parseErr
+						}
+						parsedValues = append(parsedValues, parsed)
+					}
+					f.CreatedAtNotIn = append(f.CreatedAtNotIn, parsedValues)
+				case "gt":
+					parsed, parseErr := parseArticleCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtGT = append(f.CreatedAtGT, parsed)
+				case "ge":
+					parsed, parseErr := parseArticleCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtGTE = append(f.CreatedAtGTE, parsed)
+				case "lt":
+					parsed, parseErr := parseArticleCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtLT = append(f.CreatedAtLT, parsed)
+				case "le":
+					parsed, parseErr := parseArticleCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtLTE = append(f.CreatedAtLTE, parsed)
+				case "from":
+					parsed, parseErr := parseArticleCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtGTE = append(f.CreatedAtGTE, parsed)
+				case "to":
+					parsed, parseErr := parseArticleCreatedAtQueryValue(raw, whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtLTE = append(f.CreatedAtLTE, parsed)
+				case "between":
+					parts := strings.Split(raw, ",")
+					if len(parts) != 2 {
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
+					}
+					lower, parseErr := parseArticleCreatedAtQueryValue(parts[0], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					upper, parseErr := parseArticleCreatedAtQueryValue(parts[1], whole)
+					if parseErr != nil {
+						return nil, entapi.ListRequest{}, parseErr
+					}
+					f.CreatedAtGTE = append(f.CreatedAtGTE, lower)
+					f.CreatedAtLTE = append(f.CreatedAtLTE, upper)
+				}
+			}
+		default:
+			switch key {
+			case "author_id":
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q with value %q is not Filterable", entapi.ErrValidation, key, values)
+			default:
+				return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown query field %q with value %q", entapi.ErrValidation, key, values)
+			}
+		}
+	}
+	return f, request, nil
+}
+
 var articleSortOptions = map[string]func(...sql.OrderTermOption) article.OrderOption{
+	"id":         article.ByID,
 	"title":      article.ByTitle,
 	"created_at": article.ByCreatedAt,
 }
 
-// ArticleSortKeys is the sort allow-list: exactly the fields annotated
-// Sortable, and nothing else.
-//
-// This is the load-bearing part of the query surface. An unchecked sort field
-// is an injection site, an unindexed-scan trigger and — combined with paging —
-// an ordering oracle over columns the caller was never meant to read. An entity
-// that marks nothing is orderable by nothing, which is the safe end of the
-// default rather than an oversight.
-var ArticleSortKeys = []string{"title", "created_at"}
+// ArticleSortKeys is the complete sort allow-list. The primary key is
+// naturally Sortable; every other key requires api.Sortable().
+var ArticleSortKeys = []string{
+	"id", "title", "created_at",
+}
 
-// ArticleOrder turns a list request into ent order options.
-//
-// The caller's string is checked against ArticleSortKeys and then thrown
-// away: what reaches the query is the order builder ent generated for that
-// column, looked up by an already-validated key. No caller-supplied string is
-// ever interpolated into SQL.
-//
-// A key outside the allow-list is a validation error, not a silent fallback —
-// a request to sort by a column that is out of bounds has no correct answer,
-// and quietly serving a differently-ordered page is worse than refusing.
-//
-// There is still no default sort COLUMN. Which column to order by when the
-// caller names none is a policy the schema does not contain, so generation does
-// not invent one; a consumer that wants a default passes SortBy itself.
-//
-// Every result nevertheless ends with the primary key (ADR-0002). Offset
-// pagination is only correct over a TOTAL order: LIMIT/OFFSET over a result set
-// that is unordered, or ordered by a column with ties, lets rows repeat or
-// vanish between pages with zero concurrent writes. The primary key is unique,
-// so appending it turns any prefix order into a total one — that is the whole
-// correctness argument.
-//
-// The primary-key term is a determinism floor, not a default sort: the response
-// does not claim an ordering the caller never requested, it merely stops being
-// random. The tiebreak follows the requested direction so that a descending
-// walk stays descending, and it is skipped when the requested key IS the
-// primary key, since ORDER BY id, id says nothing the first term did not.
+// ArticleOrder is the single sort allow-list seam.
 func ArticleOrder(r entapi.ListRequest) ([]article.OrderOption, error) {
-	key, desc, err := r.SortKey(ArticleSortKeys, "")
-	if err != nil {
-		return nil, err
-	}
-	dir := sql.OrderAsc()
-	if desc {
-		dir = sql.OrderDesc()
-	}
-	by, ok := articleSortOptions[key]
-	if !ok {
+	if len(r.Sort) == 0 {
 		return []article.OrderOption{article.ByID(sql.OrderAsc())}, nil
 	}
-	order := []article.OrderOption{by(dir)}
-	if key != "id" {
-		order = append(order, article.ByID(dir))
+	order := make([]article.OrderOption, 0, len(r.Sort)+1)
+	idPresent := false
+	lastDir := sql.OrderAsc()
+	for _, spec := range r.Sort {
+		by, ok := articleSortOptions[spec.Key]
+		if !ok {
+			return nil, fmt.Errorf("%w: cannot sort by %q; legal keys: %s", entapi.ErrValidation, spec.Key, strings.Join(ArticleSortKeys, ", "))
+		}
+		dir := sql.OrderAsc()
+		if spec.Desc {
+			dir = sql.OrderDesc()
+		}
+		order = append(order, by(dir))
+		lastDir = dir
+		if spec.Key == "id" {
+			idPresent = true
+		}
+	}
+	if !idPresent {
+		order = append(order, article.ByID(lastDir))
 	}
 	return order, nil
 }

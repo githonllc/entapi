@@ -49,19 +49,21 @@
 // the migration note.
 //
 // [MaxPageSize] is the single place the page-size ceiling is decided, with a
-// single reaction to crossing it: [ListRequest.Limit] clamps. [ListRequest.Validate]
-// says nothing about Size or Page, because Limit and [ListRequest.Offset] sit on
-// the only path into ListPage and apply whether or not anyone validates. The
-// validate struct tag on ListRequest.Size carries no numeric ceiling of its own,
-// because a struct tag cannot reference a constant and so can only drift away
-// from one.
+// single reaction to crossing it: [ListRequest.Limit] clamps. Generated query
+// parsers reject non-positive wire values before constructing a ListRequest;
+// Limit and [ListRequest.Offset] retain their repair semantics for direct Go
+// callers.
 //
 // A ListRequest zero value is usable as-is; there is deliberately no defaulting
 // method, so there is none to forget. ListRequest.SetDefaults has been removed —
 // see the README for the migration note.
 //
-// [ListRequest.Validate] is left with Order, compared case-insensitively to
-// match [ListRequest.SortKey], which is what actually decides the direction.
+// Query wire v2 removed the previous scalar sort fields, request validation
+// method and sort-key helper. Callers regenerate a typed Parse{Entity}Query
+// function and pass its []SortSpec to the generated {Entity}Order allow-list.
+// AppendIf and AppendIfSlice likewise became
+// [AppendEach] and [AppendEachSlice] when filter slots became slices. See the
+// README migration notes for the old-to-new wire spelling table.
 //
 // # Error mapping
 //
@@ -83,7 +85,8 @@
 // violation alike, so mapping it straight to ErrAlreadyExists would report the
 // latter as the former. Until it is installed, nothing claims ErrAlreadyExists
 // — not-found keeps working and already-exists is simply given up. What the
-// mapper cannot classify it returns unchanged rather than guessing.//
+// mapper cannot classify it returns unchanged rather than guessing.
+//
 // # Soft delete
 //
 // [WithSoftDeleted] and [WithHardDelete] are the two context switches the

@@ -103,6 +103,7 @@ var fixtures = []fixtureCase{
 		"Bad.tags", "Sortable", "not comparable",
 		"Bad.count", "Searchable", "no Contains",
 		"Bad.meta", "Filterable", "no predicates",
+		"Bad.opaque", "wire value", "encoding.TextUnmarshaler",
 		"Bad.token", "Sensitive()", "query oracle",
 		"Bad.managed_secret", "api.ReadOnly()", "api.Hidden()",
 		"Bad.hidden", "api.Hidden() conflicts",

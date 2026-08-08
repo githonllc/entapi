@@ -27,16 +27,24 @@ var exemptStatuses = map[api.Op][]int{
 // OpenAPI error table from drifting from the generated handler branches. This
 // belongs in a test rather than generation because a template function that
 // parses another template is worse than an explicit drift guard.
+//
+// The residue, stated rather than hidden: the scan sees an error status only
+// where handler.tmpl spells it as an http.Status<Name> identifier. A status
+// written as a numeric literal, or reached through a variable or a helper
+// constant, is invisible here. That asymmetry only weakens the ADDITION
+// direction -- a new arm the table does not list could slip past. Removals stay
+// loud, because they are caught from the table's side, which this test reads as
+// Go values rather than as text.
 func TestErrorStatusesByOpMatchesHandlerTemplate(t *testing.T) {
 	content, err := templateFS.ReadFile("templates/handler.tmpl")
 	if err != nil {
-		t.Fatalf("handler.tmpl operation sections have no status code because the template cannot be read: %v", err)
+		t.Fatalf("reading templates/handler.tmpl from templateFS: %v", err)
 	}
 	template := string(content)
 
 	const markerPrefix = `eq $name "`
 	if got, want := strings.Count(template, markerPrefix), len(errorStatusesByOp); got != want {
-		t.Fatalf("handler.tmpl operation set has no single status code: found %d branch markers, but errorStatusesByOp has %d operations", got, want)
+		t.Fatalf("handler.tmpl has %d operation branch markers (eq $name \"...\"), but errorStatusesByOp has %d operations; update whichever side changed", got, want)
 	}
 
 	type section struct {
@@ -47,7 +55,7 @@ func TestErrorStatusesByOpMatchesHandlerTemplate(t *testing.T) {
 	for op := range errorStatusesByOp {
 		marker := fmt.Sprintf("eq $name %q", string(op))
 		if count := strings.Count(template, marker); count != 1 {
-			t.Fatalf("handler.tmpl %s operation has no unambiguous status code section: marker %q occurs %d times, want exactly once", op, marker, count)
+			t.Fatalf("handler.tmpl %s branch cannot be delimited: marker %q occurs %d times, want exactly once", op, marker, count)
 		}
 		sections = append(sections, section{op: op, start: strings.Index(template, marker)})
 	}

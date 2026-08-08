@@ -253,6 +253,12 @@ ext := entapi.NewExtensionWithOptions(
     // The RUNTIME path, and the default (#15). Generated files import this,
     // not the generator, so nothing embeds templates in a production binary.
     entapi.WithEntAPIPackage("github.com/githonllc/entapi/runtime"),
+    // info.title / info.version of the generated ent/openapi.yaml. Unset they
+    // default to the ent package name plus " API" and to 0.0.0; the version is
+    // never read from a git tag, because generation must not depend on
+    // working-tree state (#76).
+    entapi.WithOpenAPITitle("Widget Service"),
+    entapi.WithOpenAPIVersion("1.4.0"),
 )
 // WithBaseService / WithBaseHandler were removed with the templates they
 // selected (#29). Every artifact is generated unconditionally now.
@@ -267,6 +273,7 @@ ext := entapi.NewExtensionWithOptions(
 5. **Handle the error from `NewXResponse`** — a not-loaded edge is an error, not a nil field. The removed `XEntToResponse` swallowed it and returned nil
 6. **DTOs are in `ent/` package** — import `ent` not `ent/domain`
 7. **Old `{entity}_base_service.go` / `{entity}_base_handler.go` are deleted by the next generation run** — do not re-add them by hand
+8. **`ent/openapi.yaml` is generated and committed** — it is served at `GET /openapi.yaml` from an embedded copy, so edit the schema and regenerate rather than editing the document. Deleting its first `#` marker line takes permanent ownership of it, which is also the only way to add a `servers` entry or a path prefix
 
 ## Source Files
 

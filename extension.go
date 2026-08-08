@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -30,6 +31,19 @@ type ExtensionConfig struct {
 	// runtime — ErrValidation, ListRequest, ListPage, the error mapper.
 	// Default: "github.com/githonllc/entapi/runtime"
 	EntAPIPackage string
+
+	// OpenAPITitle is info.title of the generated openapi.yaml.
+	// Default: the ent package name plus " API", e.g. "ent API".
+	OpenAPITitle string
+
+	// OpenAPIVersion is info.version of the generated openapi.yaml.
+	// Default: defaultOpenAPIVersion.
+	//
+	// It is generation-time configuration rather than something read from the
+	// working tree. Deriving it from a git tag would make the document a
+	// function of state no other generated file depends on, and a clean
+	// checkout would stop staying clean across a test run.
+	OpenAPIVersion string
 }
 
 // defaultEntAPIPackage is the RUNTIME package, not this one (#15).
@@ -199,6 +213,23 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			file, err = e.renderHTTPFile(g)
 			if err != nil {
 				return fmt.Errorf("failed to generate the HTTP route tree: %w", err)
+			}
+			pending = append(pending, file)
+			written[file.path] = true
+
+			// The document and the file that embeds it are gated together, on
+			// the same condition as the route tree they describe. Splitting
+			// them would let entapi_openapi.go embed a path that is not there.
+			file, err = e.renderOpenAPIFile(g)
+			if err != nil {
+				return fmt.Errorf("failed to generate the OpenAPI document: %w", err)
+			}
+			pending = append(pending, file)
+			written[file.path] = true
+
+			file, err = e.renderOpenAPIEmbedFile(g)
+			if err != nil {
+				return fmt.Errorf("failed to generate the OpenAPI embed: %w", err)
 			}
 			pending = append(pending, file)
 			written[file.path] = true
@@ -403,6 +434,54 @@ func (e *Extension) renderHTTPFile(g *gen.Graph) (pendingFile, error) {
 	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
+// renderOpenAPIFile renders the OpenAPI 3.1 document describing the generated
+// HTTP surface. Output: ent/openapi.yaml
+//
+// It is the one render*File that does NOT call formatFile, and the omission is
+// forced rather than chosen: imports.Process parses its input as Go, so feeding
+// it YAML fails, and a formatting failure aborts the whole run in phase 1. The
+// honest consequence is stated in the template header — this file alone has no
+// syntax gate before it reaches disk, and a template bug here is caught by the
+// fixture assertions and the e2e validator instead.
+func (e *Extension) renderOpenAPIFile(g *gen.Graph) (pendingFile, error) {
+	tmpl, err := template.New("openapi").
+		Funcs(e.templateFuncMap()).
+		Parse(openapiTemplate)
+	if err != nil {
+		return pendingFile{}, fmt.Errorf("failed to parse OpenAPI template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, g); err != nil {
+		return pendingFile{}, fmt.Errorf("failed to render OpenAPI template: %w", err)
+	}
+
+	return pendingFile{path: filepath.Join(g.Config.Target, openapiFileName), content: buf.Bytes()}, nil
+}
+
+// renderOpenAPIEmbedFile renders and formats the file that embeds the document
+// above and serves it. Output: ent/entapi_openapi.go
+func (e *Extension) renderOpenAPIEmbedFile(g *gen.Graph) (pendingFile, error) {
+	tmpl, err := template.New("openapi_embed").
+		Funcs(e.templateFuncMap()).
+		Parse(openapiEmbedTemplate)
+	if err != nil {
+		return pendingFile{}, fmt.Errorf("failed to parse OpenAPI embed template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, g); err != nil {
+		return pendingFile{}, fmt.Errorf("failed to render OpenAPI embed template: %w", err)
+	}
+
+	outputPath := filepath.Join(g.Config.Target, openapiEmbedFileName)
+	formatted, err := formatFile(outputPath, buf.Bytes())
+	if err != nil {
+		return pendingFile{}, err
+	}
+	return pendingFile{path: outputPath, content: formatted}, nil
+}
+
 // renderSoftDeleteFile renders and formats the soft-delete traverser and the
 // delete-rewriting hook for the whole graph at once.
 // Output: ent/entapi_softdelete.go
@@ -526,6 +605,27 @@ func (e *Extension) templateFuncMap() template.FuncMap {
 	pkg := e.Config.EntAPIPackage
 	funcs["entapiPkg"] = func() string { return pkg }
 
+	// The two OpenAPI info fields are closures for the same reason entapiPkg
+	// is: they are configuration, not a property of the graph. openapiTitle
+	// still takes the graph, because its DEFAULT is one — the ent package name
+	// — and computing that in the template would put the policy there.
+	title, version := e.Config.OpenAPITitle, e.Config.OpenAPIVersion
+	funcs["openapiTitle"] = func(g *gen.Graph) string {
+		if title != "" {
+			return title
+		}
+		if g == nil || g.Config == nil {
+			return "API"
+		}
+		return path.Base(g.Config.Package) + " API"
+	}
+	funcs["openapiVersion"] = func() string {
+		if version != "" {
+			return version
+		}
+		return defaultOpenAPIVersion
+	}
+
 	return funcs
 }
 
@@ -542,6 +642,20 @@ type Option func(*ExtensionConfig)
 func WithEntAPIPackage(pkg string) Option {
 	return func(c *ExtensionConfig) {
 		c.EntAPIPackage = pkg
+	}
+}
+
+// WithOpenAPITitle sets info.title of the generated openapi.yaml.
+func WithOpenAPITitle(title string) Option {
+	return func(c *ExtensionConfig) {
+		c.OpenAPITitle = title
+	}
+}
+
+// WithOpenAPIVersion sets info.version of the generated openapi.yaml.
+func WithOpenAPIVersion(version string) Option {
+	return func(c *ExtensionConfig) {
+		c.OpenAPIVersion = version
 	}
 }
 

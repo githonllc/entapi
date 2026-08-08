@@ -103,6 +103,15 @@ func API(client *Client) *APIHandler {
 			Path:    "/sessions/{id}",
 			Handler: http.HandlerFunc(h.handleDeleteSession),
 		},
+		// The document describing everything above. It is in the manifest, not
+		// beside it, so Routes() sees it and a consumer can wrap or drop it with
+		// the same loop they use for the CRUD routes. It is the one route the
+		// document does not describe: it is not part of the resource surface.
+		{
+			Method:  "GET",
+			Path:    "/openapi.yaml",
+			Handler: http.HandlerFunc(serveOpenAPI),
+		},
 	}
 	for _, rt := range h.routes {
 		h.mux.Handle(rt.Method+" "+rt.Path, rt.Handler)

@@ -49,9 +49,10 @@ import (
 // value, so an omitted key leaves the schema's default in effect. A field ent
 // requires and cannot default is a value type and is always written.
 type ArticleCreateRequest struct {
-	Title string  `json:"title"`
-	Rank  *int    `json:"rank,omitempty"`
-	Slug  *string `json:"slug,omitempty"`
+	Title        string  `json:"title"`
+	Rank         *int    `json:"rank,omitempty"`
+	Slug         *string `json:"slug,omitempty"`
+	InternalNote *string `json:"internal_note,omitempty"`
 
 	// present records which keys the payload actually carried. It is what makes
 	// "omitted" distinguishable from "sent as the zero value" for a field whose
@@ -66,7 +67,7 @@ type ArticleCreateRequest struct {
 // articleCreateRequestTags is the canonical JSON key of every field on
 // ArticleCreateRequest, in declaration order. UnmarshalJSON needs the tags as
 // data, not as struct tags, to tell a case variant from an unrelated key.
-var articleCreateRequestTags = []string{"title", "rank", "slug"}
+var articleCreateRequestTags = []string{"title", "rank", "slug", "internal_note"}
 
 // UnmarshalJSON records presence, then decodes normally.
 //
@@ -135,6 +136,9 @@ func (r *ArticleCreateRequest) HasRank() bool { return r.has("rank") }
 // HasSlug reports whether the payload carried "slug".
 func (r *ArticleCreateRequest) HasSlug() bool { return r.has("slug") }
 
+// HasInternalNote reports whether the payload carried "internal_note".
+func (r *ArticleCreateRequest) HasInternalNote() bool { return r.has("internal_note") }
+
 // ValidArticleCreateRequest wraps a ArticleCreateRequest that has
 // passed Validate. Apply is defined on this type and nowhere else, so a caller
 // who skips validation has no method to call — a compile error rather than a
@@ -166,6 +170,9 @@ func (v *ValidArticleCreateRequest) Apply(b *ArticleCreate) *ArticleCreate {
 	if r.Slug != nil {
 		b.SetSlug(*r.Slug)
 	}
+	if r.InternalNote != nil {
+		b.SetInternalNote(*r.InternalNote)
+	}
 	return b
 }
 
@@ -183,15 +190,16 @@ func (v *ValidArticleCreateRequest) Apply(b *ArticleCreate) *ArticleCreate {
 // who sends it gets silence — rejecting that needs DisallowUnknownFields, which
 // belongs to the consumer's handler.
 type ArticlePatchRequest struct {
-	Title *string `json:"title,omitempty"`
-	Rank  *int    `json:"rank,omitempty"`
+	Title        *string `json:"title,omitempty"`
+	Rank         *int    `json:"rank,omitempty"`
+	InternalNote *string `json:"internal_note,omitempty"`
 
 	present map[string]bool
 }
 
 // articlePatchRequestTags is the canonical JSON key of every field on
 // ArticlePatchRequest, in declaration order.
-var articlePatchRequestTags = []string{"title", "rank"}
+var articlePatchRequestTags = []string{"title", "rank", "internal_note"}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from
@@ -238,6 +246,9 @@ func (r *ArticlePatchRequest) HasTitle() bool { return r.has("title") }
 // HasRank reports whether the payload carried "rank".
 func (r *ArticlePatchRequest) HasRank() bool { return r.has("rank") }
 
+// HasInternalNote reports whether the payload carried "internal_note".
+func (r *ArticlePatchRequest) HasInternalNote() bool { return r.has("internal_note") }
+
 // ValidArticlePatchRequest wraps a ArticlePatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidArticlePatchRequest struct{ r *ArticlePatchRequest }
@@ -270,6 +281,13 @@ func (v *ValidArticlePatchRequest) Apply(b *ArticleUpdateOne) *ArticleUpdateOne 
 			b.ClearRank()
 		} else {
 			b.SetRank(*r.Rank)
+		}
+	}
+	if r.HasInternalNote() {
+		if r.InternalNote == nil {
+			b.ClearInternalNote()
+		} else {
+			b.SetInternalNote(*r.InternalNote)
 		}
 	}
 	return b

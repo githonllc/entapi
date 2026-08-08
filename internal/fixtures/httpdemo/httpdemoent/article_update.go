@@ -68,6 +68,26 @@ func (au *ArticleUpdate) ClearRank() *ArticleUpdate {
 	return au
 }
 
+// SetInternalNote sets the "internal_note" field.
+func (au *ArticleUpdate) SetInternalNote(s string) *ArticleUpdate {
+	au.mutation.SetInternalNote(s)
+	return au
+}
+
+// SetNillableInternalNote sets the "internal_note" field if the given value is not nil.
+func (au *ArticleUpdate) SetNillableInternalNote(s *string) *ArticleUpdate {
+	if s != nil {
+		au.SetInternalNote(*s)
+	}
+	return au
+}
+
+// ClearInternalNote clears the value of the "internal_note" field.
+func (au *ArticleUpdate) ClearInternalNote() *ArticleUpdate {
+	au.mutation.ClearInternalNote()
+	return au
+}
+
 // Mutation returns the ArticleMutation object of the builder.
 func (au *ArticleUpdate) Mutation() *ArticleMutation {
 	return au.mutation
@@ -134,6 +154,12 @@ func (au *ArticleUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if au.mutation.RankCleared() {
 		_spec.ClearField(article.FieldRank, field.TypeInt)
 	}
+	if value, ok := au.mutation.InternalNote(); ok {
+		_spec.SetField(article.FieldInternalNote, field.TypeString, value)
+	}
+	if au.mutation.InternalNoteCleared() {
+		_spec.ClearField(article.FieldInternalNote, field.TypeString)
+	}
 	if n, err = sqlgraph.UpdateNodes(ctx, au.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{article.Label}
@@ -192,6 +218,26 @@ func (auo *ArticleUpdateOne) AddRank(i int) *ArticleUpdateOne {
 // ClearRank clears the value of the "rank" field.
 func (auo *ArticleUpdateOne) ClearRank() *ArticleUpdateOne {
 	auo.mutation.ClearRank()
+	return auo
+}
+
+// SetInternalNote sets the "internal_note" field.
+func (auo *ArticleUpdateOne) SetInternalNote(s string) *ArticleUpdateOne {
+	auo.mutation.SetInternalNote(s)
+	return auo
+}
+
+// SetNillableInternalNote sets the "internal_note" field if the given value is not nil.
+func (auo *ArticleUpdateOne) SetNillableInternalNote(s *string) *ArticleUpdateOne {
+	if s != nil {
+		auo.SetInternalNote(*s)
+	}
+	return auo
+}
+
+// ClearInternalNote clears the value of the "internal_note" field.
+func (auo *ArticleUpdateOne) ClearInternalNote() *ArticleUpdateOne {
+	auo.mutation.ClearInternalNote()
 	return auo
 }
 
@@ -290,6 +336,12 @@ func (auo *ArticleUpdateOne) sqlSave(ctx context.Context) (_node *Article, err e
 	}
 	if auo.mutation.RankCleared() {
 		_spec.ClearField(article.FieldRank, field.TypeInt)
+	}
+	if value, ok := auo.mutation.InternalNote(); ok {
+		_spec.SetField(article.FieldInternalNote, field.TypeString, value)
+	}
+	if auo.mutation.InternalNoteCleared() {
+		_spec.ClearField(article.FieldInternalNote, field.TypeString)
 	}
 	_node = &Article{config: auo.config}
 	_spec.Assign = _node.assignValues

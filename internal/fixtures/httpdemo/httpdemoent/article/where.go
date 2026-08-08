@@ -68,6 +68,11 @@ func Slug(v string) predicate.Article {
 	return predicate.Article(sql.FieldEQ(FieldSlug, v))
 }
 
+// InternalNote applies equality check predicate on the "internal_note" field. It's identical to InternalNoteEQ.
+func InternalNote(v string) predicate.Article {
+	return predicate.Article(sql.FieldEQ(FieldInternalNote, v))
+}
+
 // TitleEQ applies the EQ predicate on the "title" field.
 func TitleEQ(v string) predicate.Article {
 	return predicate.Article(sql.FieldEQ(FieldTitle, v))
@@ -246,6 +251,81 @@ func SlugEqualFold(v string) predicate.Article {
 // SlugContainsFold applies the ContainsFold predicate on the "slug" field.
 func SlugContainsFold(v string) predicate.Article {
 	return predicate.Article(sql.FieldContainsFold(FieldSlug, v))
+}
+
+// InternalNoteEQ applies the EQ predicate on the "internal_note" field.
+func InternalNoteEQ(v string) predicate.Article {
+	return predicate.Article(sql.FieldEQ(FieldInternalNote, v))
+}
+
+// InternalNoteNEQ applies the NEQ predicate on the "internal_note" field.
+func InternalNoteNEQ(v string) predicate.Article {
+	return predicate.Article(sql.FieldNEQ(FieldInternalNote, v))
+}
+
+// InternalNoteIn applies the In predicate on the "internal_note" field.
+func InternalNoteIn(vs ...string) predicate.Article {
+	return predicate.Article(sql.FieldIn(FieldInternalNote, vs...))
+}
+
+// InternalNoteNotIn applies the NotIn predicate on the "internal_note" field.
+func InternalNoteNotIn(vs ...string) predicate.Article {
+	return predicate.Article(sql.FieldNotIn(FieldInternalNote, vs...))
+}
+
+// InternalNoteGT applies the GT predicate on the "internal_note" field.
+func InternalNoteGT(v string) predicate.Article {
+	return predicate.Article(sql.FieldGT(FieldInternalNote, v))
+}
+
+// InternalNoteGTE applies the GTE predicate on the "internal_note" field.
+func InternalNoteGTE(v string) predicate.Article {
+	return predicate.Article(sql.FieldGTE(FieldInternalNote, v))
+}
+
+// InternalNoteLT applies the LT predicate on the "internal_note" field.
+func InternalNoteLT(v string) predicate.Article {
+	return predicate.Article(sql.FieldLT(FieldInternalNote, v))
+}
+
+// InternalNoteLTE applies the LTE predicate on the "internal_note" field.
+func InternalNoteLTE(v string) predicate.Article {
+	return predicate.Article(sql.FieldLTE(FieldInternalNote, v))
+}
+
+// InternalNoteContains applies the Contains predicate on the "internal_note" field.
+func InternalNoteContains(v string) predicate.Article {
+	return predicate.Article(sql.FieldContains(FieldInternalNote, v))
+}
+
+// InternalNoteHasPrefix applies the HasPrefix predicate on the "internal_note" field.
+func InternalNoteHasPrefix(v string) predicate.Article {
+	return predicate.Article(sql.FieldHasPrefix(FieldInternalNote, v))
+}
+
+// InternalNoteHasSuffix applies the HasSuffix predicate on the "internal_note" field.
+func InternalNoteHasSuffix(v string) predicate.Article {
+	return predicate.Article(sql.FieldHasSuffix(FieldInternalNote, v))
+}
+
+// InternalNoteIsNil applies the IsNil predicate on the "internal_note" field.
+func InternalNoteIsNil() predicate.Article {
+	return predicate.Article(sql.FieldIsNull(FieldInternalNote))
+}
+
+// InternalNoteNotNil applies the NotNil predicate on the "internal_note" field.
+func InternalNoteNotNil() predicate.Article {
+	return predicate.Article(sql.FieldNotNull(FieldInternalNote))
+}
+
+// InternalNoteEqualFold applies the EqualFold predicate on the "internal_note" field.
+func InternalNoteEqualFold(v string) predicate.Article {
+	return predicate.Article(sql.FieldEqualFold(FieldInternalNote, v))
+}
+
+// InternalNoteContainsFold applies the ContainsFold predicate on the "internal_note" field.
+func InternalNoteContainsFold(v string) predicate.Article {
+	return predicate.Article(sql.FieldContainsFold(FieldInternalNote, v))
 }
 
 // And groups predicates with the AND operator between them.

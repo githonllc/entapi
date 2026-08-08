@@ -273,7 +273,7 @@ ext := entapi.NewExtensionWithOptions(
 5. **Handle the error from `NewXResponse`** — a not-loaded edge is an error, not a nil field. The removed `XEntToResponse` swallowed it and returned nil
 6. **DTOs are in `ent/` package** — import `ent` not `ent/domain`
 7. **Old `{entity}_base_service.go` / `{entity}_base_handler.go` are deleted by the next generation run** — do not re-add them by hand
-8. **`ent/openapi.yaml` is generated and committed** — it is served at `GET /openapi.yaml` from an embedded copy, so edit the schema and regenerate rather than editing the document. Deleting its first `#` marker line takes permanent ownership of it, which is also the only way to add a `servers` entry or a path prefix
+8. **`ent/openapi.yaml` is generated and committed** — it is served at `GET /openapi.yaml` from an embedded copy, so edit the schema and regenerate rather than editing the document. Deleting its first `#` marker line only removes it from cleanup's deletion candidates (it survives once it stops being generated); it does **not** stop the next generation from overwriting it. For a `servers` entry or a path prefix, keep your own document under your own name and serve it from a router you build from `Routes()`, skipping the generated `GET /openapi.yaml` row
 
 ## Source Files
 

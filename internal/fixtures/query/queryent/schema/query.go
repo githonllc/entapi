@@ -15,7 +15,7 @@
 // The class rule (ADR-0005) cuts across that table: those counts are what a
 // Filterable AND Searchable field earns. EqualFold produces no parameter because
 // it has no wire spelling. "ref" is the same string type marked Filterable ONLY,
-// so it earns 12 - 3 Searchable-gated operators = 9, plus the null question.
+// so it earns 12 - 4 Searchable-gated operators = 8, plus the null question.
 //
 // Two fields exist to be ABSENT from the generated artifacts: "note" carries
 // no query word, and "secret" carries none either. Neither may be

@@ -331,10 +331,11 @@ func TestWiringWithoutResponseEdges(t *testing.T) {
 		t.Errorf("id = %s, want %s", got.ID, created.ID)
 	}
 
-	// body is Filterable but not Searchable, so the substring class is not on
-	// this filter at all (ADR-0005). HasPrefix is the cheap-class operator, and
-	// which operator narrows the page is incidental to what this asserts.
-	p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{BodyHasPrefix: []string{"fir"}}, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "body"}}})
+	// body is Filterable but not Searchable, so the expensive class — which
+	// since #83 includes prefix — is not on this filter at all (ADR-0005).
+	// Equality is a cheap-class operator, and which operator narrows the page
+	// is incidental to what this asserts.
+	p, err := ent.ListNotes(ctx, c, &ent.NoteFilter{Body: []string{"first"}}, entapi.ListRequest{Sort: []entapi.SortSpec{{Key: "body"}}})
 	if err != nil {
 		t.Fatalf("ListNotes: %v", err)
 	}

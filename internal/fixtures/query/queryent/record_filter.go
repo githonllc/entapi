@@ -46,16 +46,15 @@ type RecordFilter struct {
 	TitleHasSuffix    []string   `json:"title_suffix,omitempty"`
 	TitleContainsFold []string   `json:"title_icontains,omitempty"`
 	// reference: string, optional
-	Ref          []string   `json:"reference,omitempty"`
-	RefNEQ       []string   `json:"reference_neq,omitempty"`
-	RefIn        [][]string `json:"reference_in,omitempty"`
-	RefNotIn     [][]string `json:"reference_not_in,omitempty"`
-	RefGT        []string   `json:"reference_gt,omitempty"`
-	RefGTE       []string   `json:"reference_gte,omitempty"`
-	RefLT        []string   `json:"reference_lt,omitempty"`
-	RefLTE       []string   `json:"reference_lte,omitempty"`
-	RefHasPrefix []string   `json:"reference_prefix,omitempty"`
-	RefIsNull    []bool     `json:"reference_is_null,omitempty"`
+	Ref       []string   `json:"reference,omitempty"`
+	RefNEQ    []string   `json:"reference_neq,omitempty"`
+	RefIn     [][]string `json:"reference_in,omitempty"`
+	RefNotIn  [][]string `json:"reference_not_in,omitempty"`
+	RefGT     []string   `json:"reference_gt,omitempty"`
+	RefGTE    []string   `json:"reference_gte,omitempty"`
+	RefLT     []string   `json:"reference_lt,omitempty"`
+	RefLTE    []string   `json:"reference_lte,omitempty"`
+	RefIsNull []bool     `json:"reference_is_null,omitempty"`
 	// status: record.Status
 	Status      []record.Status   `json:"status,omitempty"`
 	StatusNEQ   []record.Status   `json:"status_neq,omitempty"`
@@ -118,7 +117,6 @@ func (f *RecordFilter) Predicates() []predicate.Record {
 	entapi.AppendEach(&ps, f.RefGTE, record.RefGTE)
 	entapi.AppendEach(&ps, f.RefLT, record.RefLT)
 	entapi.AppendEach(&ps, f.RefLTE, record.RefLTE)
-	entapi.AppendEach(&ps, f.RefHasPrefix, record.RefHasPrefix)
 	for _, isNull := range f.RefIsNull {
 		if isNull {
 			ps = append(ps, record.RefIsNil())
@@ -525,7 +523,6 @@ func ParseRecordQuery(q url.Values) (*RecordFilter, entapi.ListRequest, error) {
 				case "ge":
 				case "lt":
 				case "le":
-				case "prefix":
 				case "is_null":
 				case "not_null":
 				case "from":
@@ -533,7 +530,7 @@ func ParseRecordQuery(q url.Values) (*RecordFilter, entapi.ListRequest, error) {
 				case "between":
 				default:
 					if entapi.KnownQueryOperator(op) {
-						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, prefix, is_null, not_null, from, to, between")
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
 					}
 					op, raw = "eq", whole
 				}
@@ -596,20 +593,14 @@ func ParseRecordQuery(q url.Values) (*RecordFilter, entapi.ListRequest, error) {
 						return nil, entapi.ListRequest{}, parseErr
 					}
 					f.RefLTE = append(f.RefLTE, parsed)
-				case "prefix":
-					parsed, parseErr := parseRecordRefQueryValue(raw, whole)
-					if parseErr != nil {
-						return nil, entapi.ListRequest{}, parseErr
-					}
-					f.RefHasPrefix = append(f.RefHasPrefix, parsed)
 				case "is_null":
 					if raw != "" {
-						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, prefix, is_null, not_null, from, to, between")
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
 					}
 					f.RefIsNull = append(f.RefIsNull, true)
 				case "not_null":
 					if raw != "" {
-						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, prefix, is_null, not_null, from, to, between")
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, is_null, not_null, from, to, between")
 					}
 					f.RefIsNull = append(f.RefIsNull, false)
 				case "from":

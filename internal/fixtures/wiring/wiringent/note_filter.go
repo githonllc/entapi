@@ -31,15 +31,14 @@ type NoteFilter struct {
 	IDLT    []uuid.UUID   `json:"id_lt,omitempty"`
 	IDLTE   []uuid.UUID   `json:"id_lte,omitempty"`
 	// body: string
-	Body          []string   `json:"body,omitempty"`
-	BodyNEQ       []string   `json:"body_neq,omitempty"`
-	BodyIn        [][]string `json:"body_in,omitempty"`
-	BodyNotIn     [][]string `json:"body_not_in,omitempty"`
-	BodyGT        []string   `json:"body_gt,omitempty"`
-	BodyGTE       []string   `json:"body_gte,omitempty"`
-	BodyLT        []string   `json:"body_lt,omitempty"`
-	BodyLTE       []string   `json:"body_lte,omitempty"`
-	BodyHasPrefix []string   `json:"body_prefix,omitempty"`
+	Body      []string   `json:"body,omitempty"`
+	BodyNEQ   []string   `json:"body_neq,omitempty"`
+	BodyIn    [][]string `json:"body_in,omitempty"`
+	BodyNotIn [][]string `json:"body_not_in,omitempty"`
+	BodyGT    []string   `json:"body_gt,omitempty"`
+	BodyGTE   []string   `json:"body_gte,omitempty"`
+	BodyLT    []string   `json:"body_lt,omitempty"`
+	BodyLTE   []string   `json:"body_lte,omitempty"`
 }
 
 // Predicates converts the typed filter into conjunctive ent predicates.
@@ -64,7 +63,6 @@ func (f *NoteFilter) Predicates() []predicate.Note {
 	entapi.AppendEach(&ps, f.BodyGTE, note.BodyGTE)
 	entapi.AppendEach(&ps, f.BodyLT, note.BodyLT)
 	entapi.AppendEach(&ps, f.BodyLTE, note.BodyLTE)
-	entapi.AppendEach(&ps, f.BodyHasPrefix, note.BodyHasPrefix)
 	return ps
 }
 
@@ -250,13 +248,12 @@ func ParseNoteQuery(q url.Values) (*NoteFilter, entapi.ListRequest, error) {
 				case "ge":
 				case "lt":
 				case "le":
-				case "prefix":
 				case "from":
 				case "to":
 				case "between":
 				default:
 					if entapi.KnownQueryOperator(op) {
-						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, prefix, from, to, between")
+						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "eq, ne, in, not_in, gt, ge, lt, le, from, to, between")
 					}
 					op, raw = "eq", whole
 				}
@@ -319,12 +316,6 @@ func ParseNoteQuery(q url.Values) (*NoteFilter, entapi.ListRequest, error) {
 						return nil, entapi.ListRequest{}, parseErr
 					}
 					f.BodyLTE = append(f.BodyLTE, parsed)
-				case "prefix":
-					parsed, parseErr := parseNoteBodyQueryValue(raw, whole)
-					if parseErr != nil {
-						return nil, entapi.ListRequest{}, parseErr
-					}
-					f.BodyHasPrefix = append(f.BodyHasPrefix, parsed)
 				case "from":
 					parsed, parseErr := parseNoteBodyQueryValue(raw, whole)
 					if parseErr != nil {

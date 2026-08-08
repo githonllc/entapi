@@ -625,9 +625,9 @@ The wire is `field=op:value`, split on the first colon. A bare value is equality
 | `from:` `to:` `between:a,b` | inclusive range sugar |
 
 Each field receives only the intersection of Ent's predicates and this wire
-vocabulary. `like:`, `ilike:` and `suffix:` additionally require
-`api.Searchable()`; `prefix:` does not. `_ieq` has no wire spelling. Bare `*`
-and `?` remain equality literals and do not become implicit `LIKE` patterns.
+vocabulary. `like:`, `ilike:`, `prefix:` and `suffix:` additionally require
+`api.Searchable()`. `_ieq` has no wire spelling. Bare `*` and `?` remain
+equality literals and do not become implicit `LIKE` patterns.
 
 Parsing follows six ordered rules: an empty bare value is ignored but empty
 `eq:` is real; no colon means equality; an allowed prefix applies its operator;
@@ -997,9 +997,9 @@ Ordered by how quietly they hurt you.
    before `API()` for a custom dialect.
 2. **`New{E}Response(nil)` returns `(nil, nil)`.** Not an error. Feed it a query
    that matched nothing and you get a pair of nils, not a not-found.
-3. **`like:`, `ilike:` and `suffix:` require `api.Searchable()`.** On a
+3. **`like:`, `ilike:`, `prefix:` and `suffix:` require `api.Searchable()`.** On a
    Filterable-only string field they are known-but-disallowed operators, so the
-   generated parser returns `ErrValidation`; `prefix:` remains available.
+   generated parser returns `ErrValidation`.
 4. **Only the primary key's query dimensions are inferred.** It is always
    Filterable and Sortable; every non-ID field still requires its own query word.
 5. **An all-immutable PATCH is refused** unless the resource writes

@@ -227,6 +227,11 @@ func (Post) Edges() []ent.Edge {
 `Expand()` puts `Author *UserSummary` in `PostResponse` and `WithAuthor()` in
 the generated eager-load plan; `JSONKey("writer")` overrides the response key.
 Expansion is one level deep and is never inferred from foreign-key placement.
+An edge is silent by default; `api.Expand()` includes it. On a self-referential
+pair, the two ends must agree on annotation presence: put `api.Expand()` on the
+included end and `api.EdgeAnnotation{}` on the excluded end. The zero-value
+annotation marks that end as deliberately considered and left out, making a
+one-way self-referential expansion expressible without a second edge word.
 
 An annotation arrives at codegen either as its Go type or as a
 `map[string]interface{}` after serialized schema loading, so every read goes

@@ -158,7 +158,7 @@ func TestCheckGraphConflicts_AsymmetricSelfEdgeRemainsRefused(t *testing.T) {
 	node.Edges = []*gen.Edge{assoc, inverse}
 
 	got := conflictText(t, node)
-	requireConflict(t, got, "Tree.children", "Tree.parent", "self-referential", "issue #79")
+	requireConflict(t, got, "Tree.children", "Tree.parent", "self-referential", "api.EdgeAnnotation{}")
 
 	inverse.Annotations = gen.Annotations{edgeAnnotationName: edgePtr(api.Expand())}
 	if err := checkGraphConflicts(&gen.Graph{Nodes: []*gen.Type{node}}); err != nil {

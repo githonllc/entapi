@@ -204,6 +204,9 @@ func (Post) Edges() []ent.Edge {
 
 `Expand()` 把 `Author *UserSummary` 放进 `PostResponse`，把 `WithAuthor()` 放进生成的
 预加载计划；`JSONKey("writer")` 覆盖响应 key。扩展只深入一层，绝不从外键位置推断。
+边默认不出现在响应中；`api.Expand()` 把它纳入响应。对于自引用边对，两端的注解存在性必须
+一致：纳入的一端使用 `api.Expand()`，排除的一端使用 `api.EdgeAnnotation{}`。这个零值注解
+表示该端已经过明确考虑并被排除，从而无需引入第二个 edge 词也能表达单向自引用扩展。
 
 注解到达 codegen 时可能是 Go 类型，也可能是序列化 schema loader 产生的
 `map[string]interface{}`；读取一律经过一次 JSON 归一化。

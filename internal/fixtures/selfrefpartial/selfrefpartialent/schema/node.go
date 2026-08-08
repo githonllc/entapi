@@ -1,7 +1,7 @@
 // Package schema holds the hand-written ent schema for the "selfrefpartial"
-// codegen fixture: a deliberately one-way self-referential pair. The one-word
-// edge vocabulary cannot distinguish this intent from the chained-builder
-// accident, so generation keeps refusing it under issue #79's owner review.
+// codegen fixture. It proves that a deliberately one-way self-referential pair
+// generates, while the counterpart "selfref" fixture proves that the truly
+// bare chained form is still refused.
 package schema
 
 import (
@@ -33,8 +33,9 @@ func (Node) Fields() []ent.Field {
 // Edges of the Node.
 func (Node) Edges() []ent.Edge {
 	return []ent.Edge{
-		// Deliberately not expanded. This asymmetry is refused.
-		edge.To("children", Node.Type),
+		// Deliberately not expanded; api.EdgeAnnotation{} spells that decision.
+		edge.To("children", Node.Type).
+			Annotations(api.EdgeAnnotation{}),
 
 		edge.From("parent", Node.Type).
 			Ref("children").

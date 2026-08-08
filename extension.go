@@ -81,7 +81,7 @@ func (e *Extension) Templates() []*gen.Template {
 }
 
 // perTypeFileName is the file one per-type template's output for node lands in:
-// ent/{entity}_dto.go, _filter.go and _wiring.go.
+// ent/{entity}_dto.go, _filter.go, _wiring.go and _handler.go.
 //
 // One function rather than three format strings, because the refusal messages in
 // schema_conflicts.go quote these names back to a schema author (#62). A message
@@ -170,6 +170,14 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			}
 			pending = append(pending, file)
 			written[file.path] = true
+
+			// The three-step HTTP handlers → ent/{entity}_handler.go
+			file, err = e.renderHandlerFile(g, node)
+			if err != nil {
+				return fmt.Errorf("failed to generate %s handlers: %w", node.Name, err)
+			}
+			pending = append(pending, file)
+			written[file.path] = true
 		}
 
 		// The error classifier is generated once per GRAPH for the reason the
@@ -184,6 +192,13 @@ func (e *Extension) generatePerTypeFiles(next gen.Generator) gen.Generator {
 			file, err := e.renderErrorMapFile(g)
 			if err != nil {
 				return fmt.Errorf("failed to generate the error classifier: %w", err)
+			}
+			pending = append(pending, file)
+			written[file.path] = true
+
+			file, err = e.renderHTTPFile(g)
+			if err != nil {
+				return fmt.Errorf("failed to generate the HTTP route tree: %w", err)
 			}
 			pending = append(pending, file)
 			written[file.path] = true
@@ -312,6 +327,29 @@ func (e *Extension) renderWiringFile(g *gen.Graph, node *gen.Type) (pendingFile,
 	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
+// renderHandlerFile renders and formats the three-step HTTP handlers for one
+// Resource. Output: ent/{entity}_handler.go
+func (e *Extension) renderHandlerFile(g *gen.Graph, node *gen.Type) (pendingFile, error) {
+	tmpl, err := template.New("handler").
+		Funcs(e.templateFuncMap()).
+		Parse(handlerTemplate)
+	if err != nil {
+		return pendingFile{}, fmt.Errorf("failed to parse handler template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, node); err != nil {
+		return pendingFile{}, fmt.Errorf("failed to render handler template: %w", err)
+	}
+
+	outputPath := filepath.Join(g.Config.Target, perTypeFileName(node, "handler"))
+	formatted, err := formatFile(outputPath, buf.Bytes())
+	if err != nil {
+		return pendingFile{}, err
+	}
+	return pendingFile{path: outputPath, content: formatted}, nil
+}
+
 // renderErrorMapFile renders and formats the package-level error classifier the
 // wiring returns every error through.
 // Output: ent/entapi_errors.go
@@ -335,6 +373,29 @@ func (e *Extension) renderErrorMapFile(g *gen.Graph) (pendingFile, error) {
 
 	outputPath := filepath.Join(g.Config.Target, errorMapFileName)
 
+	formatted, err := formatFile(outputPath, buf.Bytes())
+	if err != nil {
+		return pendingFile{}, err
+	}
+	return pendingFile{path: outputPath, content: formatted}, nil
+}
+
+// renderHTTPFile renders and formats the package-level APIHandler and route
+// manifest. Output: ent/entapi_http.go
+func (e *Extension) renderHTTPFile(g *gen.Graph) (pendingFile, error) {
+	tmpl, err := template.New("http").
+		Funcs(e.templateFuncMap()).
+		Parse(httpTemplate)
+	if err != nil {
+		return pendingFile{}, fmt.Errorf("failed to parse HTTP template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, g); err != nil {
+		return pendingFile{}, fmt.Errorf("failed to render HTTP template: %w", err)
+	}
+
+	outputPath := filepath.Join(g.Config.Target, httpFileName)
 	formatted, err := formatFile(outputPath, buf.Bytes())
 	if err != nil {
 		return pendingFile{}, err

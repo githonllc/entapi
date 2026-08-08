@@ -116,6 +116,7 @@ func TestTemplatesDeclareTheirImports(t *testing.T) {
 		{"dto", dtoTemplate},
 		{"filter", filterTemplate},
 		{"wiring", wiringTemplate},
+		{"handler", handlerTemplate},
 	}
 
 	ext := NewExtensionWithOptions()
@@ -231,6 +232,26 @@ func TestErrorMapTemplateDeclaresItsImports(t *testing.T) {
 	}
 	for _, removed := range missing(declared, resolved) {
 		t.Errorf("goimports had to REMOVE %q: the errors template declares an import its output does not use", removed)
+	}
+}
+
+func TestHTTPTemplateDeclaresItsImports(t *testing.T) {
+	root := repoRoot(t)
+	g := loadFixtureGraph(t, fixtureSchemaDir(root, "basic"), fixtureEntPkgPath("basic"))
+	ext := NewExtensionWithOptions()
+	rendered := renderGraphTemplate(t, ext, "http", httpTemplate, g)
+
+	formatted, err := imports.Process(httpFileName, rendered, nil)
+	if err != nil {
+		t.Fatalf("rendered http template is not valid Go: %v\n%s", err, rendered)
+	}
+	declared := importPaths(t, rendered)
+	resolved := importPaths(t, formatted)
+	for _, added := range missing(resolved, declared) {
+		t.Errorf("goimports had to ADD %q: the http template does not declare an import its output uses", added)
+	}
+	for _, removed := range missing(declared, resolved) {
+		t.Errorf("goimports had to REMOVE %q: the http template declares an import its output does not use", removed)
 	}
 }
 

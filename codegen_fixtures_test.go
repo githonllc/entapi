@@ -117,6 +117,7 @@ var fixtures = []fixtureCase{
 	{dir: "expandnonresource", wantGenErr: []string{"Post.authors", "api.Expand() targets Author", "not an api.Resource"}},
 	{dir: "createexcepted"},
 	{dir: "wiring"},
+	{dir: "httpdemo"},
 	{dir: "softdelete", features: []gen.Feature{gen.FeaturePrivacy}},
 	// #62: an entity whose NAME is a symbol this extension generates. The three
 	// substrings are the three things the message has to carry — which entity,
@@ -214,7 +215,7 @@ func assertGenerationRefused(t *testing.T, fc fixtureCase, targetDir string, err
 //
 // Run 1 uses internal/fixtures/stale/annotated/schema, where Sprocket carries
 // entapi annotations. Run 2 uses .../plain/schema, identical except that
-// Sprocket has none — so it no longer qualifies, and the three files run 1
+// Sprocket has none — so it no longer qualifies, and the four files run 1
 // wrote for it have to go.
 //
 // The committed contents of internal/fixtures/stale/staleent are run 2's result, so
@@ -229,11 +230,14 @@ func TestCodegenFixtureStaleArtifacts(t *testing.T) {
 	targetDir := filepath.Join(fixtureDir, entDirName("stale"))
 	var opts []Option
 
-	// The last entry is the graph-level one, and it is the case a name-derived
+	// The last two entries are graph-level, and they are the case a name-derived
 	// cleanup could never have reached: there is no entity left in the schema to
 	// hang it off. An ErrorMap surviving here would be an exported symbol in the
 	// consumer's package with no wiring left that uses it.
-	generated := []string{"sprocket_dto.go", "sprocket_filter.go", "sprocket_wiring.go", errorMapFileName}
+	generated := []string{
+		"sprocket_dto.go", "sprocket_filter.go", "sprocket_wiring.go", "sprocket_handler.go",
+		errorMapFileName, httpFileName,
+	}
 
 	// The hand-written file that must survive: it sits in the directory cleanup
 	// scans, and carries ent's generic header instead of entapi's marker.

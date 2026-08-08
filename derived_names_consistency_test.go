@@ -23,7 +23,7 @@ import (
 // list arrived one name short (New<N>ListResponse, added by #65) before this
 // test existed.
 //
-// So the list is not read, it is DERIVED and compared. All five standalone
+// So the list is not read, it is DERIVED and compared. All seven standalone
 // output templates are rendered over a probe entity, go/parser reads the
 // exported top-level declarations back out, and the two sets are compared in
 // both directions:
@@ -54,7 +54,7 @@ import (
 // emission is driven by real annotations. internal/fixtures/reservednames is
 // that graph — Probe carries a create scope, an update scope, a response-only
 // field, all three query markers and the soft-delete mixin, which between them
-// fire every conditional in the five output templates. Without that the reverse
+// fire every conditional in the seven output templates. Without that the reverse
 // direction would pass while quietly checking half the list.
 func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	root := repoRoot(t)
@@ -81,18 +81,22 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 		}
 	}
 
-	// The three per-type templates, rendered over the probe entity.
+	// The four per-type templates, rendered over the probe entity.
 	record("dto", renderTemplate(t, ext, "dto", dtoTemplate, probe))
 	record("filter", renderTemplate(t, ext, "filter", filterTemplate, probe))
 	record("wiring", renderTemplate(t, ext, "wiring", wiringTemplate, probe))
+	record("handler", renderTemplate(t, ext, "handler", handlerTemplate, probe))
 
-	// The two graph-level templates, rendered over the whole graph — they take a
+	// The three graph-level templates, rendered over the whole graph — they take a
 	// *gen.Graph as their data, so they cannot go through renderTemplate.
 	record("errors", renderGraphTemplate(t, ext, "errors", errorMapTemplate, g))
 	record("softdelete", renderGraphTemplate(t, ext, "softdelete", softDeleteTemplate, g))
+	record("http", renderGraphTemplate(t, ext, "http", httpTemplate, g))
 
 	reserved := map[string]bool{
-		errorMapSymbol: true,
+		errorMapSymbol:   true,
+		apiSymbol:        true,
+		apiHandlerSymbol: true,
 	}
 	for _, name := range derivedEntityNames(probe) {
 		reserved[name] = true
@@ -110,7 +114,7 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	}
 
 	// Reverse: nothing is reserved that no template emits. Every conditional
-	// emission in the five output templates is unlocked by the probe entity's
+	// emission in the seven output templates is unlocked by the probe entity's
 	// annotations, so an absence here is a name that has gone away — the list
 	// would be refusing entity names for a symbol that no longer exists.
 	for _, name := range sortedKeys(reserved) {

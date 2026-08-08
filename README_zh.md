@@ -5,8 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 一个 [Ent](https://entgo.io) 扩展。给实体标上 `api.Resource()`，它就生成请求类型、响应
-类型、查询面，以及每个操作一个接线函数——全部写进你自己的 `ent` 包，链接的运行时除
-标准库外不依赖任何东西。字段形态来自 Ent；注解只表达偏离。
+类型、查询面、每个操作一个接线函数，以及标准库 HTTP 路由树——全部写进你自己的 `ent`
+包，链接的运行时除标准库外不依赖任何东西。字段形态来自 Ent；注解只表达偏离。
 
 *[English](README.md)*
 
@@ -21,15 +21,13 @@ func (Article) Annotations() []schema.Annotation {
 ```
 
 ```go
-// handler.go —— 你得到这个
-filter, req, err := ent.ParseArticleQuery(r.URL.Query()) // GET /articles?title=like:go&_sort=title
-page, err := ent.ListArticles(ctx, client, filter, req)
-art,  err := ent.CreateArticle(ctx, client, validReq)     // POST /articles
+// main.go —— 你得到这个入口
+http.ListenAndServe(":8080", ent.API(client))
 ```
 
-这两行之间，生成器写出了带三态存在性的 `ArticleCreateRequest`、把 query 解析为强类型
+这两个声明之间，生成器写出了带三态存在性的 `ArticleCreateRequest`、把 query 解析为强类型
 `ArticleFilter` 的 `ParseArticleQuery`、多键排序白名单、带预加载计划的 `ArticleResponse`，
-以及错误分类。
+以及错误分类、五个三步 handler 和 `ent.API(client)` 背后的路由 manifest。
 
 > ### 状态：v0，从未发布过版本
 >
@@ -51,6 +49,7 @@ art,  err := ent.CreateArticle(ctx, client, validReq)     // POST /articles
 - [安装](#安装) · [三个 import 路径](#三个-import-路径) · [接入](#接入)
 - [注解模型](#注解模型)——Ent 事实加五个偏离词
 - [生成了什么](#生成了什么)
+- [生成的 HTTP](#生成的-http)
 - [请求：三态存在性](#请求三态存在性)
 - [响应、摘要与边](#响应摘要与边)
 - [查询面](#查询面)——过滤、全文、排序、分页
@@ -82,9 +81,9 @@ go get github.com/githonllc/entapi
 |---|---|---|
 | `github.com/githonllc/entapi` | 你的 `entc.go`；嵌软删除的 schema | `Extension`、`SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | 你的 **schema** 文件 | `Resource`、`Hidden`、`ReadOnly`、`Searchable`、`Filterable`、`Sortable`、`Expand` |
-| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`ErrNotFound`/`ErrAlreadyExists`/`ErrValidation`、`ErrorMapper`、`AppendEach`、`Ptr`/`PtrOrNil`/`PtrNilSafe`、`WithSoftDeleted`/`WithHardDelete` |
+| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`WriteProblem`、`FieldError`、`Route`、`WithActor`/`ActorFrom`、错误 sentinel 与 mapper、filter/pointer/软删除 helper |
 
-这个切分是承重的，不是整洁癖：根包用 `//go:embed` 内嵌五个模板，并在**包初始化时**把五份
+这个切分是承重的，不是整洁癖：根包用 `//go:embed` 内嵌八个模板，并在**包初始化时**把八份
 全部从内嵌文件系统里读出来，读不到就 panic。只要 import 根包，这件事就会发生，无论你是否
 真的生成任何东西，而且它连带拖进 `embed`、ent 的 codegen 包和
 `golang.org/x/tools/imports`。（解析发生在之后，每次渲染时——加载器返回的是模板源码
@@ -93,7 +92,8 @@ go get github.com/githonllc/entapi
 > **实现：** `template_loader.go` — `//go:embed templates/*.tmpl`、`templateFS`、
 > `loadTemplate`、`mustLoadTemplate`（返回 `string`）；
 > `template_index.go` — `dtoTemplate`、`filterTemplate`、`wiringTemplate`、
-> `errorMapTemplate`、`softDeleteTemplate`（五个包级 `var`，全部在 init 时求值）；
+> `handlerTemplate`、`errorMapTemplate`、`httpTemplate`、`softDeleteTemplate`、
+> `softDeleteConfigInitTemplate`（八个包级 `var`，全部在 init 时求值）；
 > `extension.go` — `renderDTOFile` 及其同类，`template.New(…).Funcs(…).Parse(…)` 真正
 > 发生的地方；`runtime/types.go`、`runtime/query.go`、`runtime/errors.go`、
 > `runtime/errors_map.go`、`runtime/filter.go`、`runtime/softdelete_context.go`
@@ -129,8 +129,8 @@ func main() {
 就是 `github.com/githonllc/entapi/runtime`，所以只在你 vendor 了一份副本时才有意义。
 `NewExtension(cfg)` 直接接受 `*ExtensionConfig` 且对 nil 安全。
 
-扩展只挂一个 `gen.Hook`。`Templates()` 返回**空切片**——本扩展不走 ent 的 `GraphTemplate`
-机制，它自己渲染并写盘。
+扩展只挂一个 `gen.Hook`。`Templates()` 只返回软删除的 `config/init/fields/*` partial；
+所有独立输出都由 hook 自己渲染并写盘。
 
 > **实现：** `extension.go` — `Extension`、`ExtensionConfig`、`NewExtension`、
 > `NewExtensionWithOptions`、`Option`、`WithEntAPIPackage`、`defaultEntAPIPackage`、
@@ -209,19 +209,21 @@ func (Post) Edges() []ent.Edge {
 
 ## 生成了什么
 
-每个带 **`api.Resource()`** 的实体产出三个文件；没有这个开关的实体不产生 EntAPI 文件。
+每个带 **`api.Resource()`** 的实体产出四个文件；没有这个开关的实体不产生 EntAPI 文件。
 
 | 文件 | 声明 |
 |---|---|
 | `{entity}_dto.go` | `{E}CreateRequest`、`{E}PatchRequest` 及各自的 `Valid…` 类型与 `Apply`；`{E}Response`、`{E}Summary` 及构造器；`{E}QueryWithResponseEdges`；`{E}ListResponse` 与 `New{E}ListResponse` |
 | `{entity}_filter.go` | `{E}Filter`、`Parse{E}Query`、`Predicates()`、`{E}SortKeys`、`{E}Order` |
 | `{entity}_wiring.go` | `Get{E}`、`List{Es}`、`Create{E}`、`Patch{E}`、`Delete{E}`、`DeleteBatch{Es}` |
+| `{entity}_handler.go` | 可达的 `{Op}{E}Fn` 类型，以及 bind → call → write 三步 handler |
 
-外加每个 schema 两个文件，各自有独立的发射条件：
+外加每个 schema 三个文件，各自有独立的发射条件：
 
 | 文件 | 生成条件 | 声明 |
 |---|---|---|
 | `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
+| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIHandler`、`API(client)`、`ServeHTTP`、`Mount` 与未导出的路由 manifest |
 | `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | 未导出的查询 traverser 与删除 hook |
 
 软删除文件的条件独立于 `api.Resource()`：一个不是 HTTP resource 的实体只要嵌了 mixin，仍会被写进
@@ -234,10 +236,49 @@ traverser 的类型开关。扩展还提供一个 `config/init/fields/*` partial
 [保留名](#生成会失败而这正是设计)。
 
 > **实现：** `extension.go` — `generatePerTypeFiles`、`perTypeFileName`、`renderDTOFile`、
-> `renderFilterFile`、`renderWiringFile`、`renderErrorMapFile`、`renderSoftDeleteFile`、
-> `pendingFile`；`cleanup.go` — `errorMapFileName`、`softDeleteFileName`；
+> `renderFilterFile`、`renderWiringFile`、`renderHandlerFile`、`renderErrorMapFile`、
+> `renderHTTPFile`、`renderSoftDeleteFile`、`pendingFile`；`cleanup.go` —
+> `errorMapFileName`、`httpFileName`、`softDeleteFileName`；
 > `funcs_scope.go` — `isResource`；`funcs_softdelete.go` — `softDeleteTypes`；
 > 权威符号清单：`schema_conflicts.go` — `derivedEntityDecls`
+
+## 生成的 HTTP
+
+`ent.API(client)` 返回 `*ent.APIHandler`，它同时实现 `http.Handler`。可以直接服务、挂进
+消费者自己的 mux，或用标准库 middleware 组合：
+
+```go
+api := ent.API(client)
+api.Mount(mux)
+mux.Handle("/v1/", http.StripPrefix("/v1", api))
+```
+
+每个未 Except 的 Resource 恰好得到这些 Go 1.22 pattern：
+
+| Pattern | 结果 |
+|---|---|
+| `GET /articles` | 裸 `{"data","total","page","size"}` page，200 |
+| `POST /articles` | 裸 resource，201；没有 `Location` header |
+| `GET /articles/{id}` | 裸 resource，200 |
+| `PATCH /articles/{id}` | 裸 resource，200 |
+| `DELETE /articles/{id}` | 空 body，204 |
+
+错误统一是 RFC 9457 `application/problem+json`；`WriteProblem` 写出
+`type: "about:blank"`、title、status、detail，并在 error chain 含 `*FieldError` 时加
+`field`。bind 失败是 400，生成 `Validate` 失败是 422，不支持的 media type 是 415，超限
+body 是 413；中间步骤的 sentinel 映射到 404/409/400，未分类错误是 500。Save-time Ent
+`ValidationError` 的分类留给 #74，本 slice 仍落到 500。
+
+POST 与 PATCH 只接受 `application/json`，允许 media-type 参数。body 在读取前被限制为
+**1 MiB，且没有配置旋钮**。未知 key 会与生成的 create/patch tag 数据比较，因此 PATCH 中
+的 Immutable key 会按名字被拒绝，不会静默丢弃。
+
+`WithActor` / `ActorFrom` 让认证主体穿过 middleware。`Route` 是 `Mount` 内部使用的
+stdlib-only manifest 行；导出 route accessor 和 `With(...)` 函数替换属于 #75。
+
+router 层未匹配的 path/method 仍保留 stdlib mux 的纯文本 404/405（405 含 `Allow`），而非
+problem+json。这个 residue 是有意的：catch-all 会让挂进消费者 mux 与直接服务整棵生成树的
+行为不同。
 
 ## 请求：三态存在性
 
@@ -278,8 +319,9 @@ tag、但不精确相等的 key：
 unknown key "Nickname" (did you mean "nickname"?)   // 包装 entapi.ErrValidation
 ```
 
-被拒绝的请求不会触碰你的接收者。折叠后**不匹配任何** tag 的 key 仍被忽略——拒绝那些是
-`DisallowUnknownFields`，仍归你的 handler 决定。理由见
+被拒绝的请求不会触碰你的接收者。单独使用 DTO 时，折叠后**不匹配任何** tag 的 key 仍被
+忽略；生成的 HTTP handler 更严格：调用这个自定义 unmarshaller 前，它会把 raw key 与生成的
+tag slice 比较，并以 400 返回未知或 Immutable 字段的名字。DTO 大小写规则的理由见
 [ADR-0001](docs/adr/0001-presence-follows-encoding-json-key-matching.md)。
 
 ### 验证不是可选的
@@ -558,10 +600,11 @@ hook 都在软删除 hook 内层运行。
 | 自引用边只在一端带注解 | ent 把链式的 `edge.To(…).From(…).Annotations(…)` 交给了*反向* builder，于是关联端静默丢失了它的注解 |
 | **实体名与本扩展生成的符号相撞** | 见下 |
 
-一个名为 `ErrorMap` 的实体会让 ent 发射 `type ErrorMap`，而 `entapi_errors.go` 发射
+图级的 `API`、`APIHandler`、`ErrorMap` 都是保留名。一个名为 `ErrorMap` 的实体会让 ent 发射 `type ErrorMap`，而 `entapi_errors.go` 发射
 `var ErrorMap`——Go 每个包只有一个标识符命名空间，于是 `redeclared in this block`，发生在
 两个你从没写过的文件里，且没有任何东西指出原因。跨实体相撞同理：一个字面叫
-`ArticleResponse` 的实体会撞上实体 `Article` 生成的响应类型。
+`ArticleResponse` 或 `DeleteArticleFn` 的实体会撞上实体 `Article` 生成的类型。五个 Fn 名称
+按最大宽度保留，即使对应操作已 Except 也不收窄。
 
 保留名检查在图这一层跑，而不是在节点循环里：**相撞的实体不需要带任何注解**——ent 为每个
 实体都生成类型，一个光秃秃的 `type ErrorMap struct{ ent.Schema }` 撞得一样狠，而节点循环
@@ -600,7 +643,7 @@ HTTP 检查全部跳过没有 `api.Resource()` 的实体——与生成循环条
 2. 不是本轮写入的。
 
 这就是为什么一次 schema 编辑不再弄红你的构建：删掉一个实体，它的
-`_dto.go`/`_filter.go`/`_wiring.go` 会随之而去，而不是作为「引用 ent 已不再生成的 builder」
+`_dto.go`/`_filter.go`/`_wiring.go`/`_handler.go` 会随之而去，而不是作为「引用 ent 已不再生成的 builder」
 的残骸留下来。对于跨过基类删除升级的人，它也会移除 `_base_service.go` / `_base_handler.go`
 ——这些名字不在任何清单里，它们只是同样带着 marker。
 
@@ -679,9 +722,8 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
    查询词。
 5. **全 Immutable 的 PATCH 会被拒绝**，除非 resource 写 `Except(api.OpPatch)`；请求类型与
    接线函数仍保留。
-6. **PATCH body 里出现的 `Immutable()` 字段会被 `encoding/json` 在任何验证器运行之前丢弃。**
-   拒绝它需要你的 handler 用 `DisallowUnknownFields`；生成器看不见它。（合法 key 的大小写
-   *变体*会被拒绝——真正未知的 key 不会。）
+6. **PATCH body 里的 `Immutable()` 字段不在 DTO 中。** 生成的 HTTP handler 会把 raw key
+   与生成的 patch tag 数据比较并拒绝它；单独解码 DTO 仍会忽略无关 key。
 7. **`entapi.IsNotFound` 不是 ent 的 `IsNotFound`。** 生成模板以*不限定*的形式调用后者，
    使其绑定到你包内 ent 生成的谓词。加上限定符照样编译，然后静默地什么都匹配不上。
 8. **required 字段被挡出 create 会阻止生成**，除非 except create、改 optional 或给 default。

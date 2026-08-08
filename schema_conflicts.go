@@ -411,6 +411,11 @@ func fieldHasOp(f *gen.Field, want gen.Op) bool {
 // do not belong in the reserved set.
 const errorMapSymbol = "ErrorMap"
 
+const (
+	apiSymbol        = "API"
+	apiHandlerSymbol = "APIHandler"
+)
+
 // reservedNameConflicts reports every entity whose NAME is also a name this
 // extension declares in the package it generates into.
 //
@@ -452,6 +457,10 @@ func reservedNameConflicts(g *gen.Graph) []string {
 	if len(annotated) > 0 {
 		out = append(out, graphSymbolConflicts(g, errorMapSymbol, "var", errorMapFileName,
 			annotated, "carries api.Resource(), so the error classifier is generated for this schema")...)
+		out = append(out, graphSymbolConflicts(g, apiSymbol, "func", httpFileName,
+			annotated, "carries api.Resource(), so the HTTP route tree is generated for this schema")...)
+		out = append(out, graphSymbolConflicts(g, apiHandlerSymbol, "type", httpFileName,
+			annotated, "carries api.Resource(), so the HTTP route tree is generated for this schema")...)
 	}
 
 	// The derived half: every pair of (Resource, any entity) where the
@@ -510,13 +519,13 @@ type derivedName struct {
 	file string
 }
 
-// derivedEntityDecls returns every EXPORTED top-level declaration the three
+// derivedEntityDecls returns every EXPORTED top-level declaration the four
 // per-type templates can emit for a Resource node.
 //
 // This is the list #62 turns on, and it is the one thing here that rots: a
 // template gains a declaration and this list does not, and the collision it was
 // written to refuse walks straight through. That is why
-// TestDerivedEntityNamesMatchTheTemplates renders all five standalone output
+// TestDerivedEntityNamesMatchTheTemplates renders all seven standalone output
 // templates over a probe entity, reads the exported declarations back out with
 // go/parser, and compares the two sets in BOTH directions. Add to a template,
 // and that test tells you to add here — no reading required.
@@ -539,6 +548,7 @@ func derivedEntityDecls(node *gen.Type) []derivedName {
 	dto := perTypeFileName(node, "dto")
 	filter := perTypeFileName(node, "filter")
 	wiring := perTypeFileName(node, "wiring")
+	handler := perTypeFileName(node, "handler")
 
 	return []derivedName{
 		// templates/dto.tmpl
@@ -565,6 +575,12 @@ func derivedEntityDecls(node *gen.Type) []derivedName {
 		{"Patch" + n, wiring},
 		{"Delete" + n, wiring},
 		{"DeleteBatch" + p, wiring},
+		// templates/handler.tmpl — maximum breadth, independent of Except.
+		{"List" + p + "Fn", handler},
+		{"Create" + n + "Fn", handler},
+		{"Get" + n + "Fn", handler},
+		{"Patch" + n + "Fn", handler},
+		{"Delete" + n + "Fn", handler},
 	}
 }
 

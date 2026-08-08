@@ -230,13 +230,15 @@ func TestCodegenFixtureStaleArtifacts(t *testing.T) {
 	targetDir := filepath.Join(fixtureDir, entDirName("stale"))
 	var opts []Option
 
-	// The last two entries are graph-level, and they are the case a name-derived
-	// cleanup could never have reached: there is no entity left in the schema to
-	// hang it off. An ErrorMap surviving here would be an exported symbol in the
-	// consumer's package with no wiring left that uses it.
+	// The last four entries are graph-level, and they are the case a
+	// name-derived cleanup could never have reached: there is no entity left in
+	// the schema to hang one off. openapiFileName is further the only entry that
+	// is not Go source, so it is also the end-to-end proof that widening the
+	// scan past the .go suffix works through the real pipeline rather than only
+	// in cleanup_test.go's temporary directory.
 	generated := []string{
 		"sprocket_dto.go", "sprocket_filter.go", "sprocket_wiring.go", "sprocket_handler.go",
-		errorMapFileName, httpFileName,
+		errorMapFileName, httpFileName, openapiFileName, openapiEmbedFileName,
 	}
 
 	// The hand-written file that must survive: it sits in the directory cleanup

@@ -23,8 +23,8 @@ import (
 // list arrived one name short (New<N>ListResponse, added by #65) before this
 // test existed.
 //
-// So the list is not read, it is DERIVED and compared. All seven standalone
-// output templates are rendered over a probe entity, go/parser reads the
+// So the list is not read, it is DERIVED and compared. All eight standalone
+// Go output templates are rendered over a probe entity, go/parser reads the
 // exported top-level declarations back out, and the two sets are compared in
 // both directions:
 //
@@ -54,7 +54,7 @@ import (
 // emission is driven by real annotations. internal/fixtures/reservednames is
 // that graph — Probe carries a create scope, an update scope, a response-only
 // field, all three query markers and the soft-delete mixin, which between them
-// fire every conditional in the seven output templates. Without that the reverse
+// fire every conditional in the eight output templates. Without that the reverse
 // direction would pass while quietly checking half the list.
 func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	root := repoRoot(t)
@@ -87,11 +87,17 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	record("wiring", renderTemplate(t, ext, "wiring", wiringTemplate, probe))
 	record("handler", renderTemplate(t, ext, "handler", handlerTemplate, probe))
 
-	// The three graph-level templates, rendered over the whole graph — they take a
-	// *gen.Graph as their data, so they cannot go through renderTemplate.
+	// The four graph-level Go templates, rendered over the whole graph — they
+	// take a *gen.Graph as their data, so they cannot go through renderTemplate.
 	record("errors", renderGraphTemplate(t, ext, "errors", errorMapTemplate, g))
 	record("softdelete", renderGraphTemplate(t, ext, "softdelete", softDeleteTemplate, g))
 	record("http", renderGraphTemplate(t, ext, "http", httpTemplate, g))
+	// The fifth graph-level output. Like softdelete it declares nothing
+	// exported, and it is here rather than trusted to stay that way: an
+	// exported name added to it would otherwise reach a consumer's package with
+	// no reserved-name refusal behind it. templates/openapi.tmpl is deliberately
+	// absent — its output is YAML, so go/parser has nothing to read.
+	record("openapi_embed", renderGraphTemplate(t, ext, "openapi_embed", openapiEmbedTemplate, g))
 
 	reserved := map[string]bool{
 		errorMapSymbol:   true,
@@ -115,7 +121,7 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 	}
 
 	// Reverse: nothing is reserved that no template emits. Every conditional
-	// emission in the seven output templates is unlocked by the probe entity's
+	// emission in the eight output templates is unlocked by the probe entity's
 	// annotations, so an absence here is a name that has gone away — the list
 	// would be refusing entity names for a symbol that no longer exists.
 	for _, name := range sortedKeys(reserved) {

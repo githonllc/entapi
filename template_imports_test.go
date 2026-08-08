@@ -235,6 +235,34 @@ func TestErrorMapTemplateDeclaresItsImports(t *testing.T) {
 	}
 }
 
+// TestOpenAPIEmbedTemplateDeclaresItsImports is the same invariant for the file
+// that embeds the OpenAPI document.
+//
+// It is the one generated file whose import block goimports could plausibly
+// break: `_ "embed"` is used by a directive rather than by a reference, and the
+// formatter has no way to see that from the syntax tree. Losing it turns
+// //go:embed into an ordinary comment, and openapiSpec then compiles as a nil
+// slice that serves an empty body — a failure with no error anywhere.
+func TestOpenAPIEmbedTemplateDeclaresItsImports(t *testing.T) {
+	root := repoRoot(t)
+	g := loadFixtureGraph(t, fixtureSchemaDir(root, "basic"), fixtureEntPkgPath("basic"))
+	ext := NewExtensionWithOptions()
+	rendered := renderGraphTemplate(t, ext, "openapi_embed", openapiEmbedTemplate, g)
+
+	formatted, err := imports.Process(openapiEmbedFileName, rendered, nil)
+	if err != nil {
+		t.Fatalf("rendered openapi_embed template is not valid Go: %v\n%s", err, rendered)
+	}
+	declared := importPaths(t, rendered)
+	resolved := importPaths(t, formatted)
+	for _, added := range missing(resolved, declared) {
+		t.Errorf("goimports had to ADD %q: the openapi_embed template does not declare an import its output uses", added)
+	}
+	for _, removed := range missing(declared, resolved) {
+		t.Errorf("goimports had to REMOVE %q: the openapi_embed template declares an import its output does not use", removed)
+	}
+}
+
 func TestHTTPTemplateDeclaresItsImports(t *testing.T) {
 	root := repoRoot(t)
 	g := loadFixtureGraph(t, fixtureSchemaDir(root, "basic"), fixtureEntPkgPath("basic"))

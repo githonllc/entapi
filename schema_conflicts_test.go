@@ -175,7 +175,7 @@ func TestCheckGraphConflicts_NonResourceIsSilent(t *testing.T) {
 
 func TestCheckGraphConflicts_ReservedNamesUseResources(t *testing.T) {
 	resource := newTestType("Widget", newStringField("name", nil))
-	for _, name := range []string{"ErrorMap", "API", "APIHandler"} {
+	for _, name := range []string{"ErrorMap", "API", "APIHandler", "APIOption"} {
 		t.Run(name, func(t *testing.T) {
 			collision := &gen.Type{Name: name, ID: newIntField("id", nil)}
 			got := conflictText(t, resource, collision)

@@ -64,3 +64,16 @@ and #16/#29 established that customisation inside generated types
   the framework; rejected.
 - **Endpoint-level `http.HandlerFunc` slots** — that is the external door's
   job; merging the doors would discard generated binding/validation.
+
+## Addendum (2026-08-08): the route manifest
+
+`API(client)` registers its endpoints from a **data-shaped manifest** and
+exports it: `Routes() []entapi.Route{Method, Path string; Handler
+http.Handler}` (stdlib pattern syntax, `Route` lives in the stdlib-only
+runtime). Whole-tree mounting stays the default; the manifest exists so a
+third-party router (gin/echo) can register routes natively — a ~10-line
+consumer-side adapter injects its own path params via `r.SetPathValue`
+(Go 1.22+) and calls the handler. The framework itself gains no router
+dependency, and the manifest is a data export, not a behavior extension
+point: overrides stay `With(...)`, endpoint subsetting stays
+`Except`/external.

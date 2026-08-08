@@ -613,6 +613,24 @@ runtime 装配机制，不是 Mount。
    已知但被禁的算子 400（§4.3 值解析规则第 4/5 条）——ADR-0005 门控不因
    回落规则而变静默。
 
+## 11. 定稿后增补（2026-08-08，owner 裁决）
+
+两项在定稿与评审之后追加的裁决，均已同步进 `DESIGN-v3-final.md`：
+
+1. **模块改名 `entdomain` → `entapi`**（ADR-0011，已执行）。动机：v3 删光了
+   全部 domain 命名的符号后，模块名成了唯一残留的误导——"domain"（DDD 语境
+   的业务层）恰是本框架明确拒绝承载的东西。名字入 ent 扩展命名族谱
+   （entgql/entproto/entoas）；`entrest` 因同赛道活跃项目占用而避开。
+   marker 换新并**永久**识别 legacy marker（一次字符串比较的代价，换掉整类
+   "改名后旧生成物变孤儿"的迁移事故）。GitHub 仓库同步改名，旧 URL 重定向。
+2. **路由清单（Route Manifest）**。provenance：gin/echo 接入评估暴露出唯一
+   真实耦合点——生成的 handler 用 `r.PathValue` 取路径参数，依赖 stdlib mux
+   的匹配填充，第三方路由器逐路由注册时取空。裁决：`API(client)` 的注册底座
+   改为一份导出的数据清单（`Routes() []entapi.Route{Method, Path, Handler}`，
+   stdlib 模式语法），适配器在消费者侧把自家参数经 `r.SetPathValue`（Go
+   1.22+）注入后调 Handler。整树挂载仍是默认；清单是纯数据导出，不是行为
+   扩展点。形状见 `DESIGN-v3-final.md` §2.5。
+
 ## 附录 A：样例——账号系统的 User
 
 这个样例把 v3 的每个机制踩一遍，包括它**故意不管**的部分。

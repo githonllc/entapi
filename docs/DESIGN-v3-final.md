@@ -134,6 +134,28 @@ extractor `func(error) (field string, ok bool)`。已知残余：非
 - `DeleteBatch` 不上 HTTP 面（service 层专用）;
 - 路由用 Go 1.22+ stdlib `http.ServeMux` 方法+路径模式，不自研。
 
+### 2.5 路由清单（owner 裁决，2026-08-08）
+
+`API(client)` 的路由注册以一份**数据形态**的清单为底座，并把它导出：
+
+```go
+// runtime（stdlib-only）：
+type Route struct {
+	Method  string        // "GET" / "POST" / "PATCH" / "DELETE"
+	Path    string        // stdlib 模式语法："/users/{id}"
+	Handler http.Handler  // 三步体，路径参数经 r.PathValue 读取
+}
+// 生成：
+func (a *API) Routes() []entapi.Route
+```
+
+`Mount`/`http.Handler` 整树挂载仍是默认路径（内部就是遍历这份清单注册进
+自己的 ServeMux）。清单的存在解决第三方路由器的逐路由原生集成：gin/echo
+适配器把自家路径参数注入回 `r.SetPathValue`（Go 1.22+ 标准方法）再调
+`Handler`——每框架 ~10 行、消费者侧手写，**框架自身零路由器依赖**。
+清单是纯数据导出，不是行为扩展点：换脑仍走 `With(...)`，端点增删仍走
+`Except`/external，清单只回答"有哪些路由"。
+
 ---
 
 ## 3. 查询面

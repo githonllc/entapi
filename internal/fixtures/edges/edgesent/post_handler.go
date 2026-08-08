@@ -22,6 +22,13 @@ import (
 // ListPostsFn is byte-identical to ListPosts.
 type ListPostsFn func(context.Context, *Client, *PostFilter, entapi.ListRequest) (*entapi.Page[PostResponse], error)
 
+func (f ListPostsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListPostsFn is nil")
+	}
+	h.listPosts = f
+}
+
 func (h *APIHandler) handleListPosts(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParsePostQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListPosts(w http.ResponseWriter, r *http.Request) {
 
 // CreatePostFn is byte-identical to CreatePost.
 type CreatePostFn func(context.Context, *Client, *ValidPostCreateRequest) (*PostResponse, error)
+
+func (f CreatePostFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreatePostFn is nil")
+	}
+	h.createPost = f
+}
 
 func (h *APIHandler) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 // GetPostFn is byte-identical to GetPost.
 type GetPostFn func(context.Context, *Client, uuid.UUID) (*PostResponse, error)
 
+func (f GetPostFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetPostFn is nil")
+	}
+	h.getPost = f
+}
+
 func (h *APIHandler) handleGetPost(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetPost(w http.ResponseWriter, r *http.Request) {
 
 // PatchPostFn is byte-identical to PatchPost.
 type PatchPostFn func(context.Context, *Client, uuid.UUID, *ValidPostPatchRequest) (*PostResponse, error)
+
+func (f PatchPostFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchPostFn is nil")
+	}
+	h.patchPost = f
+}
 
 func (h *APIHandler) handlePatchPost(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchPost(w http.ResponseWriter, r *http.Request) {
 
 // DeletePostFn is byte-identical to DeletePost.
 type DeletePostFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeletePostFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeletePostFn is nil")
+	}
+	h.deletePost = f
+}
 
 func (h *APIHandler) handleDeletePost(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

@@ -22,6 +22,13 @@ import (
 // ListNotesFn is byte-identical to ListNotes.
 type ListNotesFn func(context.Context, *Client, *NoteFilter, entapi.ListRequest) (*entapi.Page[NoteResponse], error)
 
+func (f ListNotesFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListNotesFn is nil")
+	}
+	h.listNotes = f
+}
+
 func (h *APIHandler) handleListNotes(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseNoteQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListNotes(w http.ResponseWriter, r *http.Request) {
 
 // CreateNoteFn is byte-identical to CreateNote.
 type CreateNoteFn func(context.Context, *Client, *ValidNoteCreateRequest) (*NoteResponse, error)
+
+func (f CreateNoteFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateNoteFn is nil")
+	}
+	h.createNote = f
+}
 
 func (h *APIHandler) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 // GetNoteFn is byte-identical to GetNote.
 type GetNoteFn func(context.Context, *Client, uuid.UUID) (*NoteResponse, error)
 
+func (f GetNoteFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetNoteFn is nil")
+	}
+	h.getNote = f
+}
+
 func (h *APIHandler) handleGetNote(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetNote(w http.ResponseWriter, r *http.Request) {
 
 // PatchNoteFn is byte-identical to PatchNote.
 type PatchNoteFn func(context.Context, *Client, uuid.UUID, *ValidNotePatchRequest) (*NoteResponse, error)
+
+func (f PatchNoteFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchNoteFn is nil")
+	}
+	h.patchNote = f
+}
 
 func (h *APIHandler) handlePatchNote(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchNote(w http.ResponseWriter, r *http.Request) {
 
 // DeleteNoteFn is byte-identical to DeleteNote.
 type DeleteNoteFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteNoteFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteNoteFn is nil")
+	}
+	h.deleteNote = f
+}
 
 func (h *APIHandler) handleDeleteNote(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

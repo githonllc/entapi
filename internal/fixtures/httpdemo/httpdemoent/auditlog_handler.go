@@ -22,6 +22,13 @@ import (
 // ListAuditLogsFn is byte-identical to ListAuditLogs.
 type ListAuditLogsFn func(context.Context, *Client, *AuditLogFilter, entapi.ListRequest) (*entapi.Page[AuditLogResponse], error)
 
+func (f ListAuditLogsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListAuditLogsFn is nil")
+	}
+	h.listAuditLogs = f
+}
+
 func (h *APIHandler) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseAuditLogQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListAuditLogs(w http.ResponseWriter, r *http.Request)
 
 // CreateAuditLogFn is byte-identical to CreateAuditLog.
 type CreateAuditLogFn func(context.Context, *Client, *ValidAuditLogCreateRequest) (*AuditLogResponse, error)
+
+func (f CreateAuditLogFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateAuditLogFn is nil")
+	}
+	h.createAuditLog = f
+}
 
 func (h *APIHandler) handleCreateAuditLog(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateAuditLog(w http.ResponseWriter, r *http.Request
 // GetAuditLogFn is byte-identical to GetAuditLog.
 type GetAuditLogFn func(context.Context, *Client, uuid.UUID) (*AuditLogResponse, error)
 
+func (f GetAuditLogFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetAuditLogFn is nil")
+	}
+	h.getAuditLog = f
+}
+
 func (h *APIHandler) handleGetAuditLog(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetAuditLog(w http.ResponseWriter, r *http.Request) {
 
 // PatchAuditLogFn is byte-identical to PatchAuditLog.
 type PatchAuditLogFn func(context.Context, *Client, uuid.UUID, *ValidAuditLogPatchRequest) (*AuditLogResponse, error)
+
+func (f PatchAuditLogFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchAuditLogFn is nil")
+	}
+	h.patchAuditLog = f
+}
 
 func (h *APIHandler) handlePatchAuditLog(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)

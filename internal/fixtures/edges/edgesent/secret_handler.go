@@ -22,6 +22,13 @@ import (
 // ListSecretsFn is byte-identical to ListSecrets.
 type ListSecretsFn func(context.Context, *Client, *SecretFilter, entapi.ListRequest) (*entapi.Page[SecretResponse], error)
 
+func (f ListSecretsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListSecretsFn is nil")
+	}
+	h.listSecrets = f
+}
+
 func (h *APIHandler) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseSecretQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 
 // CreateSecretFn is byte-identical to CreateSecret.
 type CreateSecretFn func(context.Context, *Client, *ValidSecretCreateRequest) (*SecretResponse, error)
+
+func (f CreateSecretFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateSecretFn is nil")
+	}
+	h.createSecret = f
+}
 
 func (h *APIHandler) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateSecret(w http.ResponseWriter, r *http.Request) 
 // GetSecretFn is byte-identical to GetSecret.
 type GetSecretFn func(context.Context, *Client, uuid.UUID) (*SecretResponse, error)
 
+func (f GetSecretFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetSecretFn is nil")
+	}
+	h.getSecret = f
+}
+
 func (h *APIHandler) handleGetSecret(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetSecret(w http.ResponseWriter, r *http.Request) {
 
 // PatchSecretFn is byte-identical to PatchSecret.
 type PatchSecretFn func(context.Context, *Client, uuid.UUID, *ValidSecretPatchRequest) (*SecretResponse, error)
+
+func (f PatchSecretFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchSecretFn is nil")
+	}
+	h.patchSecret = f
+}
 
 func (h *APIHandler) handlePatchSecret(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchSecret(w http.ResponseWriter, r *http.Request) {
 
 // DeleteSecretFn is byte-identical to DeleteSecret.
 type DeleteSecretFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteSecretFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteSecretFn is nil")
+	}
+	h.deleteSecret = f
+}
 
 func (h *APIHandler) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

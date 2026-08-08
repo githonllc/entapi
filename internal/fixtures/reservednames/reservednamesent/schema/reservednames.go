@@ -9,6 +9,8 @@
 //	          so the two declarations are `redeclared in this block` — a compile
 //	          error inside the consumer's own repository with nothing pointing
 //	          back at this schema. Generation is therefore refused.
+//	APIOption an ordinary entity that collides with the graph-level APIOption
+//	          type generated whenever the graph has a Resource.
 //	Probe     the ordinary annotated entity that makes the refusal reachable:
 //	          entapi_errors.go is only emitted when SOMETHING is annotated,
 //	          so an ErrorMap entity alone would prove nothing.
@@ -56,6 +58,21 @@ func (ErrorMap) Fields() []ent.Field {
 }
 
 func (ErrorMap) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }
+
+// APIOption is the second graph-level collision probe. It deliberately carries
+// no Resource annotation: Probe is enough to make entapi_http.go exist, while
+// ent still generates this entity's type into the same package.
+type APIOption struct {
+	ent.Schema
+}
+
+// Fields of the APIOption.
+func (APIOption) Fields() []ent.Field {
+	return []ent.Field{
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
+		field.String("label"),
+	}
+}
 
 // Probe is the ordinary annotated entity. See the package comment for the two
 // jobs it holds down.

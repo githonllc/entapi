@@ -22,6 +22,13 @@ import (
 // ListDocsFn is byte-identical to ListDocs.
 type ListDocsFn func(context.Context, *Client, *DocFilter, entapi.ListRequest) (*entapi.Page[DocResponse], error)
 
+func (f ListDocsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListDocsFn is nil")
+	}
+	h.listDocs = f
+}
+
 func (h *APIHandler) handleListDocs(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseDocQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListDocs(w http.ResponseWriter, r *http.Request) {
 
 // CreateDocFn is byte-identical to CreateDoc.
 type CreateDocFn func(context.Context, *Client, *ValidDocCreateRequest) (*DocResponse, error)
+
+func (f CreateDocFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateDocFn is nil")
+	}
+	h.createDoc = f
+}
 
 func (h *APIHandler) handleCreateDoc(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateDoc(w http.ResponseWriter, r *http.Request) {
 // GetDocFn is byte-identical to GetDoc.
 type GetDocFn func(context.Context, *Client, uuid.UUID) (*DocResponse, error)
 
+func (f GetDocFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetDocFn is nil")
+	}
+	h.getDoc = f
+}
+
 func (h *APIHandler) handleGetDoc(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetDoc(w http.ResponseWriter, r *http.Request) {
 
 // PatchDocFn is byte-identical to PatchDoc.
 type PatchDocFn func(context.Context, *Client, uuid.UUID, *ValidDocPatchRequest) (*DocResponse, error)
+
+func (f PatchDocFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchDocFn is nil")
+	}
+	h.patchDoc = f
+}
 
 func (h *APIHandler) handlePatchDoc(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchDoc(w http.ResponseWriter, r *http.Request) {
 
 // DeleteDocFn is byte-identical to DeleteDoc.
 type DeleteDocFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteDocFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteDocFn is nil")
+	}
+	h.deleteDoc = f
+}
 
 func (h *APIHandler) handleDeleteDoc(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

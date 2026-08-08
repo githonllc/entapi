@@ -97,6 +97,7 @@ func TestDerivedEntityNamesMatchTheTemplates(t *testing.T) {
 		errorMapSymbol:   true,
 		apiSymbol:        true,
 		apiHandlerSymbol: true,
+		apiOptionSymbol:  true,
 	}
 	for _, name := range derivedEntityNames(probe) {
 		reserved[name] = true

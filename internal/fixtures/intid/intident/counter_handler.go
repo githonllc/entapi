@@ -21,6 +21,13 @@ import (
 // ListCountersFn is byte-identical to ListCounters.
 type ListCountersFn func(context.Context, *Client, *CounterFilter, entapi.ListRequest) (*entapi.Page[CounterResponse], error)
 
+func (f ListCountersFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListCountersFn is nil")
+	}
+	h.listCounters = f
+}
+
 func (h *APIHandler) handleListCounters(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseCounterQuery(r.URL.Query())
 	if err != nil {
@@ -55,6 +62,13 @@ func (h *APIHandler) handleListCounters(w http.ResponseWriter, r *http.Request) 
 
 // CreateCounterFn is byte-identical to CreateCounter.
 type CreateCounterFn func(context.Context, *Client, *ValidCounterCreateRequest) (*CounterResponse, error)
+
+func (f CreateCounterFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateCounterFn is nil")
+	}
+	h.createCounter = f
+}
 
 func (h *APIHandler) handleCreateCounter(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -139,6 +153,13 @@ func (h *APIHandler) handleCreateCounter(w http.ResponseWriter, r *http.Request)
 // GetCounterFn is byte-identical to GetCounter.
 type GetCounterFn func(context.Context, *Client, int) (*CounterResponse, error)
 
+func (f GetCounterFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetCounterFn is nil")
+	}
+	h.getCounter = f
+}
+
 func (h *APIHandler) handleGetCounter(w http.ResponseWriter, r *http.Request) {
 	parsedID, err := strconv.ParseInt(r.PathValue("id"), 10, 0)
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetCounter(w http.ResponseWriter, r *http.Request) {
 
 // PatchCounterFn is byte-identical to PatchCounter.
 type PatchCounterFn func(context.Context, *Client, int, *ValidCounterPatchRequest) (*CounterResponse, error)
+
+func (f PatchCounterFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchCounterFn is nil")
+	}
+	h.patchCounter = f
+}
 
 func (h *APIHandler) handlePatchCounter(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -263,6 +291,13 @@ func (h *APIHandler) handlePatchCounter(w http.ResponseWriter, r *http.Request) 
 
 // DeleteCounterFn is byte-identical to DeleteCounter.
 type DeleteCounterFn func(context.Context, *Client, int) error
+
+func (f DeleteCounterFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteCounterFn is nil")
+	}
+	h.deleteCounter = f
+}
 
 func (h *APIHandler) handleDeleteCounter(w http.ResponseWriter, r *http.Request) {
 	parsedID, err := strconv.ParseInt(r.PathValue("id"), 10, 0)

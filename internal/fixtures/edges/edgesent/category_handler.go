@@ -22,6 +22,13 @@ import (
 // ListCategoriesFn is byte-identical to ListCategories.
 type ListCategoriesFn func(context.Context, *Client, *CategoryFilter, entapi.ListRequest) (*entapi.Page[CategoryResponse], error)
 
+func (f ListCategoriesFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListCategoriesFn is nil")
+	}
+	h.listCategories = f
+}
+
 func (h *APIHandler) handleListCategories(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseCategoryQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListCategories(w http.ResponseWriter, r *http.Request
 
 // CreateCategoryFn is byte-identical to CreateCategory.
 type CreateCategoryFn func(context.Context, *Client, *ValidCategoryCreateRequest) (*CategoryResponse, error)
+
+func (f CreateCategoryFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateCategoryFn is nil")
+	}
+	h.createCategory = f
+}
 
 func (h *APIHandler) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateCategory(w http.ResponseWriter, r *http.Request
 // GetCategoryFn is byte-identical to GetCategory.
 type GetCategoryFn func(context.Context, *Client, uuid.UUID) (*CategoryResponse, error)
 
+func (f GetCategoryFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetCategoryFn is nil")
+	}
+	h.getCategory = f
+}
+
 func (h *APIHandler) handleGetCategory(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetCategory(w http.ResponseWriter, r *http.Request) {
 
 // PatchCategoryFn is byte-identical to PatchCategory.
 type PatchCategoryFn func(context.Context, *Client, uuid.UUID, *ValidCategoryPatchRequest) (*CategoryResponse, error)
+
+func (f PatchCategoryFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchCategoryFn is nil")
+	}
+	h.patchCategory = f
+}
 
 func (h *APIHandler) handlePatchCategory(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchCategory(w http.ResponseWriter, r *http.Request)
 
 // DeleteCategoryFn is byte-identical to DeleteCategory.
 type DeleteCategoryFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteCategoryFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteCategoryFn is nil")
+	}
+	h.deleteCategory = f
+}
 
 func (h *APIHandler) handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

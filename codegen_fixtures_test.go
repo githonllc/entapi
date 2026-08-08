@@ -124,7 +124,7 @@ var fixtures = []fixtureCase{
 	// which generated file it collides in, and what to do about it — because a
 	// message that only says "conflict" leaves the author with a `redeclared`
 	// error in a file they did not write.
-	{dir: "reservednames", wantGenErr: []string{"ErrorMap", "entapi_errors.go", "rename"}},
+	{dir: "reservednames", wantGenErr: []string{"ErrorMap", "entapi_errors.go", "APIOption", "entapi_http.go", "rename"}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the

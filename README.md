@@ -248,7 +248,7 @@ Plus three files per schema, each with its own emission condition:
 | File | Emitted when | Declares |
 |---|---|---|
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
-| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIHandler`, `API(client)`, `ServeHTTP`, `Mount` and the unexported route manifest |
+| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Routes`, `ServeHTTP`, `Mount` and the route manifest |
 | `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
 
 The soft-delete condition is independent of `api.Resource()`: an entity that is
@@ -283,6 +283,40 @@ api.Mount(mux)
 mux.Handle("/v1/", http.StripPrefix("/v1", api))
 ```
 
+### Providing a custom operation implementation
+
+Every reachable operation emits a `{Op}{Entity}Fn` type with exactly the same
+signature as its wiring function. `With` accepts only those generated function
+types: its `APIOption` method is unexported, and an operation removed by
+`Except` emits neither its Fn type nor another way to name that customization
+point.
+
+`With` has three fixed laws:
+
+- **Variadic is equivalent to chaining:** `With(a, b).With(c)` is equivalent to
+  `With(a, b, c)`.
+- **Last wins:** when two options customize the same operation, the later one is
+  used.
+- **Nil panics at construction:** both a nil `APIOption` and a typed-nil Fn are
+  rejected while wiring the handler.
+
+`With` mutates and returns the same `*APIHandler`. Finish wiring before serving;
+calling it after requests have begun is a data race and is undefined. A method
+value is a small service injection that retains its receiver as a closure:
+
+```go
+type ArticleService struct{ patches atomic.Int64 }
+
+func (s *ArticleService) Patch(ctx context.Context, client *ent.Client, id uuid.UUID,
+    request *ent.ValidArticlePatchRequest) (*ent.ArticleResponse, error) {
+    s.patches.Add(1)
+    return ent.PatchArticle(ctx, client, id, request)
+}
+
+service := new(ArticleService)
+api := ent.API(client).With(ent.PatchArticleFn(service.Patch))
+```
+
 Each non-Excepted Resource gets exactly these Go 1.22 patterns:
 
 | Pattern | Result |
@@ -308,8 +342,52 @@ knob**. Unknown keys are compared against the generated create/patch tag data,
 so an immutable PATCH key is rejected by name rather than silently discarded.
 
 `WithActor` and `ActorFrom` carry authentication state through middleware.
-`Route` is the stdlib-only manifest row used internally by `Mount`; exporting a
-route accessor and the `With(...)` function replacements belongs to #75.
+
+### Registering exported routes
+
+`Routes()` returns `[]entapi.Route{Method, Path, Handler}` in deterministic
+registration order. Every call returns a fresh slice, so changing its rows
+cannot change what `ServeHTTP` or a later `Mount` registers. The list is a data
+export, not a mutation API: remove generated endpoints with `Except`, provide
+custom implementations with `With`, and register extra endpoints on your own router.
+
+A complete Gin adapter is consumer code; the framework takes no Gin dependency:
+
+```go
+func mountGin(r *gin.Engine, api *ent.APIHandler) {
+    for _, route := range api.Routes() {
+        path := strings.ReplaceAll(route.Path, "{id}", ":id")
+        handler := route.Handler
+        r.Handle(route.Method, path, func(c *gin.Context) {
+            c.Request.SetPathValue("id", c.Param("id"))
+            handler.ServeHTTP(c.Writer, c.Request)
+        })
+    }
+}
+```
+
+Echo has the same shape in one line: translate `{id}` to `:id`, copy
+`c.Param("id")` into `c.Request().SetPathValue`, then call the route handler
+with Echo's response writer and request.
+
+One router difference is deliberately not bridged. Go 1.22 `ServeMux` treats
+`%2F` as part of one encoded segment and gives the handler a decoded `/` in
+`PathValue`; Gin's defaults match the already-decoded `URL.Path`, so
+`/articles/a%2Fb` does not match `/articles/:id`. If encoded slashes matter for
+an identifier, choose and test the consumer router's policy explicitly.
+
+The metadata also supports selective outer middleware without adding a hook
+inside generated handlers:
+
+```go
+for _, route := range api.Routes() {
+    handler := route.Handler
+    if route.Method == http.MethodDelete {
+        handler = requireAuth(handler)
+    }
+    mux.Handle(route.Method+" "+route.Path, handler)
+}
+```
 
 Router-level unmatched paths and methods remain the stdlib mux's plain-text
 404/405 responses (including `Allow` on 405), not problem+json. This residue is

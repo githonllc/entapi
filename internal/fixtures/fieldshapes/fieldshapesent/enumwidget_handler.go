@@ -22,6 +22,13 @@ import (
 // ListEnumWidgetsFn is byte-identical to ListEnumWidgets.
 type ListEnumWidgetsFn func(context.Context, *Client, *EnumWidgetFilter, entapi.ListRequest) (*entapi.Page[EnumWidgetResponse], error)
 
+func (f ListEnumWidgetsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListEnumWidgetsFn is nil")
+	}
+	h.listEnumWidgets = f
+}
+
 func (h *APIHandler) handleListEnumWidgets(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseEnumWidgetQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListEnumWidgets(w http.ResponseWriter, r *http.Reques
 
 // CreateEnumWidgetFn is byte-identical to CreateEnumWidget.
 type CreateEnumWidgetFn func(context.Context, *Client, *ValidEnumWidgetCreateRequest) (*EnumWidgetResponse, error)
+
+func (f CreateEnumWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateEnumWidgetFn is nil")
+	}
+	h.createEnumWidget = f
+}
 
 func (h *APIHandler) handleCreateEnumWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateEnumWidget(w http.ResponseWriter, r *http.Reque
 // GetEnumWidgetFn is byte-identical to GetEnumWidget.
 type GetEnumWidgetFn func(context.Context, *Client, uuid.UUID) (*EnumWidgetResponse, error)
 
+func (f GetEnumWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetEnumWidgetFn is nil")
+	}
+	h.getEnumWidget = f
+}
+
 func (h *APIHandler) handleGetEnumWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetEnumWidget(w http.ResponseWriter, r *http.Request)
 
 // PatchEnumWidgetFn is byte-identical to PatchEnumWidget.
 type PatchEnumWidgetFn func(context.Context, *Client, uuid.UUID, *ValidEnumWidgetPatchRequest) (*EnumWidgetResponse, error)
+
+func (f PatchEnumWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchEnumWidgetFn is nil")
+	}
+	h.patchEnumWidget = f
+}
 
 func (h *APIHandler) handlePatchEnumWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchEnumWidget(w http.ResponseWriter, r *http.Reques
 
 // DeleteEnumWidgetFn is byte-identical to DeleteEnumWidget.
 type DeleteEnumWidgetFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteEnumWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteEnumWidgetFn is nil")
+	}
+	h.deleteEnumWidget = f
+}
 
 func (h *APIHandler) handleDeleteEnumWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

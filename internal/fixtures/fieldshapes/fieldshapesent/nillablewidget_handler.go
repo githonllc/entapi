@@ -22,6 +22,13 @@ import (
 // ListNillableWidgetsFn is byte-identical to ListNillableWidgets.
 type ListNillableWidgetsFn func(context.Context, *Client, *NillableWidgetFilter, entapi.ListRequest) (*entapi.Page[NillableWidgetResponse], error)
 
+func (f ListNillableWidgetsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListNillableWidgetsFn is nil")
+	}
+	h.listNillableWidgets = f
+}
+
 func (h *APIHandler) handleListNillableWidgets(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseNillableWidgetQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListNillableWidgets(w http.ResponseWriter, r *http.Re
 
 // CreateNillableWidgetFn is byte-identical to CreateNillableWidget.
 type CreateNillableWidgetFn func(context.Context, *Client, *ValidNillableWidgetCreateRequest) (*NillableWidgetResponse, error)
+
+func (f CreateNillableWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateNillableWidgetFn is nil")
+	}
+	h.createNillableWidget = f
+}
 
 func (h *APIHandler) handleCreateNillableWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateNillableWidget(w http.ResponseWriter, r *http.R
 // GetNillableWidgetFn is byte-identical to GetNillableWidget.
 type GetNillableWidgetFn func(context.Context, *Client, uuid.UUID) (*NillableWidgetResponse, error)
 
+func (f GetNillableWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetNillableWidgetFn is nil")
+	}
+	h.getNillableWidget = f
+}
+
 func (h *APIHandler) handleGetNillableWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetNillableWidget(w http.ResponseWriter, r *http.Requ
 
 // PatchNillableWidgetFn is byte-identical to PatchNillableWidget.
 type PatchNillableWidgetFn func(context.Context, *Client, uuid.UUID, *ValidNillableWidgetPatchRequest) (*NillableWidgetResponse, error)
+
+func (f PatchNillableWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchNillableWidgetFn is nil")
+	}
+	h.patchNillableWidget = f
+}
 
 func (h *APIHandler) handlePatchNillableWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchNillableWidget(w http.ResponseWriter, r *http.Re
 
 // DeleteNillableWidgetFn is byte-identical to DeleteNillableWidget.
 type DeleteNillableWidgetFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteNillableWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteNillableWidgetFn is nil")
+	}
+	h.deleteNillableWidget = f
+}
 
 func (h *APIHandler) handleDeleteNillableWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -30,6 +31,21 @@ type problem struct {
 	Status int    `json:"status"`
 	Detail string `json:"detail"`
 	Field  string `json:"field"`
+}
+
+type articlePatchService struct {
+	calls int
+	title string
+}
+
+func (s *articlePatchService) Patch(
+	_ context.Context,
+	_ *ent.Client,
+	id uuid.UUID,
+	_ *ent.ValidArticlePatchRequest,
+) (*ent.ArticleResponse, error) {
+	s.calls++
+	return &ent.ArticleResponse{ID: id, Title: s.title}, nil
 }
 
 func newClient(t *testing.T) *ent.Client {
@@ -124,6 +140,19 @@ func requireStatus(t *testing.T, response *http.Response, body []byte, want int)
 	}
 }
 
+func panicMessage(t *testing.T, fn func()) (message string) {
+	t.Helper()
+	defer func() {
+		value := recover()
+		if value == nil {
+			t.Fatal("call did not panic")
+		}
+		message = fmt.Sprint(value)
+	}()
+	fn()
+	return ""
+}
+
 func createArticle(t *testing.T, server *testServer, title string) ent.ArticleResponse {
 	t.Helper()
 	response, body := request(t, server.Client(), http.MethodPost, server.URL+"/articles", "application/json; charset=utf-8",
@@ -176,6 +205,306 @@ func TestHTTPFiveEndpointsRoundTripAndBarePage(t *testing.T) {
 	requireStatus(t, response, body, http.StatusNoContent)
 	if len(body) != 0 {
 		t.Errorf("DELETE body = %q, want empty", body)
+	}
+}
+
+func TestWithReplacementRuns(t *testing.T) {
+	called := false
+	api := ent.API(newClient(t)).With(ent.CreateArticleFn(func(
+		context.Context,
+		*ent.Client,
+		*ent.ValidArticleCreateRequest,
+	) (*ent.ArticleResponse, error) {
+		called = true
+		return &ent.ArticleResponse{Title: "replacement"}, nil
+	}))
+	server := newTestServer(t, api)
+	t.Cleanup(server.Close)
+
+	response, body := request(t, server.Client(), http.MethodPost, server.URL+"/articles", "application/json",
+		strings.NewReader(`{"title":"input"}`))
+	requireStatus(t, response, body, http.StatusCreated)
+	if !called {
+		t.Fatal("CreateArticleFn replacement did not run")
+	}
+}
+
+func TestWithLastWinsAndVariadicEqualsChained(t *testing.T) {
+	tests := []struct {
+		name      string
+		configure func(*ent.APIHandler, ent.CreateArticleFn, ent.CreateArticleFn) *ent.APIHandler
+	}{
+		{
+			name: "variadic",
+			configure: func(api *ent.APIHandler, a, b ent.CreateArticleFn) *ent.APIHandler {
+				return api.With(a, b)
+			},
+		},
+		{
+			name: "chained",
+			configure: func(api *ent.APIHandler, a, b ent.CreateArticleFn) *ent.APIHandler {
+				return api.With(a).With(b)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			last := ""
+			a := ent.CreateArticleFn(func(context.Context, *ent.Client, *ent.ValidArticleCreateRequest) (*ent.ArticleResponse, error) {
+				last = "a"
+				return &ent.ArticleResponse{Title: "a"}, nil
+			})
+			b := ent.CreateArticleFn(func(context.Context, *ent.Client, *ent.ValidArticleCreateRequest) (*ent.ArticleResponse, error) {
+				last = "b"
+				return &ent.ArticleResponse{Title: "b"}, nil
+			})
+			api := ent.API(newClient(t))
+			if got := tc.configure(api, a, b); got != api {
+				t.Fatal("With returned a different APIHandler")
+			}
+			server := newTestServer(t, api)
+			defer server.Close()
+
+			response, body := request(t, server.Client(), http.MethodPost, server.URL+"/articles", "application/json",
+				strings.NewReader(`{"title":"input"}`))
+			requireStatus(t, response, body, http.StatusCreated)
+			if last != "b" {
+				t.Fatalf("replacement = %q, want b", last)
+			}
+		})
+	}
+}
+
+func TestWithNilPanicsAtConstruction(t *testing.T) {
+	t.Run("nil APIOption", func(t *testing.T) {
+		message := panicMessage(t, func() {
+			ent.API(newClient(t)).With(nil)
+		})
+		const want = "entapi: APIOption at index 0 is nil"
+		if message != want {
+			t.Errorf("panic = %q, want %q", message, want)
+		}
+	})
+
+	t.Run("typed nil Fn", func(t *testing.T) {
+		var replacement ent.CreateArticleFn
+		message := panicMessage(t, func() {
+			ent.API(newClient(t)).With(replacement)
+		})
+		const want = "entapi: CreateArticleFn is nil"
+		if message != want {
+			t.Errorf("panic = %q, want %q", message, want)
+		}
+	})
+}
+
+func TestWithAcceptsStatefulMethodValue(t *testing.T) {
+	service := &articlePatchService{title: "from service"}
+	api := ent.API(newClient(t)).With(ent.PatchArticleFn(service.Patch))
+	server := newTestServer(t, api)
+	t.Cleanup(server.Close)
+	id := uuid.New()
+
+	response, body := request(t, server.Client(), http.MethodPatch, server.URL+"/articles/"+id.String(), "application/json",
+		strings.NewReader(`{"title":"input"}`))
+	requireStatus(t, response, body, http.StatusOK)
+	var got ent.ArticleResponse
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if service.calls != 1 || got.Title != service.title || got.ID != id {
+		t.Fatalf("service calls = %d, response = %+v", service.calls, got)
+	}
+}
+
+func TestRoutesShapeOrderAndCopyIsolation(t *testing.T) {
+	type routeKey struct {
+		method string
+		path   string
+	}
+	want := []routeKey{
+		{http.MethodGet, "/articles"},
+		{http.MethodPost, "/articles"},
+		{http.MethodGet, "/articles/{id}"},
+		{http.MethodPatch, "/articles/{id}"},
+		{http.MethodDelete, "/articles/{id}"},
+		{http.MethodGet, "/audit_logs"},
+		{http.MethodPost, "/audit_logs"},
+		{http.MethodGet, "/audit_logs/{id}"},
+		{http.MethodPatch, "/audit_logs/{id}"},
+	}
+	api := ent.API(newClient(t))
+	routes := api.Routes()
+	if len(routes) != len(want) {
+		t.Fatalf("route count = %d, want %d", len(routes), len(want))
+	}
+	legalityProbe := http.NewServeMux()
+	for i, route := range routes {
+		if route.Handler == nil {
+			t.Fatalf("route %d has a nil Handler", i)
+		}
+		if got := (routeKey{route.Method, route.Path}); got != want[i] {
+			t.Errorf("route %d = %+v, want %+v", i, got, want[i])
+		}
+		legalityProbe.Handle(route.Method+" "+route.Path, route.Handler)
+	}
+
+	routes[0] = entapi.Route{
+		Method: http.MethodPost,
+		Path:   "/poison",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusTeapot)
+		}),
+	}
+	if fresh := api.Routes()[0]; fresh.Method != http.MethodGet || fresh.Path != "/articles" {
+		t.Fatalf("mutating Routes result changed next result: %+v", fresh)
+	}
+	mux := http.NewServeMux()
+	api.Mount(mux)
+	server := newTestServer(t, mux)
+	t.Cleanup(server.Close)
+	response, body := request(t, server.Client(), http.MethodGet, server.URL+"/articles", "", nil)
+	requireStatus(t, response, body, http.StatusOK)
+}
+
+func TestMountMatchesRoutes(t *testing.T) {
+	api := ent.API(newClient(t))
+	mux := http.NewServeMux()
+	api.Mount(mux)
+	missingID := "00000000-0000-0000-0000-000000000001"
+
+	newRouteRequest := func(route entapi.Route, direct bool) *http.Request {
+		t.Helper()
+		path := strings.ReplaceAll(route.Path, "{id}", missingID)
+		var body io.Reader
+		if route.Method == http.MethodPost || route.Method == http.MethodPatch {
+			body = strings.NewReader(`{}`)
+		}
+		request := httptest.NewRequest(route.Method, path, body)
+		if body != nil {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		if direct && strings.Contains(route.Path, "{id}") {
+			request.SetPathValue("id", missingID)
+		}
+		return request
+	}
+
+	for _, route := range api.Routes() {
+		mounted := httptest.NewRecorder()
+		mux.ServeHTTP(mounted, newRouteRequest(route, false))
+		direct := httptest.NewRecorder()
+		route.Handler.ServeHTTP(direct, newRouteRequest(route, true))
+		if mounted.Code != direct.Code {
+			t.Errorf("%s %s: mounted status = %d, direct status = %d",
+				route.Method, route.Path, mounted.Code, direct.Code)
+		}
+	}
+
+	source, err := os.ReadFile("../httpdemoent/entapi_http.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "func (h *APIHandler) Mount(mux *http.ServeMux) {\n\tfor _, rt := range h.routes {\n\t\tmux.Handle(rt.Method+\" \"+rt.Path, rt.Handler)\n\t}\n}"
+	if !strings.Contains(string(source), want) {
+		t.Fatal("Mount is not a literal range walk over h.routes")
+	}
+}
+
+func TestRoutesSupportThirdPartyRouterAdapterMechanics(t *testing.T) {
+	if got := strings.ReplaceAll("/articles/{id}", "{id}", ":id"); got != "/articles/:id" {
+		t.Fatalf("translated path = %q, want /articles/:id", got)
+	}
+	client := newClient(t)
+	article, err := client.Article.Create().SetTitle("adapter").Save(context.Background())
+	if err != nil {
+		t.Fatalf("create article: %v", err)
+	}
+	api := ent.API(client)
+	var getArticle entapi.Route
+	for _, route := range api.Routes() {
+		if route.Method == http.MethodGet && route.Path == "/articles/{id}" {
+			getArticle = route
+			break
+		}
+	}
+	if getArticle.Handler == nil {
+		t.Fatal("GET /articles/{id} route not found")
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/articles/:id", nil)
+	request.SetPathValue("id", article.ID.String())
+	recorder := httptest.NewRecorder()
+	getArticle.Handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	stdlibMux := http.NewServeMux()
+	stdlibMux.HandleFunc("GET /articles/{id}", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, r.PathValue("id"))
+	})
+	encoded := httptest.NewRequest(http.MethodGet, "/articles/a%2Fb", nil)
+	if encoded.URL.Path != "/articles/a/b" || encoded.URL.RawPath != "/articles/a%2Fb" {
+		t.Fatalf("encoded request Path = %q, RawPath = %q", encoded.URL.Path, encoded.URL.RawPath)
+	}
+	encodedRecorder := httptest.NewRecorder()
+	stdlibMux.ServeHTTP(encodedRecorder, encoded)
+	if encodedRecorder.Code != http.StatusOK || encodedRecorder.Body.String() != "a/b" {
+		t.Fatalf("stdlib encoded segment: status = %d, id = %q", encodedRecorder.Code, encodedRecorder.Body.String())
+	}
+}
+
+func TestRoutesSupportSelectiveMethodWrapping(t *testing.T) {
+	api := ent.API(newClient(t))
+	mux := http.NewServeMux()
+	requireAuth := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+	for _, route := range api.Routes() {
+		handler := route.Handler
+		if route.Method == http.MethodDelete {
+			handler = requireAuth(handler)
+		}
+		mux.Handle(route.Method+" "+route.Path, handler)
+	}
+	server := newTestServer(t, mux)
+	t.Cleanup(server.Close)
+
+	response, body := request(t, server.Client(), http.MethodGet, server.URL+"/articles", "", nil)
+	requireStatus(t, response, body, http.StatusOK)
+	response, body = request(t, server.Client(), http.MethodDelete,
+		server.URL+"/articles/00000000-0000-0000-0000-000000000001", "", nil)
+	requireStatus(t, response, body, http.StatusUnauthorized)
+}
+
+func TestWithAfterRoutesAndMountAppliesBeforeRequest(t *testing.T) {
+	api := ent.API(newClient(t))
+	before := api.Routes()
+	mux := http.NewServeMux()
+	api.Mount(mux)
+	called := false
+	api.With(ent.CreateArticleFn(func(context.Context, *ent.Client, *ent.ValidArticleCreateRequest) (*ent.ArticleResponse, error) {
+		called = true
+		return &ent.ArticleResponse{Title: "after mount"}, nil
+	}))
+	if after := api.Routes(); len(after) != len(before) {
+		t.Fatalf("route count changed from %d to %d", len(before), len(after))
+	}
+	server := newTestServer(t, mux)
+	t.Cleanup(server.Close)
+
+	response, body := request(t, server.Client(), http.MethodPost, server.URL+"/articles", "application/json",
+		strings.NewReader(`{"title":"input"}`))
+	requireStatus(t, response, body, http.StatusCreated)
+	if !called {
+		t.Fatal("replacement installed after Routes and Mount did not run")
 	}
 }
 

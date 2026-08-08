@@ -7,12 +7,25 @@ import (
 	"testing"
 )
 
-func TestExceptedDeleteFnIsAbsentFromGeneratedSource(t *testing.T) {
+func TestExceptedDeleteFnAndOptionAreAbsentFromGeneratedSource(t *testing.T) {
 	source, err := os.ReadFile("auditlog_handler.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(source), "DeleteAuditLogFn") {
-		t.Fatal("auditlog_handler.go contains DeleteAuditLogFn despite Except(api.OpDelete)")
+	for _, absent := range []string{
+		"type DeleteAuditLogFn",
+		"func (f DeleteAuditLogFn) applyOption",
+	} {
+		if strings.Contains(string(source), absent) {
+			t.Fatalf("auditlog_handler.go contains %q despite Except(api.OpDelete)", absent)
+		}
+	}
+	for _, present := range []string{
+		"type CreateAuditLogFn",
+		"func (f CreateAuditLogFn) applyOption",
+	} {
+		if !strings.Contains(string(source), present) {
+			t.Fatalf("auditlog_handler.go does not contain %q for the non-excepted Create operation", present)
+		}
 	}
 }

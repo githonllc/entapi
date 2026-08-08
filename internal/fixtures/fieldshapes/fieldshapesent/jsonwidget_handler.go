@@ -22,6 +22,13 @@ import (
 // ListJSONWidgetsFn is byte-identical to ListJSONWidgets.
 type ListJSONWidgetsFn func(context.Context, *Client, *JSONWidgetFilter, entapi.ListRequest) (*entapi.Page[JSONWidgetResponse], error)
 
+func (f ListJSONWidgetsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListJSONWidgetsFn is nil")
+	}
+	h.listJSONWidgets = f
+}
+
 func (h *APIHandler) handleListJSONWidgets(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseJSONWidgetQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListJSONWidgets(w http.ResponseWriter, r *http.Reques
 
 // CreateJSONWidgetFn is byte-identical to CreateJSONWidget.
 type CreateJSONWidgetFn func(context.Context, *Client, *ValidJSONWidgetCreateRequest) (*JSONWidgetResponse, error)
+
+func (f CreateJSONWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateJSONWidgetFn is nil")
+	}
+	h.createJSONWidget = f
+}
 
 func (h *APIHandler) handleCreateJSONWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateJSONWidget(w http.ResponseWriter, r *http.Reque
 // GetJSONWidgetFn is byte-identical to GetJSONWidget.
 type GetJSONWidgetFn func(context.Context, *Client, uuid.UUID) (*JSONWidgetResponse, error)
 
+func (f GetJSONWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetJSONWidgetFn is nil")
+	}
+	h.getJSONWidget = f
+}
+
 func (h *APIHandler) handleGetJSONWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetJSONWidget(w http.ResponseWriter, r *http.Request)
 
 // PatchJSONWidgetFn is byte-identical to PatchJSONWidget.
 type PatchJSONWidgetFn func(context.Context, *Client, uuid.UUID, *ValidJSONWidgetPatchRequest) (*JSONWidgetResponse, error)
+
+func (f PatchJSONWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchJSONWidgetFn is nil")
+	}
+	h.patchJSONWidget = f
+}
 
 func (h *APIHandler) handlePatchJSONWidget(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchJSONWidget(w http.ResponseWriter, r *http.Reques
 
 // DeleteJSONWidgetFn is byte-identical to DeleteJSONWidget.
 type DeleteJSONWidgetFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteJSONWidgetFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteJSONWidgetFn is nil")
+	}
+	h.deleteJSONWidget = f
+}
 
 func (h *APIHandler) handleDeleteJSONWidget(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

@@ -22,6 +22,13 @@ import (
 // ListPlainsFn is byte-identical to ListPlains.
 type ListPlainsFn func(context.Context, *Client, *PlainFilter, entapi.ListRequest) (*entapi.Page[PlainResponse], error)
 
+func (f ListPlainsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListPlainsFn is nil")
+	}
+	h.listPlains = f
+}
+
 func (h *APIHandler) handleListPlains(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParsePlainQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListPlains(w http.ResponseWriter, r *http.Request) {
 
 // CreatePlainFn is byte-identical to CreatePlain.
 type CreatePlainFn func(context.Context, *Client, *ValidPlainCreateRequest) (*PlainResponse, error)
+
+func (f CreatePlainFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreatePlainFn is nil")
+	}
+	h.createPlain = f
+}
 
 func (h *APIHandler) handleCreatePlain(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreatePlain(w http.ResponseWriter, r *http.Request) {
 // GetPlainFn is byte-identical to GetPlain.
 type GetPlainFn func(context.Context, *Client, uuid.UUID) (*PlainResponse, error)
 
+func (f GetPlainFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetPlainFn is nil")
+	}
+	h.getPlain = f
+}
+
 func (h *APIHandler) handleGetPlain(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetPlain(w http.ResponseWriter, r *http.Request) {
 
 // PatchPlainFn is byte-identical to PatchPlain.
 type PatchPlainFn func(context.Context, *Client, uuid.UUID, *ValidPlainPatchRequest) (*PlainResponse, error)
+
+func (f PatchPlainFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchPlainFn is nil")
+	}
+	h.patchPlain = f
+}
 
 func (h *APIHandler) handlePatchPlain(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchPlain(w http.ResponseWriter, r *http.Request) {
 
 // DeletePlainFn is byte-identical to DeletePlain.
 type DeletePlainFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeletePlainFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeletePlainFn is nil")
+	}
+	h.deletePlain = f
+}
 
 func (h *APIHandler) handleDeletePlain(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

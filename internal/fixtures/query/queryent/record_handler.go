@@ -22,6 +22,13 @@ import (
 // ListRecordsFn is byte-identical to ListRecords.
 type ListRecordsFn func(context.Context, *Client, *RecordFilter, entapi.ListRequest) (*entapi.Page[RecordResponse], error)
 
+func (f ListRecordsFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: ListRecordsFn is nil")
+	}
+	h.listRecords = f
+}
+
 func (h *APIHandler) handleListRecords(w http.ResponseWriter, r *http.Request) {
 	filter, request, err := ParseRecordQuery(r.URL.Query())
 	if err != nil {
@@ -56,6 +63,13 @@ func (h *APIHandler) handleListRecords(w http.ResponseWriter, r *http.Request) {
 
 // CreateRecordFn is byte-identical to CreateRecord.
 type CreateRecordFn func(context.Context, *Client, *ValidRecordCreateRequest) (*RecordResponse, error)
+
+func (f CreateRecordFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: CreateRecordFn is nil")
+	}
+	h.createRecord = f
+}
 
 func (h *APIHandler) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -140,6 +154,13 @@ func (h *APIHandler) handleCreateRecord(w http.ResponseWriter, r *http.Request) 
 // GetRecordFn is byte-identical to GetRecord.
 type GetRecordFn func(context.Context, *Client, uuid.UUID) (*RecordResponse, error)
 
+func (f GetRecordFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: GetRecordFn is nil")
+	}
+	h.getRecord = f
+}
+
 func (h *APIHandler) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -173,6 +194,13 @@ func (h *APIHandler) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 
 // PatchRecordFn is byte-identical to PatchRecord.
 type PatchRecordFn func(context.Context, *Client, uuid.UUID, *ValidRecordPatchRequest) (*RecordResponse, error)
+
+func (f PatchRecordFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: PatchRecordFn is nil")
+	}
+	h.patchRecord = f
+}
 
 func (h *APIHandler) handlePatchRecord(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -262,6 +290,13 @@ func (h *APIHandler) handlePatchRecord(w http.ResponseWriter, r *http.Request) {
 
 // DeleteRecordFn is byte-identical to DeleteRecord.
 type DeleteRecordFn func(context.Context, *Client, uuid.UUID) error
+
+func (f DeleteRecordFn) applyOption(h *APIHandler) {
+	if f == nil {
+		panic("entapi: DeleteRecordFn is nil")
+	}
+	h.deleteRecord = f
+}
 
 func (h *APIHandler) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

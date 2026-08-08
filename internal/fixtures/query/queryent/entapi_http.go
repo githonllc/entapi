@@ -5,10 +5,14 @@
 package queryent
 
 import (
+	"fmt"
 	"net/http"
 
 	entapi "github.com/githonllc/entapi/runtime"
 )
+
+// APIOption replaces one generated operation implementation.
+type APIOption interface{ applyOption(*APIHandler) }
 
 // APIHandler is the generated CRUD HTTP surface.
 type APIHandler struct {
@@ -104,6 +108,22 @@ func API(client *Client) *APIHandler {
 		h.mux.Handle(rt.Method+" "+rt.Path, rt.Handler)
 	}
 	return h
+}
+
+// With replaces generated operation implementations before serving begins.
+func (h *APIHandler) With(opts ...APIOption) *APIHandler {
+	for i, opt := range opts {
+		if opt == nil {
+			panic(fmt.Sprintf("entapi: APIOption at index %d is nil", i))
+		}
+		opt.applyOption(h)
+	}
+	return h
+}
+
+// Routes returns generated routes in deterministic registration order.
+func (h *APIHandler) Routes() []entapi.Route {
+	return append([]entapi.Route(nil), h.routes...)
 }
 
 // ServeHTTP serves the generated route tree.

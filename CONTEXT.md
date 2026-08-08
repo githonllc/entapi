@@ -35,7 +35,8 @@ Searchable（子串扫描）/ Filterable（算子参数）/ Sortable（排序白
 _Avoid_: DomainEdge, eager edge
 
 **Except**:
-Resource 的操作子集选项——`api.Resource().Except(api.OpDelete, …)` 关掉指定 HTTP 端点。全字段 Immutable 而未 Except 更新操作 → 生成期拒绝。
+Resource 的操作子集选项——`api.Resource().Except(api.OpDelete, …)`。它关掉的是**该操作的 HTTP 面**：端点 + 路由 + OpenAPI path + 定制点类型 `{Op}{Entity}Fn`；wiring 函数与请求 DTO **照常生成**（Scope 宪章：注解永不限制 service 层能做什么）。定制点类型必须跟着端点消失，否则 `With(…Fn(f))` 会编译通过却永不被调用——静默失效。
+唯一例外是"可证明必然失败"的一族：ent 必填且无 Default 的字段被 `Hidden`/`ReadOnly` 挡在 create 请求外时，未 Except 即生成期拒绝，已 Except 则 **create 一族整体不生成**。对称的空 PATCH（字段集为空 + Except(OpPatch)）不适用——它无用但不坏，wiring 照常生成。
 
 **自定义实现（With）**:
 把某个操作的默认实现整个换成你的函数：`With(ent.PatchUserFn(fn))`，`fn` 的签名与生成的 wiring 函数逐字相同（编译器校验），默认值就是 wiring 函数本身。生成代码调用你，你从不嵌入它。那个可被替换的位置叫**定制点**。
@@ -59,7 +60,7 @@ _Avoid_: 裸 sort/page/size/q 作保留参数, $ 前缀
 _Avoid_: sort_by, order
 
 **_q**:
-自由文本析取——对全部 Searchable 字段做 Contains 后 OR。与 Filterable 的结构化 AND 面是两个查询面，不合并（ADR-0005）。
+自由文本析取——对全部 Searchable 字段做 Contains 后 OR。它与 Filterable 的结构化面是两个**维度**，不是两条互斥路径：同一请求里同时出现时，`_q` 的 OR 组作为**一个**谓词与各过滤谓词 AND 复合（`filter.tmpl:96-105`）。维度不合并指的是算子门控（ADR-0005），不是请求不可同用。
 _Avoid_: search, keyword
 
 ### 生成物

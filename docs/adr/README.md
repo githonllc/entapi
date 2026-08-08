@@ -25,11 +25,16 @@ the ADR carries the decision and its rationale.
 | [0010](0010-softdelete-registration-generated-init.md) | Soft-delete registration: generated init in the consumer's package, never Mount | **Accepted** (spike-gated) | — |
 | [0011](0011-rename-module-to-entapi.md) | Rename the module: entdomain → entapi | **Accepted** (executed) | — |
 | [0012](0012-with-composes-as-functional-options.md) | `With` composes as functional options: last-wins, nil panics | **Accepted** | — |
+| [0013](0013-duplicate-params-and-value-parse-failures.md) | Repeated filter parameters AND-merge; a value that will not parse is a 400 | **Accepted** | — |
 
 0006–0010 record the DESIGN-v3 adjudications (grilling session 2026-08-07/08 +
 one cross-family adversarial review round; process log in `../DESIGN-v3.md`,
 final design in `../DESIGN-v3-final.md`). Their tracking issues are assigned
 when the implementation arc opens; ADR-0004 also carries a DESIGN-v3 addendum
-(marker ownership extends to `openapi.yaml`).
+(marker ownership extends to `openapi.yaml`). 0013 comes from the third
+grilling round (2026-08-08, process log `../DESIGN-v3.md` §13) and extends
+0007; the round's other twelve rulings are recorded in the final design in
+place rather than as ADRs — they are either mechanical consequences of an
+existing charter or cheap to reverse before release.
 
 Review-only findings without an ADR (plain bugs or documentation): [#60](https://github.com/githonllc/entdomain/issues/60) offset overflow, [#62](https://github.com/githonllc/entdomain/issues/62) reserved generated names, [#65](https://github.com/githonllc/entdomain/issues/65) `{Entity}ListResponse` role (owner decision), [#66](https://github.com/githonllc/entdomain/issues/66) stale dto.tmpl header, [#67](https://github.com/githonllc/entdomain/issues/67) no-op builder godoc.

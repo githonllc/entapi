@@ -538,8 +538,11 @@ runtime 装配机制，不是 Mount。
    冲突检查; `_` 前缀字段拒绝（§4.4）是新增检查项;
 6. ~~`openapi.yaml` 的 cleanup 特例~~——**评审证实并已修订**（§5.1：yaml
    自带注释 marker，ADR-0004 一致；C6）;
-7. **op-in-value 解析器的模糊面**：重复同名参数（`?score=gt:30&score=lt:50`）
-   语义未裁决——AND 合并还是 400，实现时定并入档;
+7. ~~**op-in-value 解析器的模糊面**：重复同名参数语义未裁决~~——**已裁决**
+   （owner，2026-08-08，grilling 第三轮）：**AND 合并**（半开区间可表达；
+   OR 已有头等拼写 `in:`）。同轮补裁**值转不出目标类型 = 400**（原规则表只判
+   前缀），两条均与 entigo 传统分道（`IN`/静默跳过），须进迁移说明。
+   落点 final §3.1;
 8. 校验 422 发生在 Save 时而非绑参时；OpenAPI 不体现数值约束（§1.4，已接受）。
 
 ## 9. 落地顺序与未裁决事项
@@ -553,13 +556,16 @@ runtime 装配机制，不是 Mount。
 
 **未裁决（§9.6 体例）**：
 
-- 挂载前缀下 OpenAPI `servers`/paths 对齐、spec `info.title/version` 来源
-  ——实现期定;
+- ~~挂载前缀下 OpenAPI `servers`/paths 对齐、spec `info.title/version` 来源~~
+  ——**已裁决**（owner，2026-08-08，grilling 第三轮）：**`servers` 一律不生成**
+  （前缀是部署期事实，spec 路径保持无前缀）；`info.title`/`version` 走
+  `ExtensionConfig` 的生成期字段，缺省 `"<ent 包名> API"` / `"0.0.0"`，
+  不从 git tag 猜。落点 final §4.1;
 - 软删除实体的 HTTP 语义（restore 端点、`include_deleted`）——defer，
   与 OwnedBy 同理;
 - `json:` 算子（§4.3）——defer;
 - `in:`/`between:` 值内逗号——入档为已知限制，暂不解;
-- 重复同名过滤参数语义（§8.7）——实现时定;
+- ~~重复同名过滤参数语义（§8.7）~~——**已裁决**（见 §8.7 条目）;
 - 迁移说明写到哪（README Known limitations vs MIGRATION.md）——沿
   DESIGN-v2 §9.6 继续悬置，#23 收口时定;
 - ~~preset 式语法糖~~——**已裁决：不设**（owner，2026-08-08，裁决与结构性
@@ -867,3 +873,68 @@ mux.Handle("/api/", http.StripPrefix("/api", h))
   （注册、下单、开票……）是常态而非例外;
 - 三种定制方式各就各位：中间件在 Mount 外、自定义实现替换整单元、external 整动词自持——
   没有一处发生在生成类型内部（#29 的比例论证闭环）。
+
+---
+
+## 13. 第三轮 grilling 记录（2026-08-08，主线程独审 + 源码接地）
+
+第二轮对抗评审（§12）与 arbitrate（§12.5）之后的一轮。**不是评审，是拷问**：
+单线程逐支走设计树，每问附推荐与代价，owner 逐条裁决。与前两轮的分工差别在
+取证方式——本轮的发现全部来自**回源码核实**（ent v0.14.4 的 `entc/gen`、本仓
+生成物、owner 的前作 entigo），而不是模型的独立视角。13 条裁决全部就地折进
+`DESIGN-v3-final.md` 并标注"（owner 裁决，2026-08-08）"。
+
+### 13.1 裁决清单
+
+| # | 题目 | 裁决 | 落点 |
+|---|---|---|---|
+| 1 | 事务边界（§9 实现前必决遗留项） | 签名不动，不设 `*Tx` 变体、不走 tx-from-context；`tx.Client()` 是既有出路，框架永不生成事务边界 | final §2.6 |
+| 2 | 主键的查询面 | 天然进 Filterable+Sortable，零注解；永不 Searchable；`id` 上任何偏离词生成期拒绝 | final §1.3 + §1.4 |
+| 3 | `Summary` 字段集与列表行形状 | Summary = 响应字段全集减边（收窄 defer）；`GET /xs` 每行返回 `Response`，边照常 Expand | final §1.2 |
+| 4 | 附录引用的 runtime 符号 | `WriteProblem` 与 `WithActor`/`ActorFrom` 两组均导出进 runtime；actor 为 `any` | final §2.1 + §4.4 边界 2 |
+| 5 | 请求硬化 | body 1 MiB → 413；`POST`/`PATCH` 媒体类型必须 `application/json` → 415；两者零旋钮 | final §2.3 |
+| 6 | 并发写 | 本版无乐观锁/ETag，丢失更新入明账并进显式 defer | final §2.3 + §5 |
+| 7 | 重复同名过滤参数（§8.7 遗留） | AND 合并 | final §3.1，**ADR-0013** |
+| 8 | 挂载前缀与 spec 元数据（§9 遗留） | `servers` 一律不生成；`info.title`/`version` 走 `ExtensionConfig` 生成期字段 | final §4.1 |
+| 9 | HTTP 层是否可关 | 无条件生成，四条代价明写；backlog 第 7 项由"生成但不挂载"改为"HTTP 层生成开关" | final §2.1 + §5 |
+| 10 | 过滤值解析失败 | 一律 400（含 enum 成员、uuid 语法） | final §3.1，**ADR-0013** |
+| 11 | `Except` 关掉什么 | 端点+路由+OpenAPI path 关、定制点类型 `{Op}{Entity}Fn` 关、wiring 与请求 DTO 留 | final §1.1 |
+| 12 | 必填字段被 `Hidden`/`ReadOnly` 挡在 create 请求外 | 判据上移到"create 面是否可用"，三分支；§2 矩阵两行合并为一行，`Hidden` 与 `ReadOnly` 归一 | final §1.1 + §1.4 |
+| 13 | 空 PATCH 的对称面 | wiring 与空请求类型照常生成——只有"可证明必然失败"才配整族不生成 | final §1.1 |
+
+### 13.2 本轮的源码接地锚点（每条都改变了裁决）
+
+| 锚点 | 事实 | 影响 |
+|---|---|---|
+| `basicent/tx.go:139-145` | ent 生成 `func (tx *Tx) Client() *Client`，绑定当前事务 | 把 #1 从三选一变成"三个都不选"——契约一字不动 |
+| `entc/gen/type.go:225-273` | 用户声明的 `id` 赋给 `typ.ID` 而**不进** `typ.Fields`；未声明时合成的 `typ.ID` 连 `Annotations` 都是 nil | #2：偏离词在主键上要么无处可写、要么静默失效 |
+| `edges/edgesent/post_query.go:447-460` | eager-load 是整页批量（收集 FK 后一条 `IDIn(ids...)`） | #3：列表带边是 O(边数)/页，不是 N+1 |
+| `entigo/tag_filter.go:136-139` | 多值参数生成 `IN (?)` | #7：确认这是与 owner 传统的分道，须进迁移说明 |
+| `entigo/tag_filter.go:154-165` | 解析失败静默不加谓词 | #10：同上，且这是 fails-open 的形态 |
+| `extension.go:24-33` | `ExtensionConfig` 是唯一生成期配置入口；#29 已删掉两个生成开关 | #8 沿已有的缝；#9 不走回头路 |
+| `templates/dto.tmpl:356-366` | 旧 `Summary` = `responseFields` 减边，而 `responseFields` 依赖已删除的 Scope 模型 | #3：定义悬空，必须重述 |
+| `templates/filter.tmpl:96-105` | `_q` 的 OR 组作为**一个**谓词与过滤谓词同 `ps` 复合 | `CONTEXT.md` 的 `_q` 词条"不合并"措辞纠正为"两个维度，同请求 AND 复合" |
+
+### 13.3 本轮暴露的文档缺陷（非裁决，已修）
+
+- **定稿引用了不存在的符号**：`entapi.WithActor`（§4.4 明写"本版不设计"）与
+  `entapi.WriteProblem`（在 scope 内但从未具名）——两者只出现在样例里。由 #4 闭合;
+- **`Summary` 全文无定义**：三处提及全是"目标实体 Summary，一层"。由 #3 闭合;
+- **矩阵的不对称**：`ReadOnly` × 必填无 Default 是无条件拒绝，`Hidden` × 同情形
+  却被 `Except(OpCreate)` 豁免——两行讲同一件事。由 #12 归一;
+- **#11 的原始论据被 #12 推翻了一半**：附录 `POST /register` 被用作"wiring 该
+  保留"的例证，而它恰好落在 create 一族不生成的分支里（`password_hash` 是
+  Hidden 的必填无默认字段）。final §1.1 的论据已改为不依赖该样例，附录同步改写。
+  **留档不删**：这是本轮唯一一处"裁决 N 的理由被裁决 N+1 证伪"，而裁决本身仍成立;
+- **ADR-0007 的 Consequences 早已写过"typed fields still fail value-parse to
+  400"**，但六条规则表与正文从未规定，闭集成员（enum/uuid）完全未覆盖。
+  因此 #10 的准确定性是**把脚注提升为规范并扩展到闭集**，不是全新裁决——
+  ADR-0013 按此措辞。
+
+### 13.4 未闭合项（诚实结转）
+
+- **待验证**：ent 的 `UpdateOne` 在零 setter 时是否仍发 SQL、`UpdateDefault`
+  字段（如 `updated_at`）是否照写。#13 不依赖该事实（"无用但不坏"两种情况都
+  成立），但实现空 PATCH wiring 前必须先跑，否则生成的 godoc 会写错;
+- **两条迁移破坏必须写在同一处**：`IN`→`AND`（恒空结果，200 无告警）与
+  坏值 200→400。落点仍随 #23 收口时定（§9 既有悬置项）。

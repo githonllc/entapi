@@ -27,7 +27,7 @@ is derived. The surface is:
 - Derived, not declared: create/patch presence from
   Optional/Default/Nillable/Immutable (#26 rules), response exclusion from
   `Sensitive()`, the ID from `$.ID`, no-PATCH from empty `MutableFields`
-  (refused unless `Except(OpUpdate)` is written).
+  (refused unless `Except(OpPatch)` is written).
 - Validator values (`MinLen`, `Match`, …) stay ent-side: they are erased
   before codegen (serialization boundary + closure opacity), so the HTTP
   layer classifies ent's own `ValidationError` instead of re-declaring rules.

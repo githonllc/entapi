@@ -21,7 +21,7 @@
 - **`api.Resource()`**——实体级唯一开关：标了它获得完整生成 CRUD 面，
   不标则该实体零产出。
 - **`api.Resource().Except(api.OpCreate, …)`**——细粒度操作子集，
-  枚举常量 `OpCreate / OpUpdate / OpDelete / OpGet / OpList`。
+  枚举常量 `OpCreate / OpPatch / OpDelete / OpGet / OpList`。
 
 ### 1.2 字段级：沉默 + 五词偏离
 
@@ -63,9 +63,10 @@ HTTP 层分类 `ent.ValidationError` → 422。
 
 主键 ID 天然是第 6 行，零注解。查询三维度与此表正交。
 
-命名规则：**操作名说 Update**（`OpUpdate`、`Update{Entity}`、
-`Update{Entity}Fn`），**线格式名说 Patch**（HTTP `PATCH`、
-`{Entity}PatchRequest`）。只有部分更新，没有 PUT。
+命名**全线用 Patch**：`OpPatch`、`Patch{Entity}`、`Patch{Entity}Fn`、
+`{Entity}PatchRequest`、HTTP `PATCH`——一个概念一个名，没有要背的换算规则。
+只有部分更新，没有 PUT（也因此没有需要"Update"来区分的第二个操作）。
+ent 构建器仍叫 `UpdateOne`——那条缝在两个产品之间，不在本框架的面内。
 
 ### 1.4 拒绝矩阵（矛盾 → 生成失败并报出两个事实）
 
@@ -76,7 +77,7 @@ HTTP 层分类 `ent.ValidationError` → 422。
 | `Sensitive` × `ReadOnly` | 拒绝，消息指路 `Hidden` |
 | `ReadOnly` × ent 必填且无 Default | 拒绝（创建必然失败） |
 | `Hidden` × ent 必填且无 Default，且 `OpCreate` 未 Except | 拒绝（同上；修复：`Except(OpCreate)` 或给 Default/Optional） |
-| 全字段 Immutable 且未 `Except(OpUpdate)` | 拒绝（空 PATCH 端点） |
+| 全字段 Immutable 且未 `Except(OpPatch)` | 拒绝（空 PATCH 端点） |
 | `Expand` → 非 Resource | 拒绝 |
 | `_` 开头字段名进查询面 | 拒绝（保留命名空间） |
 | `ReadOnly` × 查询三维度 | **允许** |
@@ -270,9 +271,9 @@ mux.HandleFunc("POST /login", Login(client))
 只改一步而不换请求形状时用换脑：
 
 ```go
-ent.API(client).With(ent.UpdateUserFn(func(ctx context.Context, db *ent.Client,
+ent.API(client).With(ent.PatchUserFn(func(ctx context.Context, db *ent.Client,
 	id uuid.UUID, v *ent.ValidUserPatchRequest) (*ent.UserResponse, error) {
-	resp, err := ent.UpdateUser(ctx, db, id, v)
+	resp, err := ent.PatchUser(ctx, db, id, v)
 	if err == nil && v.HasStatus() { notify(ctx, id) }
 	return resp, err
 }))

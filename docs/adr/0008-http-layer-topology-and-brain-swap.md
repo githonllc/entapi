@@ -35,9 +35,14 @@ and #16/#29 established that customisation inside generated types
   The framework never generates a service skeleton.
 - **URL face:** `snake(plural(Name))` paths, five endpoints
   (`GET /xs`, `POST /xs`, `GET/PATCH/DELETE /xs/{id}`); `DeleteBatch` stays
-  service-layer only. Update is PATCH-only (partial, tri-state presence);
-  there is no PUT — full replacement would turn every added schema field
-  into a breaking change for deployed clients.
+  service-layer only. The update operation is PATCH-only (partial, tri-state
+  presence); there is no PUT — full replacement would turn every added schema
+  field into a breaking change for deployed clients. **The operation is
+  named Patch end to end** (`OpPatch`, `Patch{Entity}`, `Patch{Entity}Fn`,
+  `{Entity}PatchRequest`): with no PUT there is no second member for an
+  Update/Patch split to distinguish, so one concept gets one name
+  (owner, 2026-08-08). ent's own builders keep their `Update*` names —
+  that seam lies between two products, not inside this framework's surface.
 
 ## Consequences
 

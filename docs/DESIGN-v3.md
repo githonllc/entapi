@@ -50,10 +50,11 @@ Scope 宪章不变：**注解只控制 HTTP 层生成，永不限制 service 层
 
 操作子集走**细粒度 `api.Resource().Except(api.OpDelete, …)`**（owner 裁决，
 否决了作者推荐的粗粒度 `ReadOnly()`，见 §6.5）。操作枚举 `api.OpCreate` /
-`OpUpdate` / `OpDelete` / `OpGet` / `OpList` 是 `api` 包的导出常量。
+`OpPatch` / `OpDelete` / `OpGet` / `OpList` 是 `api` 包的导出常量
+（原稿作 `OpUpdate`，随 §1.5 的命名裁决改为 Patch）。
 
 随附一条从 §9.2 政策机械导出的推论：**全字段 Immutable 而未写
-`Except(api.OpUpdate)` → 生成期拒绝**，消息点名两个事实并给出修复行。
+`Except(api.OpPatch)` → 生成期拒绝**，消息点名两个事实并给出修复行。
 空 PATCH 端点不是"可以正确生成的东西"，而 Except 的存在让修复恰好是一行。
 
 ### 1.3 字段级：五词偏离词表（裁决）
@@ -160,10 +161,13 @@ ReadOnly + external 动作场景）。留缺的**裁决不变**，但理由从"�
 过早可给）或 ReadOnly + external 动作端点；专用词等真实消费者的压力再加"。
 
 命名规则说破（表列名用 Patch 的原因）：更新面只有一个、没有 PUT——
-**操作名说 Update**（`api.OpUpdate`、wiring `Update{Entity}`、槽位
-`Update{Entity}Fn`，与 ent 的 `UpdateOne` 同族），**线格式名说 Patch**
-（HTTP 动词 `PATCH`、请求类型 `{Entity}PatchRequest`——三态 presence 的部分
-更新，叫 UpdateRequest 会误示整体替换语义）。上表讲请求形状，故用线格式名。
+~~操作名说 Update、线格式名说 Patch~~——**该双名规则已被 owner 推翻
+（2026-08-08）：命名全线用 Patch**（`api.OpPatch`、`Patch{Entity}`、
+`Patch{Entity}Fn`）。推翻理由留档：双名规则守卫的 Update/Patch 区分在本框架
+没有第二个成员（没有 PUT），规则本身违反"一件事一种写法"，且 k8s 语境里
+Update = 整体替换、名不副实。原规则的辩护论据（ent `UpdateOne` 同族、
+gRPC/AIP "Update + field mask" 惯例）记录在案——ent 的缝在两个产品之间，
+不在本框架面内。
 这张表应随实现进入 README/godoc——解决"逐面枚举 → v3 写法"的脑内转换负担的
 是文档速查，不是 API 面。
 
@@ -196,7 +200,7 @@ ReadOnly + external 动作场景）。留缺的**裁决不变**，但理由从"�
 | `Hidden` × ent 必填且无 Default，且 `OpCreate` 未 Except | 拒绝 | 同上一行的死路：生成的 create 没有该字段、ent 又必填，每次创建被 ent 校验器拒。修复行二选一：`Except(api.OpCreate)`（创建走 external，见附录 A 的 password_hash），或给字段 Default/Optional |
 | `ReadOnly` × 查询三维度 | 允许 | 按 created_at 过滤/排序是正常需求 |
 | `Expand` → 非 Resource | 拒绝 | 目标无 Summary，产物不编译 |
-| 全 Immutable 且未 `Except(OpUpdate)` | 拒绝（§1.2） | 空 PATCH 端点 |
+| 全 Immutable 且未 `Except(OpPatch)` | 拒绝（§1.2） | 空 PATCH 端点 |
 | `_` 开头字段名进查询面 | 拒绝（§4.4） | 与保留参数命名空间冲突 |
 
 矩阵之外全部照 #26 已裁决的 presence 规则推导。注意旧 §9.2 的
@@ -708,9 +712,9 @@ mux.HandleFunc("POST /login", Login(client))                 // login 从头到�
 只改一步而不换请求形状时才用**换脑**（§3.2）——如 suspend 时发通知：
 
 ```go
-ent.API(client).With(ent.UpdateUserFn(
+ent.API(client).With(ent.PatchUserFn(
 	func(ctx context.Context, db *ent.Client, id uuid.UUID, v *ent.ValidUserPatchRequest) (*ent.UserResponse, error) {
-		resp, err := ent.UpdateUser(ctx, db, id, v)          // 默认实现就是槽位的零值
+		resp, err := ent.PatchUser(ctx, db, id, v)           // 默认实现就是槽位的零值
 		if err == nil && v.HasStatus() { notify(ctx, id) }
 		return resp, err
 	}))

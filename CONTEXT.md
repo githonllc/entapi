@@ -69,5 +69,9 @@ _Avoid_: search, keyword
 _Avoid_: header comment
 
 **wiring**:
-每实体六个操作的自由函数层（List/Get/Create/Update/Delete/DeleteBatch），接受 validated request，经 ErrorMap 恰好映射一次错误。
+每实体六个操作的自由函数层（List/Get/Create/Patch/Delete/DeleteBatch），接受 validated request，经 ErrorMap 恰好映射一次错误。
 _Avoid_: service, base service
+
+**Patch**:
+本框架唯一的更新操作，全线一名：`OpPatch`、`Patch{Entity}`、`Patch{Entity}Fn`、`{Entity}PatchRequest`、HTTP `PATCH`。部分更新、三态 presence；没有 PUT。ent 构建器的 `Update*` 名不在本框架面内。
+_Avoid_: Update（本框架符号中）, UpdateRequest, PUT

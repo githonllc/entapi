@@ -58,7 +58,7 @@ http.ListenAndServe(":8080", ent.API(client))
 - [生成会失败，而这正是设计](#生成会失败而这正是设计)
 - [生成器对你的目录做了什么](#生成器对你的目录做了什么)
 - [字段形态](#字段形态) · [被接受但不被消费的](#被接受但不被消费的)
-- [陷阱](#陷阱) · [限制](#限制) · [与 DESIGN-v2 的偏离](#与-design-v2-的偏离) · [迁移注记](#迁移注记)
+- [陷阱](#陷阱) · [限制](#限制) · [与 DESIGN-v2 的偏离](#与-design-v2-的偏离) · [与 DESIGN-v3 的偏离](#与-design-v3-的偏离) · [迁移注记](#迁移注记)
 
 ---
 
@@ -599,6 +599,23 @@ func DeleteArticle(ctx context.Context, db *Client, id uuid.UUID) error
 func DeleteBatchArticles(ctx context.Context, db *Client, ids []uuid.UUID) (int, error)
 ```
 
+**它们每一个都收 `*Client`，这就是事务契约：本包永不生成事务边界。** 没有 `*Tx` 变体，
+也没有 tx-from-context 查找。要把生成的某一步纳入你自己的事务，把 ent 已经绑定到该事务的
+那个 client 递给它：
+
+```go
+tx, err := db.Tx(ctx)
+// ...
+resp, err := ent.PatchUser(ctx, tx.Client(), id, v)   // 生成的那一步，在你的事务里
+_, err = tx.Client().AuditLog.Create(). /* ... */ .Save(ctx)
+err = tx.Commit()
+```
+
+两条后果值得直说。`*Tx` 变体会让每个定制点长出一个孪生签名，而「定制点签名与 wiring 函数
+逐字相同」正是让一次写错的替换变成**编译错误**而不是运行期意外的那个东西。另外
+`ent.API(client)` 持有的是根 client，所以自定义实现在 HTTP 路径上拿到的 `db` **不是**
+tx-bound 的——那里若要事务，自己开，再经 `tx.Client()` 调生成的 wiring。
+
 任何地方都没有硬编码的标识符类型——id 来自你的 schema 的 `$.ID.Type`，并作为类型参数抵达
 运行时，所以一个 `int` 主键连 import 都不需要。
 
@@ -871,13 +888,22 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
   深度仍是 O(n)，并且在*并发写入下*仍可能跳过或重复行。包内没有 keyset 替代方案，也没有
   游标类型。
 - **摘要永远是一层深。** 没有深度选项。
-- **摘要携带哪些标量字段无法从 schema 判定**，所以摘要携带每个响应作用域字段减去边。想收窄
+- **摘要携带哪些标量字段无法从 schema 判定**，所以摘要携带每个响应可见字段减去边。想收窄
   它需要一个新注解。
+- **没有乐观锁，丢失更新是已知边界。** 生成的 patch wiring 是
+  `v.Apply(db.X.UpdateOneID(id))`，不带版本谓词（`templates/wiring.tmpl` — `Patch{Entity}`），
+  所以两个并发 `PATCH` 打同一个字段时，后到者静默胜出。受害面比 PUT 语义窄——本包只有部分
+  更新，改不同字段的两个 patch 互不影响。不加版本词，是因为框架没有合法途径知道哪一列是
+  版本列，而按名猜 `version`/`updated_at` 正是 #18 退役掉的那类约定推导。出路是定制点：
+  用 `With(ent.PatchXFn(...))` 整单元替换那一步，在里面写自己的 `Where(x.Version(v))`，
+  并对零行受影响返 409。
 - **产物与 ent 的输出同处一个包。** 生成器不建独立的 `dto` 子包，也没有配置项可以换目录；
   它对目标目录的所有权靠 marker 逐文件判定，而不是靠独占一个目录。
-- **作用域只控制 HTTP 结构体的生成。** 它们绝不限制你的 service 层能拿一个 ent 实体做什么。
-  任何需要强制的东西，必须在构造查询的地方强制。
-- **生成器包在包初始化时加载全部五个模板。** 这被限制在 `entc.go` 与 schema 文件里；
+- **注解只控制 HTTP 层的生成。** 它们绝不限制你的 service 层能拿一个 ent 实体做什么——
+  `Except` 关掉的是端点、路由与 `{Op}{Entity}Fn` 类型，wiring 函数与请求 DTO 留在原地。
+  唯一例外是可证明无法工作的 create 一族（见「注解模型」）。任何需要强制的东西，必须在
+  构造查询的地方强制。
+- **生成器包在包初始化时加载全部十个模板。** 这被限制在 `entc.go` 与 schema 文件里；
   `runtime/` 就是把它挡在你的二进制之外的那个东西。
 
 ## 与 DESIGN-v2 的偏离
@@ -892,6 +918,23 @@ T3 已经全部落地。三处偏离，都是有意的：
 | §8.4 `OutputPackage` 配置项 | **未做**，因 §1.6 未做而无意义。唯一的选项是 `WithEntAPIPackage` |
 
 设计文档里明确「延后」的 T2（受众维度）同样没有实现，这与设计一致。
+
+## 与 DESIGN-v3 的偏离
+
+[`docs/DESIGN-v3-final.md`](docs/DESIGN-v3-final.md) 的抬头同样写着「实现未开始」，
+那也是**陈旧的**：它列的八个切片（#69–#76）已全部落地，分别由 #77、#78、#81、#82、#84、
+#85、#86、#87 关闭。读它是为了拿决策与理由，**不要拿它当现行 API** ——其中三处在实现期被
+取代了，以代码为准：
+
+| 设计条目 | 现状 |
+|---|---|
+| §2.1 / §2.5 `ent.API(client)` 返回 `*API`；`func (a *API) Routes()` | 类型是 **`*APIHandler`**（`templates/http.tmpl` — `API`）。`API` 是构造函数的名字，同一个包里 handler 不可能也叫这个 |
+| §4.3 软删除由生成的 `init()` 注册，失败回落显式 `RegisterSoftDelete(client)` | 两者都不存在。#78 改用 Ent 在 `newConfig` 内部执行的 `config/init/fields/*` **partial**（`templates/softdelete_config_init.tmpl`）直接填 hook 与 interceptor，于是 `NewClient`、`Open`、`enttest.Open` 以及之后每一份 config 拷贝都自带它们，既无注册调用也无初始化顺序依赖。`RegisterSoftDelete` 是被**删除**，不是留作回落 |
+| §2.3 生成的 handler 开 `DisallowUnknownFields`，被拒字段名从 `encoding/json` 的错误文本里抠 | handler 先把 body 解进 `map[string]json.RawMessage`，再拿 key 与生成的 `{entity}{Op}RequestTags` 数据比对（`templates/handler.tmpl`），经 `entapi.FieldError` 报出那个 key。设计文档把「抠错误文本」列为已知残余，这个实现把它消掉了——字段名现在是生成的数据，不是解析出来的字符串。`DisallowUnknownFields` 仍然是消费者自己单独解 DTO 时的决定 |
+
+那份文档里的其余内容——五个偏离词、`Except` 的三层语义与 create 一族例外、op-in-value 线
+格式、`_` 命名空间、413/415 请求硬化、RFC 9457 错误、`Routes()`，以及 OpenAPI 那几条
+裁决——描述的就是已经发布的东西。
 
 ## 迁移注记
 

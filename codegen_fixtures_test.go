@@ -78,10 +78,9 @@ type fixtureCase struct {
 	wantGenErr []string
 }
 
-// Every case now runs with no options at all. WithBaseService and
-// WithBaseHandler were the only two, and #29 removed both along with the
-// templates they selected; every artifact is emitted unconditionally for an
-// annotated entity.
+// Most cases run with no options. strictquery is the first fixture to exercise
+// the opts path; the removed WithBaseService and WithBaseHandler options no
+// longer select which artifacts are emitted.
 var fixtures = []fixtureCase{
 	{dir: "basic"},
 	{dir: "fieldshapes"},
@@ -99,6 +98,7 @@ var fixtures = []fixtureCase{
 	{dir: "selfrefpartial"},
 	{dir: "presence"},
 	{dir: "query"},
+	{dir: "strictquery", opts: []Option{WithStrictQueryOperators()}},
 	{dir: "queryconflict", wantGenErr: []string{
 		"Bad.tags", "Sortable", "not comparable",
 		"Bad.count", "Searchable", "no Contains",

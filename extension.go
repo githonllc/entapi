@@ -32,6 +32,11 @@ type ExtensionConfig struct {
 	// Default: "github.com/githonllc/entapi/runtime"
 	EntAPIPackage string
 
+	// StrictQueryOperators makes an unrecognised operator prefix a validation
+	// failure instead of falling back to whole-value equality. It is off by
+	// default because bare RFC-3339 timestamps rely on that fallback.
+	StrictQueryOperators bool
+
 	// OpenAPITitle is info.title of the generated openapi.yaml.
 	// Default: the ent package name plus " API", e.g. "ent API".
 	OpenAPITitle string
@@ -582,7 +587,7 @@ func writeFormatted(path string, formatted []byte) error {
 // templateFuncMap returns the combined template function map with Ent standard functions.
 //
 // The layering is Ent's gen.Funcs first, then templateFuncs(), then the
-// entapiPkg closure — so a later source wins on a name collision, silently
+// configuration closures — so a later source wins on a name collision, silently
 // and invisibly at the call site. That shadowing hazard is neutralised at the
 // source rather than managed here: templateFuncs() is required to stay
 // disjoint from gen.Funcs, which TestTemplateFuncsDoNotShadowEntBuiltins
@@ -604,6 +609,9 @@ func (e *Extension) templateFuncMap() template.FuncMap {
 
 	pkg := e.Config.EntAPIPackage
 	funcs["entapiPkg"] = func() string { return pkg }
+	strictQueryOperators := e.Config.StrictQueryOperators
+	// Configuration closures deliberately stay out of templateFuncs().
+	funcs["strictQueryOperators"] = func() bool { return strictQueryOperators }
 
 	// The two OpenAPI info fields are closures for the same reason entapiPkg
 	// is: they are configuration, not a property of the graph. openapiTitle
@@ -633,15 +641,20 @@ func (e *Extension) templateFuncMap() template.FuncMap {
 type Option func(*ExtensionConfig)
 
 // WithBaseService and WithBaseHandler have been removed along with the
-// templates they selected (#29). They were the only two options, so a call site
-// that passed them now passes nothing — which is also the whole configuration
-// this extension has left, apart from the import path below. See the migration
-// note in README.md.
+// templates they selected (#29). A call site that passed them now omits them;
+// see the migration note in README.md.
 
 // WithEntAPIPackage sets the import path for the entapi package
 func WithEntAPIPackage(pkg string) Option {
 	return func(c *ExtensionConfig) {
 		c.EntAPIPackage = pkg
+	}
+}
+
+// WithStrictQueryOperators rejects unrecognised query operator prefixes.
+func WithStrictQueryOperators() Option {
+	return func(c *ExtensionConfig) {
+		c.StrictQueryOperators = true
 	}
 }
 

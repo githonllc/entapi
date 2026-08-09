@@ -138,10 +138,13 @@ func main() {
 }
 ```
 
-There are three options. `WithEntAPIPackage` rewrites the runtime path the
+There are four options. `WithEntAPIPackage` rewrites the runtime path the
 generated files import, and its default is already
 `github.com/githonllc/entapi/runtime`, so it matters only if you vendored a
-copy. `WithOpenAPITitle` and `WithOpenAPIVersion` set `info.title` and
+copy. `WithStrictQueryOperators()` makes an unrecognised operator prefix a
+validation failure; it is off by default so bare RFC-3339 timestamps keep
+working as whole-value equality literals. `WithOpenAPITitle` and
+`WithOpenAPIVersion` set `info.title` and
 `info.version` of the generated `openapi.yaml`; unset they default to the ent
 package name plus `" API"` and to `0.0.0`. The version is deliberately NOT read
 from a git tag — generation must not depend on working-tree state, or a clean
@@ -154,8 +157,9 @@ and written by the hook.
 
 > **Implementation:** `extension.go` — `Extension`, `ExtensionConfig`,
 > `NewExtension`, `NewExtensionWithOptions`, `Option`, `WithEntAPIPackage`,
-> `WithOpenAPITitle`, `WithOpenAPIVersion`, `defaultEntAPIPackage`, `Hooks`,
-> `Templates`, `Annotations`, `Options`, `ConfigAnnotation`
+> `WithStrictQueryOperators`, `WithOpenAPITitle`, `WithOpenAPIVersion`,
+> `defaultEntAPIPackage`, `Hooks`, `Templates`, `Annotations`, `Options`,
+> `ConfigAnnotation`
 
 ## The annotation model
 
@@ -721,8 +725,10 @@ equality literals and do not become implicit `LIKE` patterns.
 Parsing follows six ordered rules: an empty bare value is ignored but empty
 `eq:` is real; no colon means equality; an allowed prefix applies its operator;
 a known but disallowed prefix is validation failure; an unknown prefix falls
-back to whole-value equality; explicit `eq:` escapes operator-looking values.
-Conversion failures name the field and value and wrap `entapi.ErrValidation`.
+back to whole-value equality (which permits bare RFC-3339 timestamps), but under
+`WithStrictQueryOperators()` it is a validation failure and such timestamps
+must use `eq:`; explicit `eq:` escapes operator-looking values. Conversion
+failures name the field and value and wrap `entapi.ErrValidation`.
 
 Repeated field parameters are separate `AND`ed predicates, including repeated
 equality. Consequently scalar filter slots are slices, and `in:`/`not_in:`
@@ -1179,7 +1185,7 @@ deviations remain, all deliberate:
 |---|---|
 | §1.6 move output into an `ent/dto` subpackage | **Not done, and superseded.** Output lands in the consumer's `ent` package; handler decoupling is achieved by the generated free functions rather than by package placement |
 | §8.1 refuse generation when the directory holds files that are not ours | **Not done.** Cleanup **leaves such files in place and logs them**. It depended on §1.6's exclusive directory |
-| §8.4 an `OutputPackage` config option | **Not done**, and moot without §1.6. The only option is `WithEntAPIPackage` |
+| §8.4 an `OutputPackage` config option | **Not done**, and moot without §1.6. The supported options configure the runtime import path, strict query parsing, or OpenAPI info; none relocates output |
 
 T2 (the audience dimension), which the design itself deferred, is likewise
 unimplemented — consistent with the design.

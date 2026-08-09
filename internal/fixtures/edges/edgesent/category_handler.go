@@ -6,11 +6,7 @@ package edgesent
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"mime"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -38,27 +34,12 @@ func (h *APIHandler) handleListCategories(w http.ResponseWriter, r *http.Request
 
 	response, err := h.listCategories(r.Context(), h.client, filter, request)
 	if err != nil {
-		status := http.StatusInternalServerError
-		switch {
-		case entapi.IsNotFound(err):
-			status = http.StatusNotFound
-		case entapi.IsAlreadyExists(err):
-			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
-		}
+		status := entapi.Status(err, http.StatusBadRequest)
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 
-	body, err := json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusOK, response)
 }
 
 // CreateCategoryFn is byte-identical to CreateCategory.
@@ -72,52 +53,10 @@ func (f CreateCategoryFn) applyOption(h *APIHandler) {
 }
 
 func (h *APIHandler) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
-		entapi.WriteProblem(w, http.StatusUnsupportedMediaType, http.StatusText(http.StatusUnsupportedMediaType),
-			errors.New("content type must be application/json"))
-		return
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			entapi.WriteProblem(w, http.StatusRequestEntityTooLarge, http.StatusText(http.StatusRequestEntityTooLarge), err)
-			return
-		}
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
-	unknownField := ""
-	for key := range raw {
-		known := false
-		for _, tag := range categoryCreateRequestTags {
-			if key == tag {
-				known = true
-				break
-			}
-		}
-		if !known && (unknownField == "" || key < unknownField) {
-			unknownField = key
-		}
-	}
-	if unknownField != "" {
-		err := &entapi.FieldError{
-			Field: unknownField,
-			Err:   fmt.Errorf("%w: unknown field %q", entapi.ErrValidation, unknownField),
-		}
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
 	var request CategoryCreateRequest
-	if err := json.Unmarshal(body, &request); err != nil {
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
+	if err := entapi.BindJSON(w, r, categoryCreateRequestTags, &request); err != nil {
+		status := entapi.Status(err, http.StatusBadRequest)
+		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 	validated, err := request.Validate()
@@ -128,27 +67,12 @@ func (h *APIHandler) handleCreateCategory(w http.ResponseWriter, r *http.Request
 
 	response, err := h.createCategory(r.Context(), h.client, validated)
 	if err != nil {
-		status := http.StatusInternalServerError
-		switch {
-		case entapi.IsNotFound(err):
-			status = http.StatusNotFound
-		case entapi.IsAlreadyExists(err):
-			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusUnprocessableEntity
-		}
+		status := entapi.Status(err, http.StatusUnprocessableEntity)
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 
-	body, err = json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusCreated, response)
 }
 
 // GetCategoryFn is byte-identical to GetCategory.
@@ -182,14 +106,7 @@ func (h *APIHandler) handleGetCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusOK, response)
 }
 
 // PatchCategoryFn is byte-identical to PatchCategory.
@@ -203,52 +120,10 @@ func (f PatchCategoryFn) applyOption(h *APIHandler) {
 }
 
 func (h *APIHandler) handlePatchCategory(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
-		entapi.WriteProblem(w, http.StatusUnsupportedMediaType, http.StatusText(http.StatusUnsupportedMediaType),
-			errors.New("content type must be application/json"))
-		return
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			entapi.WriteProblem(w, http.StatusRequestEntityTooLarge, http.StatusText(http.StatusRequestEntityTooLarge), err)
-			return
-		}
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
-	unknownField := ""
-	for key := range raw {
-		known := false
-		for _, tag := range categoryPatchRequestTags {
-			if key == tag {
-				known = true
-				break
-			}
-		}
-		if !known && (unknownField == "" || key < unknownField) {
-			unknownField = key
-		}
-	}
-	if unknownField != "" {
-		err := &entapi.FieldError{
-			Field: unknownField,
-			Err:   fmt.Errorf("%w: unknown field %q", entapi.ErrValidation, unknownField),
-		}
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
 	var request CategoryPatchRequest
-	if err := json.Unmarshal(body, &request); err != nil {
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
+	if err := entapi.BindJSON(w, r, categoryPatchRequestTags, &request); err != nil {
+		status := entapi.Status(err, http.StatusBadRequest)
+		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 	validated, err := request.Validate()
@@ -265,27 +140,12 @@ func (h *APIHandler) handlePatchCategory(w http.ResponseWriter, r *http.Request)
 
 	response, err := h.patchCategory(r.Context(), h.client, id, validated)
 	if err != nil {
-		status := http.StatusInternalServerError
-		switch {
-		case entapi.IsNotFound(err):
-			status = http.StatusNotFound
-		case entapi.IsAlreadyExists(err):
-			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusUnprocessableEntity
-		}
+		status := entapi.Status(err, http.StatusUnprocessableEntity)
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 
-	body, err = json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusOK, response)
 }
 
 // DeleteCategoryFn is byte-identical to DeleteCategory.

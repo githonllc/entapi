@@ -90,7 +90,7 @@ packages are named `entapi`; the schema package is named `api`.
 |---|---|---|
 | `github.com/githonllc/entapi` | your `entc.go`; schemas that embed soft delete | `Extension`, `SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | your **schema** files | `Resource`, `Hidden`, `ReadOnly`, `Searchable`, `Filterable`, `Sortable`, `Expand` |
-| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `WriteProblem`, `FieldError`, `Route`/`Op`, `WithActor`/`ActorFrom`, error sentinels and mapper, filter/pointer/soft-delete helpers |
+| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `BindJSON`, `Status`, `WriteJSON`, `WriteProblem`, `FieldError`, `Route`/`Op`, `WithActor`/`ActorFrom`, error sentinels and mapper, filter/pointer/soft-delete helpers |
 
 The split is load-bearing, not cosmetic. The root package embeds eight templates
 with `//go:embed` and reads all eight out of the embedded filesystem **at package
@@ -360,6 +360,8 @@ POST and PATCH accept only `application/json`; media-type parameters are
 allowed. Their body is capped at **1 MiB before reading, with no configuration
 knob**. Unknown keys are compared against the generated create/patch tag data,
 so an immutable PATCH key is rejected by name rather than silently discarded.
+All three rules live in `entapi.BindJSON`, which a hand-written handler can call
+too — see [Bring your own handler](#bring-your-own-handler).
 
 `WithActor` and `ActorFrom` carry authentication state through middleware.
 
@@ -534,6 +536,72 @@ Router-level unmatched paths and methods remain the stdlib mux's plain-text
 404/405 responses (including `Allow` on 405), not problem+json. This residue is
 intentional: installing catch-alls would make mounting into a consumer mux
 behave differently from serving the generated tree directly.
+
+### Bring your own handler
+
+Every generated handler is bind → call → write, and all three steps are exported
+runtime functions. A hand-written endpoint — on `net/http`, on a third-party
+router, for an entity this generator does not own — gets the same behaviour by
+calling them instead of copying a generated body:
+
+```go
+func BindJSON(w http.ResponseWriter, r *http.Request, tags []string, dst any) error
+func Status(err error, onValidation int) int
+func WriteJSON(w http.ResponseWriter, status int, v any) error
+```
+
+`BindJSON` applies the same three bind rules: the 1 MiB `MaxBytesReader` cap, the
+`application/json` media-type check, and rejection of any body key absent from
+`tags`. Its error is **total**: every error it returns wraps exactly one of
+`entapi.ErrUnsupportedMediaType`, `entapi.ErrRequestTooLarge` or
+`entapi.ErrValidation`, so `Status` classifies all of them and there is no fourth
+case to write a branch for. It takes `w` only because `http.MaxBytesReader` needs
+it, and **writes nothing** — the caller owns the response, including its shape.
+
+`Status` returns 415 and 413 for the two bind sentinels, 404 for
+`entapi.ErrNotFound`, 409 for `entapi.ErrAlreadyExists`, `onValidation` for
+`entapi.ErrValidation`, 500 for anything else, and 0 for a nil error. The
+`onValidation` argument is the whole 400-vs-422 convention: generated handlers
+pass **400 for a bind failure** (the request is malformed) and **422 for a
+middle-step failure** (the request parsed, and the domain rejected it). Pass the
+same two and a custom endpoint answers like a generated one; pass others and it
+answers however you chose.
+
+`WriteJSON` marshals before touching the response, so a marshal failure becomes a
+clean 500 problem response rather than a truncated 200.
+
+Nothing here is Ent-specific — `entapi/runtime` imports the standard library only
+— so this works with your own request type, your own tag list, and your own
+response envelope. A Gin endpoint that answers in the caller's envelope rather
+than in problem+json:
+
+```go
+type createTicketRequest struct {
+    Subject string `json:"subject"`
+}
+
+var createTicketTags = []string{"subject"}
+
+func (s *server) createTicket(c *gin.Context) {
+    var req createTicketRequest
+    if err := entapi.BindJSON(c.Writer, c.Request, createTicketTags, &req); err != nil {
+        c.JSON(entapi.Status(err, http.StatusBadRequest), envelope{Error: err.Error()})
+        return
+    }
+
+    ticket, err := s.tickets.Create(c.Request.Context(), req.Subject)
+    if err != nil {
+        c.JSON(entapi.Status(err, http.StatusUnprocessableEntity), envelope{Error: err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusCreated, envelope{Data: ticket})
+}
+```
+
+The generated tag slices (`articleCreateRequestTags`, …) are unexported members
+of your `ent` package, so a handler outside it declares its own — which is the
+point: `tags` is the caller's allow-list, not a generated one.
 
 ## Requests: three-state presence
 
@@ -871,7 +939,10 @@ trigger it; only direct builder use can.
 
 > **Implementation:** `templates/wiring.tmpl`, `templates/errors.tmpl`;
 > `runtime/errors.go` — `ErrNotFound`, `ErrAlreadyExists`, `ErrValidation`,
-> `IsNotFound`, `IsAlreadyExists`, `IsValidation`; `runtime/errors_map.go` —
+> `ErrUnsupportedMediaType`, `ErrRequestTooLarge`,
+> `IsNotFound`, `IsAlreadyExists`, `IsValidation`;
+> `runtime/bind.go` — `BindJSON`, `Status`, `WriteJSON`;
+> `runtime/errors_map.go` —
 > `ErrorMapper`, `NewErrorMapper`, `WithValidation`, `WithUniqueViolation`,
 > `HasUniqueViolation`, `MapError`; `runtime/errors_dialect.go` —
 > `UniqueViolation`;

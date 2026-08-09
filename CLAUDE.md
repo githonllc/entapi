@@ -141,7 +141,12 @@ load-bearing:
   parameters from `parseFields` and the per-field operator sets in
   `funcs_filter.go`. A field, an operation or an operator spelled out in the
   template or in a test is a defect, not a shortcut. The one table that IS here
-  is `errorStatusesByOp`, read off `handler.tmpl`'s literal statuses;
+  is `errorStatusesByOp`, probed from `runtime.Status`'s behaviour together with
+  the template's call sites — `handler.tmpl` stopped spelling most statuses as
+  literals in #103, so `openapi_status_drift_test.go` now derives each branch's
+  expected set by calling `runtime.Status` over a hand-chosen sentinel list at
+  each `entapi.Status`/`entapi.BindJSON` site's `onValidation` argument, and
+  unions that with the literals still in the text;
   `openapiProblemStatuses` is its union rather than a second list.
 - **No YAML library, in either module.** `yamlQuote` is the whole mechanism:
   YAML 1.2 is a strict superset of JSON, so a JSON string literal is a YAML
@@ -340,9 +345,10 @@ family may disappear when `OpCreate` is explicitly excepted.
   no generated hook/interceptor chain; cross-cutting concerns wrap the returned
   `http.Handler`.
 - **The bind step's two hardenings have no knobs, and that is the design.**
-  Every POST/PATCH handler opens with `r.Body = http.MaxBytesReader(w, r.Body,
-  1<<20)` → 413, and an `application/json` media-type check → 415
-  (`templates/handler.tmpl`). Neither is configurable: `With` accepts exactly one
+  Every POST/PATCH handler binds through `entapi.BindJSON`, which opens with
+  `r.Body = http.MaxBytesReader(w, r.Body, 1<<20)` → 413 and an
+  `application/json` media-type check → 415 (`runtime/bind.go`; #103 moved both
+  out of `templates/handler.tmpl`, unchanged). Neither is configurable: `With` accepts exactly one
   family — per-operation replacement functions whose signature is the wiring
   function's — and a global config knob would make it two families, which is
   where its compile-time guarantee comes from. 1 MiB is therefore a hard ceiling

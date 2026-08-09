@@ -6,11 +6,7 @@ package queryent
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"mime"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -38,27 +34,12 @@ func (h *APIHandler) handleListPlains(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.listPlains(r.Context(), h.client, filter, request)
 	if err != nil {
-		status := http.StatusInternalServerError
-		switch {
-		case entapi.IsNotFound(err):
-			status = http.StatusNotFound
-		case entapi.IsAlreadyExists(err):
-			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
-		}
+		status := entapi.Status(err, http.StatusBadRequest)
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 
-	body, err := json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusOK, response)
 }
 
 // CreatePlainFn is byte-identical to CreatePlain.
@@ -72,52 +53,10 @@ func (f CreatePlainFn) applyOption(h *APIHandler) {
 }
 
 func (h *APIHandler) handleCreatePlain(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
-		entapi.WriteProblem(w, http.StatusUnsupportedMediaType, http.StatusText(http.StatusUnsupportedMediaType),
-			errors.New("content type must be application/json"))
-		return
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			entapi.WriteProblem(w, http.StatusRequestEntityTooLarge, http.StatusText(http.StatusRequestEntityTooLarge), err)
-			return
-		}
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
-	unknownField := ""
-	for key := range raw {
-		known := false
-		for _, tag := range plainCreateRequestTags {
-			if key == tag {
-				known = true
-				break
-			}
-		}
-		if !known && (unknownField == "" || key < unknownField) {
-			unknownField = key
-		}
-	}
-	if unknownField != "" {
-		err := &entapi.FieldError{
-			Field: unknownField,
-			Err:   fmt.Errorf("%w: unknown field %q", entapi.ErrValidation, unknownField),
-		}
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
 	var request PlainCreateRequest
-	if err := json.Unmarshal(body, &request); err != nil {
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
+	if err := entapi.BindJSON(w, r, plainCreateRequestTags, &request); err != nil {
+		status := entapi.Status(err, http.StatusBadRequest)
+		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 	validated, err := request.Validate()
@@ -128,27 +67,12 @@ func (h *APIHandler) handleCreatePlain(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.createPlain(r.Context(), h.client, validated)
 	if err != nil {
-		status := http.StatusInternalServerError
-		switch {
-		case entapi.IsNotFound(err):
-			status = http.StatusNotFound
-		case entapi.IsAlreadyExists(err):
-			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusUnprocessableEntity
-		}
+		status := entapi.Status(err, http.StatusUnprocessableEntity)
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 
-	body, err = json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusCreated, response)
 }
 
 // GetPlainFn is byte-identical to GetPlain.
@@ -182,14 +106,7 @@ func (h *APIHandler) handleGetPlain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusOK, response)
 }
 
 // PatchPlainFn is byte-identical to PatchPlain.
@@ -203,52 +120,10 @@ func (f PatchPlainFn) applyOption(h *APIHandler) {
 }
 
 func (h *APIHandler) handlePatchPlain(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
-		entapi.WriteProblem(w, http.StatusUnsupportedMediaType, http.StatusText(http.StatusUnsupportedMediaType),
-			errors.New("content type must be application/json"))
-		return
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			entapi.WriteProblem(w, http.StatusRequestEntityTooLarge, http.StatusText(http.StatusRequestEntityTooLarge), err)
-			return
-		}
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
-	unknownField := ""
-	for key := range raw {
-		known := false
-		for _, tag := range plainPatchRequestTags {
-			if key == tag {
-				known = true
-				break
-			}
-		}
-		if !known && (unknownField == "" || key < unknownField) {
-			unknownField = key
-		}
-	}
-	if unknownField != "" {
-		err := &entapi.FieldError{
-			Field: unknownField,
-			Err:   fmt.Errorf("%w: unknown field %q", entapi.ErrValidation, unknownField),
-		}
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
-		return
-	}
 	var request PlainPatchRequest
-	if err := json.Unmarshal(body, &request); err != nil {
-		entapi.WriteProblem(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), err)
+	if err := entapi.BindJSON(w, r, plainPatchRequestTags, &request); err != nil {
+		status := entapi.Status(err, http.StatusBadRequest)
+		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 	validated, err := request.Validate()
@@ -265,27 +140,12 @@ func (h *APIHandler) handlePatchPlain(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.patchPlain(r.Context(), h.client, id, validated)
 	if err != nil {
-		status := http.StatusInternalServerError
-		switch {
-		case entapi.IsNotFound(err):
-			status = http.StatusNotFound
-		case entapi.IsAlreadyExists(err):
-			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusUnprocessableEntity
-		}
+		status := entapi.Status(err, http.StatusUnprocessableEntity)
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 
-	body, err = json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusOK, response)
 }
 
 // DeletePlainFn is byte-identical to DeletePlain.

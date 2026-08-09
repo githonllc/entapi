@@ -110,20 +110,46 @@ func TestHandlerMiddleValidationStatusDependsOnOperation(t *testing.T) {
 		bodies[fn.Name.Name] = body.String()
 	}
 
-	assertValidationStatus := func(name, status string) {
-		t.Helper()
+	// Since #103 the 400-vs-422 decision is the onValidation argument, so it is
+	// pinned by ORDER rather than by presence: a create handler that passed 400
+	// to its middle step and 422 to its bind step would contain both spellings
+	// and satisfy any presence-only assertion.
+	const (
+		bindCall   = "entapi.BindJSON"
+		badRequest = "entapi.Status(err, http.StatusBadRequest)"
+		unprocessa = "entapi.Status(err, http.StatusUnprocessableEntity)"
+	)
+
+	listBody := bodies["handleListArticles"]
+	if !strings.Contains(listBody, "status := "+badRequest) {
+		t.Errorf("handleListArticles does not classify its middle-step error with %s\n%s", badRequest, listBody)
+	}
+	if strings.Contains(listBody, unprocessa) {
+		t.Errorf("handleListArticles must answer 400, not 422, for a validation error\n%s", listBody)
+	}
+
+	for _, name := range []string{"handleCreateArticle", "handlePatchArticle"} {
 		body := bodies[name]
-		want := "case entapi.IsValidation(err):\n\t\t\tstatus = " + status
-		if !strings.Contains(body, want) {
-			t.Errorf("%s validation arm does not map to %s\n%s", name, status, body)
+		bind, bad, unproc := strings.Index(body, bindCall), strings.Index(body, badRequest), strings.Index(body, unprocessa)
+		if bind < 0 || bad < 0 || unproc < 0 {
+			t.Errorf("%s is missing one of %q (%d), %q (%d), %q (%d)\n%s",
+				name, bindCall, bind, badRequest, bad, unprocessa, unproc, body)
+			continue
+		}
+		if bind > bad || bad > unproc {
+			t.Errorf("%s must bind first, classify the bind failure as 400, then classify the middle step as 422; got offsets bind=%d 400=%d 422=%d\n%s",
+				name, bind, bad, unproc, body)
 		}
 	}
-	assertValidationStatus("handleListArticles", "http.StatusBadRequest")
-	assertValidationStatus("handleCreateArticle", "http.StatusUnprocessableEntity")
-	assertValidationStatus("handlePatchArticle", "http.StatusUnprocessableEntity")
+
 	for _, name := range []string{"handleGetArticle", "handleDeleteArticle"} {
 		if strings.Contains(bodies[name], "entapi.IsValidation(") {
 			t.Errorf("%s must not classify an impossible middle-step validation error\n%s", name, bodies[name])
+		}
+		// Also what keeps TestErrorStatusesByOpMatchesHandlerTemplate's scan of
+		// these two branches purely textual: no entapi.Status call to probe.
+		if strings.Contains(bodies[name], "entapi.Status(") {
+			t.Errorf("%s must not route its middle step through entapi.Status, which would give it a validation arm\n%s", name, bodies[name])
 		}
 	}
 }

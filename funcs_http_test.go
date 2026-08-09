@@ -70,17 +70,16 @@ func TestHandlerImportsAreOperationAndIDSpecific(t *testing.T) {
 	node.ID = newField("id", &field.TypeInfo{
 		Type: field.TypeUUID, Ident: "uuid.UUID", PkgPath: "github.com/google/uuid",
 	}, nil)
+	// The body's own imports left with the bodies in #103: binding, error
+	// classification and JSON writing all live behind the entapi alias now, so
+	// only a signature or a path-id parse can still name a package here.
 	assertImports(t, handlerImports(node),
 		`"context"`,
-		`"encoding/json"`,
-		`"errors"`,
 		`"fmt"`,
 		`"github.com/google/uuid"`,
-		`"io"`,
-		`"mime"`,
 		`"net/http"`,
 	)
 
 	node.Annotations[resourceAnnotationName] = resourcePtr(api.Resource().Except(api.OpCreate, api.OpPatch, api.OpGet, api.OpDelete))
-	assertImports(t, handlerImports(node), `"context"`, `"encoding/json"`, `"net/http"`)
+	assertImports(t, handlerImports(node), `"context"`, `"net/http"`)
 }

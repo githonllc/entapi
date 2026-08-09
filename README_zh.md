@@ -81,7 +81,7 @@ go get github.com/githonllc/entapi
 |---|---|---|
 | `github.com/githonllc/entapi` | 你的 `entc.go`；嵌软删除的 schema | `Extension`、`SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | 你的 **schema** 文件 | `Resource`、`Hidden`、`ReadOnly`、`Searchable`、`Filterable`、`Sortable`、`Expand` |
-| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`WriteProblem`、`FieldError`、`Route`/`Op`、`WithActor`/`ActorFrom`、错误 sentinel 与 mapper、filter/pointer/软删除 helper |
+| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`BindJSON`、`Status`、`WriteJSON`、`WriteProblem`、`FieldError`、`Route`/`Op`、`WithActor`/`ActorFrom`、错误 sentinel 与 mapper、filter/pointer/软删除 helper |
 
 这个切分是承重的，不是整洁癖：根包用 `//go:embed` 内嵌八个模板，并在**包初始化时**把八份
 全部从内嵌文件系统里读出来，读不到就 panic。只要 import 根包，这件事就会发生，无论你是否
@@ -314,7 +314,8 @@ validation 是 422。Get/Delete 没有 validation 分支。未分类错误是 50
 
 POST 与 PATCH 只接受 `application/json`，允许 media-type 参数。body 在读取前被限制为
 **1 MiB，且没有配置旋钮**。未知 key 会与生成的 create/patch tag 数据比较，因此 PATCH 中
-的 Immutable key 会按名字被拒绝，不会静默丢弃。
+的 Immutable key 会按名字被拒绝，不会静默丢弃。这三条规则都住在 `entapi.BindJSON` 里，
+手写 handler 同样可以调用——见[自己写 handler](#自己写-handler)。
 
 `WithActor` / `ActorFrom` 让认证主体穿过 middleware。
 
@@ -457,6 +458,65 @@ for _, route := range api.Routes() {
 router 层未匹配的 path/method 仍保留 stdlib mux 的纯文本 404/405（405 含 `Allow`），而非
 problem+json。这个 residue 是有意的：catch-all 会让挂进消费者 mux 与直接服务整棵生成树的
 行为不同。
+
+### 自己写 handler
+
+每个生成的 handler 都是 bind → call → write，而这三步都是导出的 runtime 函数。手写的
+endpoint——不论跑在 `net/http`、第三方 router，还是根本不属于本生成器的实体——只要调用它们，
+就能得到同样的行为，不必抄一份生成的函数体：
+
+```go
+func BindJSON(w http.ResponseWriter, r *http.Request, tags []string, dst any) error
+func Status(err error, onValidation int) int
+func WriteJSON(w http.ResponseWriter, status int, v any) error
+```
+
+`BindJSON` 施加的是同样三条 bind 规则：1 MiB 的 `MaxBytesReader` 上限、
+`application/json` media-type 检查，以及拒绝任何不在 `tags` 里的 body key。它的错误是
+**完备的**：它返回的每一个错误都恰好包装
+`entapi.ErrUnsupportedMediaType`、`entapi.ErrRequestTooLarge`、`entapi.ErrValidation`
+三者之一，所以 `Status` 能把它们全部分类，不存在需要你另写分支的第四种情况。它接收 `w` 只是
+因为 `http.MaxBytesReader` 需要，**它自己什么都不写**——response 完全归调用者所有，包括它长什么样。
+
+`Status` 对两个 bind sentinel 返回 415 与 413，对 `entapi.ErrNotFound` 返回 404，对
+`entapi.ErrAlreadyExists` 返回 409，对 `entapi.ErrValidation` 返回 `onValidation`，其余
+一律 500，nil 错误返回 0。`onValidation` 这个参数就是 400-vs-422 约定的全部：生成的 handler
+对 **bind 失败传 400**（请求本身不成形），对**中间步骤失败传 422**（请求解析成功，被领域逻辑
+拒绝）。照传这两个值，自定义 endpoint 的回答就与生成的一致；传别的，它就按你选的回答。
+
+`WriteJSON` 先 marshal 再碰 response，所以 marshal 失败会变成一个干净的 500 problem
+response，而不是一个写了一半的 200。
+
+这里没有任何东西依赖 Ent——`entapi/runtime` 只 import 标准库——所以你可以配自己的请求类型、
+自己的 tag 列表和自己的 response 信封。下面这个 Gin endpoint 用调用者自己的信封作答，而非
+problem+json：
+
+```go
+type createTicketRequest struct {
+    Subject string `json:"subject"`
+}
+
+var createTicketTags = []string{"subject"}
+
+func (s *server) createTicket(c *gin.Context) {
+    var req createTicketRequest
+    if err := entapi.BindJSON(c.Writer, c.Request, createTicketTags, &req); err != nil {
+        c.JSON(entapi.Status(err, http.StatusBadRequest), envelope{Error: err.Error()})
+        return
+    }
+
+    ticket, err := s.tickets.Create(c.Request.Context(), req.Subject)
+    if err != nil {
+        c.JSON(entapi.Status(err, http.StatusUnprocessableEntity), envelope{Error: err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusCreated, envelope{Data: ticket})
+}
+```
+
+生成的 tag 切片（`articleCreateRequestTags` 等）是你 `ent` 包里的未导出成员，所以包外的
+handler 自己声明一份——这正是本意：`tags` 是调用者的白名单，不是生成的那一份。
 
 ## 请求：三态存在性
 
@@ -738,8 +798,10 @@ constraint **且** unique → 原样返回。unique 判定仍受 Ent 的 `IsCons
 sentinel，HTTP 结果是 500。生成的 PATCH 表面无法触发它；只有直接调用 builder 才能触发。
 
 > **实现：** `templates/wiring.tmpl`、`templates/errors.tmpl`；
-> `runtime/errors.go` — `ErrNotFound`、`ErrAlreadyExists`、`ErrValidation`、`IsNotFound`、
+> `runtime/errors.go` — `ErrNotFound`、`ErrAlreadyExists`、`ErrValidation`、
+> `ErrUnsupportedMediaType`、`ErrRequestTooLarge`、`IsNotFound`、
 > `IsAlreadyExists`、`IsValidation`；
+> `runtime/bind.go` — `BindJSON`、`Status`、`WriteJSON`；
 > `runtime/errors_map.go` — `ErrorMapper`、`NewErrorMapper`、`WithUniqueViolation`、
 > `WithValidation`、`HasUniqueViolation`、`MapError`；`runtime/errors_dialect.go` —
 > `UniqueViolation`；`runtime/query.go` — `ListPage`、`GetOne`、`SaveOne`、`Saver[E]`；

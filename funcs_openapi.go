@@ -307,9 +307,18 @@ type openapiStatus struct {
 	Title string
 }
 
-// errorStatusesByOp is the statuses each generated handler can actually write,
-// read off templates/handler.tmpl. It is one table so that openapiProblemStatuses
-// below is its union rather than a second list.
+// errorStatusesByOp is the statuses each generated handler can actually write.
+// It used to be read off templates/handler.tmpl's literal http.Status
+// constants; since #103 folded the status ladder into entapi.Status, it is
+// derived from that function's behaviour together with the template's call
+// sites — TestErrorStatusesByOpMatchesHandlerTemplate finds each
+// entapi.Status/entapi.BindJSON call in a section and probes the real
+// runtime.Status with every sentinel to build the expected set. Which
+// operations bind, and what onValidation each passes, stay template
+// properties, which is why this table cannot simply move to the runtime.
+//
+// It is one table so that openapiProblemStatuses below is its union rather
+// than a second list.
 var errorStatusesByOp = map[api.Op][]int{
 	api.OpList:   {http.StatusBadRequest, http.StatusNotFound, http.StatusInternalServerError},
 	api.OpGet:    {http.StatusBadRequest, http.StatusNotFound, http.StatusInternalServerError},

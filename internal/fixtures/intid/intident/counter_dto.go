@@ -315,8 +315,17 @@ func NewCounterResponse(e *Counter) (*CounterResponse, error) {
 
 // CounterQueryWithResponseEdges applies the eager-load plan for CounterResponse.
 //
-// The plan is generated from the response type's own edge set, so a caller
-// cannot forget an edge.
+// The plan is generated from the response type's own edge set, so no individual
+// edge can be omitted from it. Generated wiring always routes through this
+// function.
+//
+// For a hand-written query, using this function is a convention the type
+// system does not enforce. An entity loaded without this plan makes
+// NewCounterResponse return a not-loaded-edge error at run time. It fails
+// loudly; it never silently narrows the response.
+//
+// With no expanded edges, this function is the identity function. It exists so
+// every entity has the same call shape.
 func CounterQueryWithResponseEdges(q *CounterQuery) *CounterQuery {
 	return q
 }

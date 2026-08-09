@@ -66,7 +66,7 @@ classification, five three-step handlers, and the route manifest behind
 - [Generation can fail, and that is the design](#generation-can-fail-and-that-is-the-design)
 - [What the generator does to your directory](#what-the-generator-does-to-your-directory)
 - [Field shapes](#field-shapes) · [Accepted but not consumed](#accepted-but-not-consumed)
-- [Gotchas](#gotchas) · [Limits](#limits) · [Deviations from DESIGN-v2](#deviations-from-design-v2) · [Migration notes](#migration-notes)
+- [Gotchas](#gotchas) · [Limits](#limits) · [Deviations from DESIGN-v2](#deviations-from-design-v2) · [Deviations from DESIGN-v3](#deviations-from-design-v3) · [Migration notes](#migration-notes)
 
 ---
 
@@ -701,6 +701,28 @@ func DeleteArticle(ctx context.Context, db *Client, id uuid.UUID) error
 func DeleteBatchArticles(ctx context.Context, db *Client, ids []uuid.UUID) (int, error)
 ```
 
+**Every one of them takes a `*Client`, and that is the transaction contract:
+this package never generates a transaction boundary.** There is no `*Tx`
+variant and no transaction-from-context lookup. To pull a generated step into a
+transaction of your own, hand it the client ent already binds to that
+transaction:
+
+```go
+tx, err := db.Tx(ctx)
+// ...
+resp, err := ent.PatchUser(ctx, tx.Client(), id, v)   // the generated step, inside your tx
+_, err = tx.Client().AuditLog.Create(). /* ... */ .Save(ctx)
+err = tx.Commit()
+```
+
+Two consequences worth stating plainly. A `*Tx` variant would give every
+customization point a twin signature, and "the customization point's signature
+is character-for-character the wiring function's" is what makes a wrong
+replacement a compile error rather than a runtime surprise. And `ent.API(client)`
+holds the root client, so the `db` a custom implementation receives on the HTTP
+path is **not** transaction-bound — if you need one there, open it yourself and
+call the generated wiring through `tx.Client()`.
+
 No identifier type is hardcoded anywhere — the id comes from your schema's
 `$.ID.Type` and reaches the runtime as a type parameter, so an `int` primary key
 needs no import at all.
@@ -1036,16 +1058,30 @@ Ordered by how quietly they hurt you.
   keyset alternative and no cursor type in this package.
 - **Summaries are always one level deep.** There is no depth option.
 - **Which scalar fields a summary carries cannot be decided from the schema**, so
-  a summary carries every response-scoped field minus the edges. Narrowing it
+  a summary carries every response-visible field minus the edges. Narrowing it
   needs a new annotation.
+- **No optimistic locking, so a lost update is a known boundary.** Generated
+  patch wiring is `v.Apply(db.X.UpdateOneID(id))` with no version predicate
+  (`templates/wiring.tmpl` — `Patch{Entity}`), so two concurrent `PATCH`es to the
+  *same field* end with the later writer winning silently. The exposure is
+  narrower than PUT semantics — this package has partial update only, so patches
+  touching different fields do not interfere. There is no version word, because
+  the framework has no legitimate way to know which column is the version and
+  guessing `version`/`updated_at` by name is exactly the convention-derivation
+  #18 retired. The escape hatch is the customization point: replace that one step
+  with `With(ent.PatchXFn(...))`, add your own `Where(x.Version(v))`, and return
+  409 on zero rows affected.
 - **Output shares a package with ent's own.** The generator creates no separate
   `dto` subpackage and has no option to change the directory; it establishes
   ownership of the target directory file by file, via the marker, rather than by
   owning a directory outright.
-- **Scopes only control HTTP-layer struct generation.** They never restrict what
-  your service layer can do with an ent entity. Anything that must be enforced
-  has to be enforced where the query is built.
-- **The generator package loads all five templates at package init.** Confine it
+- **Annotations only control HTTP-layer generation.** They never restrict what
+  your service layer can do with an ent entity — `Except` closes an endpoint, a
+  route and a `{Op}{Entity}Fn` type, and leaves the wiring function and the
+  request DTO in place. The one exception is a create family that provably
+  cannot work (see "The annotation model"). Anything that must be enforced has to
+  be enforced where the query is built.
+- **The generator package loads all ten templates at package init.** Confine it
   to `entc.go` and your schema files; `runtime/` is what keeps it out of your
   binary.
 
@@ -1063,6 +1099,26 @@ deviations remain, all deliberate:
 
 T2 (the audience dimension), which the design itself deferred, is likewise
 unimplemented — consistent with the design.
+
+## Deviations from DESIGN-v3
+
+[`docs/DESIGN-v3-final.md`](docs/DESIGN-v3-final.md) also still says
+implementation has not started. That too is **stale**: all eight slices it lists
+(#69–#76) have landed, closed by #77, #78, #81, #82, #84, #85, #86 and #87. Read
+it for the decisions and their rationale, never for the current API — three
+things it specifies were superseded during implementation, and the code is what
+shipped:
+
+| Design item | Actual state |
+|---|---|
+| §2.1 / §2.5 `ent.API(client)` returns `*API`; `func (a *API) Routes()` | The type is **`*APIHandler`** (`templates/http.tmpl` — `API`). `API` is the constructor's name, so the handler could not also be called that |
+| §4.3 soft delete registers from a generated `init()`, falling back to an explicit `RegisterSoftDelete(client)` | Neither exists. #78 installs the hook and interceptor from a `config/init/fields/*` **partial that Ent executes inside `newConfig`** (`templates/softdelete_config_init.tmpl`), so `NewClient`, `Open`, `enttest.Open` and every later config copy carry them with no registration call and no initialization-order dependency. `RegisterSoftDelete` was removed rather than kept as a fallback |
+| §2.3 the generated handler enables `DisallowUnknownFields`, and the rejected field name is scraped out of `encoding/json`'s error text | The handler decodes the body into a `map[string]json.RawMessage` first and compares its keys against generated `{entity}{Op}RequestTags` data (`templates/handler.tmpl`), reporting the offending key through `entapi.FieldError`. The design called the error-text scrape a known residue; this removes it — the field name is now generated data, not a parsed string. `DisallowUnknownFields` stays the consumer handler's decision for à la carte DTO decoding |
+
+Everything else in that document — the five deviation words, `Except`'s three
+layers plus the create-family exception, the op-in-value wire format, the `_`
+namespace, 413/415 request hardening, RFC 9457 errors, `Routes()`, and the
+OpenAPI decisions — describes what shipped.
 
 ## Migration notes
 

@@ -109,6 +109,14 @@ reserved parameters remain single-valued. `{Entity}Order`, not the parser, is
 the only sort-key allow-list check and appends the ID tiebreak only when ID is
 absent from the entire sort list.
 
+Every parse failure is `ErrValidation`, i.e. a 400 that names the field and the
+value — a disallowed operator prefix, an unparseable value, a non-member enum, a
+non-RFC-3339 time. Silently dropping the predicate would be the fail-open
+direction: the response would carry MORE rows than the caller asked for. One
+wire value is deliberately reserved rather than clamped: an explicit `_size=0`
+is a 400 (`runtime/urlquery.go` — `ParsePageParam`), because 0 is held for a
+future count-only mode and clamping it first would break consumers later.
+
 ### The OpenAPI document (#76)
 
 `templates/openapi.tmpl` renders `openapi.yaml` and
@@ -318,6 +326,23 @@ family may disappear when `OpCreate` is explicitly excepted.
   customization point for #75. There is no customization point inside a handler body and
   no generated hook/interceptor chain; cross-cutting concerns wrap the returned
   `http.Handler`.
+- **The bind step's two hardenings have no knobs, and that is the design.**
+  Every POST/PATCH handler opens with `r.Body = http.MaxBytesReader(w, r.Body,
+  1<<20)` → 413, and an `application/json` media-type check → 415
+  (`templates/handler.tmpl`). Neither is configurable: `With` accepts exactly one
+  family — per-operation replacement functions whose signature is the wiring
+  function's — and a global config knob would make it two families, which is
+  where its compile-time guarantee comes from. 1 MiB is therefore a hard ceiling
+  with no way out in-band; wrapping a larger `MaxBytesReader` outside does not
+  help, since the inner smaller limit still wins.
+- **Wiring and customization points take `*Client`, and this package never
+  generates a transaction boundary.** No `*Tx` variant, no
+  transaction-from-context: a `*Tx` twin would break the property that a
+  customization point's signature is character-for-character the wiring
+  function's, which is what turns a wrong replacement into a compile error.
+  Composing with an outer transaction is ent's own `tx.Client()` (its `config`
+  carries the `txDriver`). `API(client)` holds the root client, so the `db` a
+  custom implementation receives on the HTTP path is NOT transaction-bound.
 - `With` mutates `APIHandler` with whole-operation custom implementations; finish wiring before serving, because later calls race with request-time field reads.
 - `Routes()` returns a fresh copy in registration order, while `Mount` and the internal mux walk the single unexported route list.
 - Handler code should not import `ent` for conversion. That is a property of
@@ -434,5 +459,7 @@ such symbol.
 ## Docs to keep in sync
 
 `README.md` and `README_zh.md` are parallel translations; changing the public API means editing both, and both carry the migration notes for every symbol this module has removed. There are now **two** `doc.go`s: the root one is the generator's godoc quick start and the runtime migration pointer, `runtime/doc.go` is the runtime's. `docs/ARCHITECTURE.md` carries the module table and the PlantUML diagrams, and `.claude/skills/entapi/SKILL.md` documents downstream usage patterns (some of it describes a consumer project's interceptors, not this repo).
+
+**`docs/DESIGN-v2.md` and `docs/DESIGN-v3-final.md` are plans, not references.** Both still say implementation has not started; both are stale in that claim, and v3's eight slices (#69–#76) have all landed, closed by #77, #78, #81, #82, #84, #85, #86 and #87. Read them for decisions and rationale, never for the current API — three v3 items were superseded during implementation (`*APIHandler` not `*API`; soft delete installs from a `config/init/fields/*` partial with no `init()` and no `RegisterSoftDelete` fallback; unknown request keys are caught by comparing raw keys against generated `{entity}{Op}RequestTags` rather than by `DisallowUnknownFields`). The divergence tables live in both READMEs, under "Deviations from DESIGN-v3".
 
 Moving or removing a published symbol is an established move here, not an exception — #3, #6, #24, #26, #29 and #15 all did it. The convention is a migration note in **both** READMEs plus a `doc.go` pointer, and no compatibility alias: an alias that preserves the coupling a change exists to remove is worse than the break.

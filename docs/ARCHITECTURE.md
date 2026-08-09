@@ -10,7 +10,8 @@
 **一句话**：一个 [Ent](https://entgo.io) 扩展——`api.Resource()` 选择需要 HTTP 表面的实体，字段形状
 默认由 Ent 的 `Optional`、`Default`、`Nillable`、`Immutable`、`Sensitive` 和类型派生，只有五个字段词与
 `api.Expand()` 表达偏离。生成器把请求类型、响应类型、查询面（filter/search/sort）、每个操作一个的
-wiring 函数、三段式 HTTP handler、`With` 定制点与 `Routes()` 路由清单生成进消费者自己的 `ent/` 包，运行期只依赖标准库。
+wiring 函数、三段式 HTTP handler、`With` 定制点、`Routes()` 路由清单，以及描述这一切的 OpenAPI 3.1
+文档生成进消费者自己的 `ent/` 包，运行期只依赖标准库。
 
 | 维度 | 事实 | 证据 |
 |---|---|---|
@@ -19,8 +20,8 @@ wiring 函数、三段式 HTTP handler、`With` 定制点与 `Routes()` 路由�
 | 存储 / 中间件 | **无**。本库不含 SQL driver，也不含 HTTP 框架 | `go.mod` 无 driver 依赖；`Makefile` — `test-modules` 注释 |
 | 部署形态 | 库（`go get`）。无 `main`、无示例 app、无下游 ent 项目 | 仓库无 `main` 包 |
 | 包数 | **3 个手写产品包**（`entapi`、`api`、`runtime`）+ 10 个模板 + 5 个嵌套模块 | `extension.go` / `api/` / `runtime/` / `templates/` / `internal/**/go.mod` |
-| 手写非测试代码量 | 生成器 2980 行、api 173 行、runtime 810 行、模板 1554 行 | `wc -l`（实测） |
-| 测试规模 | 全仓 274 个 `Test*` 函数（根包 105、api 6、runtime 47、fixtures 116） | `rg '^func Test'`（实测） |
+| 手写非测试代码量 | 生成器 3518 行、api 173 行、runtime 810 行、模板 1796 行 | `wc -l`（实测于 `513c37f`） |
+| 测试规模 | 全仓 290 个 `Test*` 函数（根包 113、api 6、runtime 47、`internal/` 124） | `grep '^func Test'`（实测于 `513c37f`） |
 | 测试基线 | 根模块与五个嵌套模块测试均退出 0 | `Makefile` — `test-modules`；实测 |
 | 覆盖目标 | `CONTRIBUTING` 定 >85%，由 `make cover` 报告 | `Makefile` — `cover` |
 
@@ -50,6 +51,7 @@ package "消费者项目" #FFF7E6 {
   component "ent/schema/*.go\n(手写, 带注解)" as SCHEMA
   component "entc.go\nentc.Generate(...)" as ENTC
   component "ent/ (生成包)\nDTO / filter / wiring / handler / APIHandler / With / Routes" as ENTPKG
+  artifact "ent/openapi.yaml\n+ entapi_openapi.go (go:embed)" as SPEC
   component "consumer mux / third-party router / middleware\n(http.Handler 洋葱组合)" as MUX
 }
 
@@ -66,8 +68,10 @@ EXT --> CONF
 EXT --> TMPL
 TMPL --> FUNCS
 EXT --> ENTPKG : 写 per-type 与 graph-level 产物
+EXT --> SPEC : 同一轮生成，与路由树同一个 wiredAny 闸门
 EXT --> CLEAN
 MUX --> ENTPKG : ServeHTTP / Mount / Routes
+ENTPKG --> SPEC : GET /openapi.yaml\n(serveOpenAPI，清单里的最后一条路由)
 ENTPKG ..> RT : 生成代码 import (显式别名 entapi)
 ENTPKG --> DB
 
@@ -107,7 +111,7 @@ end note
 | 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `WithValidation` / `WithUniqueViolation` / `HasUniqueViolation` / `UniqueViolation` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `WriteProblem` / `FieldError` / `Route`（仅路由元数据）/ `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
 | codegen fixtures | `internal/fixtures/<dir>/<dir>ent/` | 生成 + 编译的证明 | — | 本模块 |
 | spike 规格 | `internal/fixture/`（**单数**） | #22 手写目标，是生成物的规格 | 独立 go.mod | ent + SQLite |
-| 行为证明 | `internal/fixtures/wiring/e2e`、`internal/fixtures/httpdemo/e2e`、`internal/softdeleteproof`、`internal/uniqueproof` | wiring、HTTP、软删除与真实 driver uniqueness channel 的行为证明 | 独立 go.mod | ent + SQL driver |
+| 行为证明 | `internal/fixtures/wiring/e2e`、`internal/fixtures/httpdemo/e2e`、`internal/softdeleteproof`、`internal/uniqueproof` | wiring、HTTP、OpenAPI 文档校验、软删除与真实 driver uniqueness channel 的行为证明 | 独立 go.mod | ent + SQL driver（`httpdemo/e2e` 另含 `pb33f/libopenapi{,-validator}`，全仓仅此一处） |
 
 ```plantuml
 @startuml
@@ -164,6 +168,23 @@ ROOT -[#gray,dotted]-> RT : 仅字符串常量\ndefaultEntAPIPackage
   推导，注册了没人用会红。
 - 注册表不得与 ent 内建函数重名 —— `TestTemplateFuncsDoNotShadowEntBuiltins`；因为
   `templateFuncMap()` 是「ent 的 `gen.Funcs` → 本包 → `entapiPkg`」的叠加，后者静默覆盖前者。
+
+**`funcs_*.go` 的分工**（模板能问的问题按关注点分文件，注册处只有 `funcs.go` — `templateFuncs()` 一处）：
+
+| 文件 | 管什么 |
+|---|---|
+| `funcs_scope.go` | **归一化注解读取器** `getResourceAnnotation` / `getFieldAnnotation` / `getEdgeAnnotation`，以及 `isResource` / `resourceExcepts` / `blockedCreateFields` / `hasCreateFamily` |
+| `funcs_fields.go` | 派生的字段与边选择：`createFields` / `patchFields` / `responseFields` / `responseEdges` |
+| `funcs_presence.go` | 请求字段形状：`isCreatePointer` / `isCreateRequired` / `isPatchClearable` |
+| `funcs_filter.go` | 整个查询面：`queryFields` / `parseFields` / `searchFields` / `isSortable` / 每字段的线上算子集与转换表达式 / `filterImports` |
+| `funcs_http.go` | `resourceOps` / `routePath` / `idParseExpr` / `handlerImports` |
+| `funcs_openapi.go` | 文档的 YAML 成形：`yamlQuote` / `openapiSchema` / `openapiPathGroups` / `openapiFilterParams` / `openapiReservedParams` / `openapiErrorStatuses` / `openapiProblemStatuses` / `openapiRequiredCreateFields` |
+| `funcs_imports.go` | 产物必须自己声明的 import：`dtoImports` / `wiringImports` |
+| `funcs_codegen.go` | `fieldValueExpr`——响应构造器的每字段表达式，也是 `isComplexFieldType` 的唯一调用方 |
+| `funcs_typechecks.go` | `isComplexFieldType`，**故意不注册**：它是活代码，但没有模板按名字调它，而这张注册表的含义是「有模板调它」 |
+| `funcs_softdelete.go` | `isSoftDeletable` / `softDeleteTypes` / `softDeleteField` / `softDeleteImports` |
+| `funcs_strings.go` | 只有 `camelCase`——其余 `lower` / `hasPrefix` / `snake` / `plural` 用 ent 的 `gen.Funcs` |
+| `annotations_edge.go` | `responseEdgeSet` / `edgeJSONKey` |
 
 **未发现循环依赖或跨层直调。** 唯一值得单列的边界事实是：`softdelete.go`（schema 期，import
 `entgo.io/ent/schema`）留在根包，而 `WithSoftDeleted` / `WithHardDelete` 及其读取函数搬到了
@@ -251,6 +272,35 @@ SoftDeleteMixin ..> DomainSoftDelete : 附加
 替代数据库模型事实。三个注解类型都实现 `schema.Merger`：布尔值与 `ExceptOps` 取并集，边的后一个
 非空 `JSONKey` 胜出，所以同一字段分开写 `Annotations(api.Searchable(), api.Sortable())` 不会互相覆盖。
 
+### 注解在物理上怎么到达生成器（#81 换模型时最容易踩的一条）
+
+**同一个注解有两种到达形态，取决于 schema 是怎么加载的**，所以生成器里**绝不允许**直接读注解 map：
+
+```go
+// funcs_scope.go — getResourceAnnotation()
+// Ent annotations are pointers while a schema is being described and
+// map[string]interface{} values after the serialized-schema load path. The JSON
+// round-trip keeps both paths on one reader contract.
+```
+
+`funcs_scope.go` — `getResourceAnnotation` / `getFieldAnnotation` / `getEdgeAnnotation` 是唯一入口，
+`decodeAnnotation` 用 JSON round-trip 把两条路径归一。手搓 `gen.Type` 的单元测试走的是指针那条，
+真实生成走的是 map 那条——直接读 map 的代码**能过全部单元测试、在真实 schema 加载时静默失效**。
+
+这条约束反过来决定了 `Op` 的底层类型：
+
+```go
+// api/annotations.go — Op
+// It is string-backed because Ent annotations cross a JSON serialization
+// boundary. String values retain their meaning there; numeric enum values do
+// not retain their Go type.
+type Op string
+```
+
+int 枚举经 JSON 回来是 `float64`，丢掉 Go 类型；而 `Except` 是一个**删端点**的开关，它丢词的方向是
+fail-open——「本该关掉的操作还开着」。string 值经同一次往返含义不变，所以这个类型选择消掉的不是
+「更好地报错」，是**丢词这件事本身**。
+
 ### 承重设计规则
 
 > **`Except` 关闭公开操作表面，不拿走 service 层能力：wiring 函数与 request DTO 仍生成。**
@@ -329,11 +379,17 @@ group **阶段 1：渲染 + 格式化，只进内存**
     HOOK -> REND : dto / filter / wiring / handler
     REND --> HOOK : pendingFile{path, content}
   end
-  HOOK -> REND : errors + http（wiredAny 时）\nsoftdelete（softDeleteTypes 非空时）
+  HOOK -> REND : errors + http + openapi + openapi_embed（wiredAny 时）\nsoftdelete（softDeleteTypes 非空时）
   note right of REND
     imports.Process 是**纯函数**，不碰磁盘。
     失败 = 模板生成了非法 Go = 本包的 bug
     → 直接中止，上一次的产物完整幸存
+  end note
+  note left of REND
+    唯一例外：renderOpenAPIFile **跳过** formatFile
+    （产物是 YAML，goimports 会拒绝解析）。
+    openapi.yaml 因此是全仓唯一
+    没有阶段 1 语法闸门的产物。
   end note
 end
 group **阶段 2：落盘**
@@ -406,7 +462,9 @@ EM --> H : 结果 / ErrNotFound / 原样透传
 ```
 
 `templates/http.tmpl` — `API` 为每张路由构造一个持有 `*http.ServeMux` 与 `[]entapi.Route` 的
-`*APIHandler`：`GET /xs`、`POST /xs`、`GET/PATCH/DELETE /xs/{id}`。`ServeHTTP` 直接委托内部 mux，
+`*APIHandler`：`GET /xs`、`POST /xs`、`GET/PATCH/DELETE /xs/{id}`，清单**最后**追加一条
+`GET /openapi.yaml`（`templates/http.tmpl` — `API`）。放进清单而不是放在清单旁边，是为了让 `Routes()`
+看得见它、让消费者能用包裹 CRUD 路由的同一个循环包裹或丢弃它。`ServeHTTP` 直接委托内部 mux，
 `Mount` 遍历同一份未导出清单注册到消费者 mux；`Routes()` 按注册顺序返回一份新 slice，第三方路由器
 可据此注册并用 `Request.SetPathValue` 注入路径参数。返回值是数据副本，不是增删或改写生成路由的 API。
 前缀由外层 `http.StripPrefix` 处理。`Except` 同时关闭 endpoint、route、`{Op}{Entity}Fn` 及其
@@ -486,6 +544,90 @@ case *{{ .Name }}Mutation:
 `enttest.Open`、双 client 与 deny-by-default privacy——编译证明分不清「谓词被生成了」和
 「谓词到达了 SQL」。
 
+### 5.4 OpenAPI 文档：派生物，不是第二份真相
+
+```plantuml
+@startuml
+skinparam shadowing false
+left to right direction
+
+component "resourceOps / routePath\nfuncs_http.go" as OPS
+component "responseFields / responseEdges\ncreateFields / patchFields\nfuncs_fields.go" as SHAPE
+component "parseFields / 每字段算子集\nfuncs_filter.go" as FILT
+component "runtime.DefaultPageSize\nruntime.MaxPageSize" as BOUND
+component "errorStatusesByOp\nfuncs_openapi.go" as ERRTAB
+
+component "templates/http.tmpl\n→ entapi_http.go" as HTTP
+component "templates/openapi.tmpl\n→ openapi.yaml" as DOC
+component "templates/openapi_embed.tmpl\n→ entapi_openapi.go" as EMB
+
+OPS --> HTTP : 路由清单
+OPS --> DOC : paths / operations
+SHAPE --> DOC : components/schemas
+FILT --> DOC : query parameters
+BOUND --> DOC : _size 的文档化边界
+ERRTAB --> DOC : 每操作的错误状态码
+DOC --> EMB : //go:embed openapi.yaml
+EMB --> HTTP : serveOpenAPI
+
+note bottom of ERRTAB
+  唯一一张**手工维护**的表；
+  openapiProblemStatuses() 是它的并集，
+  不是第二份清单。
+  由 TestErrorStatusesByOpMatchesHandlerTemplate
+  扫 handler.tmpl 的分支双向钉住（#91）
+end note
+note bottom of OPS
+  文档与路由树共用同一个源头，
+  所以 Except 掉的操作不可能
+  只在其中一边消失
+end note
+@enduml
+```
+
+四件承重的事：
+
+1. **`renderOpenAPIFile` 是唯一跳过 `formatFile` 的 render\*File**，而且是被迫的：`imports.Process`
+   按 Go 解析输入，而格式化失败会中止整轮生成（§5.1）。诚实的后果写在模板头里——**这一个文件没有
+   落盘前的语法闸门**（`extension.go` — `renderOpenAPIFile` 的函数注释、`templates/openapi.tmpl` 头）。
+2. **文档是派生的，`funcs_openapi.go` 里任何东西都不许是第二意见。** 模板或测试里写死一个字段名、
+   一个操作或一个算子，是缺陷而不是捷径。唯一的例外是 `errorStatusesByOp`——它是**手工
+   维护**的，所以 #91 给它配了 `openapi_status_drift_test.go` —
+   `TestErrorStatusesByOpMatchesHandlerTemplate`：扫 `handler.tmpl` 的五个
+   `eq $name "<op>"` 分支、把 `http.Status<Name>` 标识符映射成数字、双向比对。
+   诚实的残余写在测试注释里——扫描只看得见拼成 `http.Status<Name>` 的状态码，所以
+   **新增**方向可能漏，**删除**方向不会（那一侧读的是 Go 值不是文本）。
+3. **两个模块都没有 YAML 库**，`yamlQuote` 就是全部机制：
+
+   ```go
+   // funcs_openapi.go — yamlQuote()
+   // Every data-derived scalar in openapi.tmpl goes through here, INCLUDING map
+   // keys. A storage key spelled "on", "no", "y" or "null" is a boolean or a null
+   // to a YAML 1.1 parser if it is left bare, and a path key contains braces; a
+   // quoted scalar is one of exactly one thing in every parser.
+   ```
+
+   依据是 YAML 1.2 是 JSON 的严格超集：JSON 字符串字面量就是 YAML 双引号标量，JSON flow mapping
+   就是 YAML mapping。
+4. **模板的迭代顺序是 `$.Nodes`、ent 的字段顺序与算子顺序，没有任何一处直接 range Go map。** 产物已提交，
+   无序遍历会让 `TestCodegenFixtures` 隔轮把工作树弄脏。唯一遍历 map 的
+   `openapiProblemStatuses` 先 `sort.Ints` 再返回（`funcs_openapi.go` — `openapiProblemStatuses`）。
+
+`openapi.yaml` 与 `entapi_openapi.go` **共用同一个 `wiredAny` 闸门**，二者分开会让 `entapi_openapi.go`
+`//go:embed` 一个不存在的路径（`extension.go` — `generatePerTypeFiles` 内联注释）。文档不描述它自己那条
+`GET /openapi.yaml`——它不是资源表面的一部分。`_size` 只写 `minimum: 1` 而**不写 `maximum`**：
+`ListRequest.Limit()` 是钳位而不是报错，写上 `maximum` 等于文档化一个 handler 永远不会返回的 400。
+
+**「文件能解析」什么也证明不了，所以 `internal/fixtures/httpdemo/e2e/openapi_test.go` 从三个方向对现实
+交叉验证**（外加 3.1 元 schema 校验）：
+
+| 断言 | 方法 |
+|---|---|
+| `TestOpenAPIPathsMatchTheLiveRouteTree` | 与 `ent.API(client).Routes()` **比集合**（探测只能发现文档里 404 的路径，发现不了文档漏掉的活路由），再逐条打一遍拒绝 stdlib 的 text/plain 残余 |
+| `TestOpenAPISchemasMatchTheGeneratedStructs` | 反射生成的 struct，比对 `components/schemas` |
+| `TestOpenAPIFilterOperatorsMatchTheLiveParser` | 每个字段文档化的算子前缀 vs. 活的 `Parse{Entity}Query` 真正接受的 |
+| `TestOpenAPIServedBytesAreTheFileOnDisk` | HTTP 响应体逐字节等于磁盘上的 `openapi.yaml` |
+
 ---
 
 ## 6. 设计与约定
@@ -524,7 +666,8 @@ func isCreatePointer(f *gen.Field) bool {
 理由不是风格偏好：**ent 决定哪些 setter 存在**，本包形成的任何第二意见都会表现为「调用了一个
 从未被生成的方法」（`funcs_presence.go` — `isCreatePointer`）。同理 `patchFields` 取
 `node.MutableFields()` 再去掉 `Hidden` / `ReadOnly`；`responseFields` 取全部字段再去掉 `Hidden` /
-`Sensitive`。没有 scope 交集，也没有注解对 Ent 可变性作第二意见。
+`Sensitive`。三者都是「从 ent 已有的集合里减」，没有任何一处由注解正面声明某字段属于哪个请求——
+注解不对 Ent 的可变性作第二意见。
 
 ### 6.3 生成物里的限定符是有意为之的
 
@@ -549,6 +692,7 @@ func isCreatePointer(f *gen.Field) bool {
 | `TestDerivedEntityNamesMatchTheTemplates` | `derived_names_consistency_test.go` | §4 那张派生名表与模板脱节 |
 | `TestSchemaAPIPackageIsGeneratorFree` | `api_isolation_test.go` | schema API 包边界（带生成器正向对照） |
 | `TestRuntimePackageIsGeneratorFree` | `runtime_isolation_test.go` | runtime 包边界（带正向对照） |
+| `TestErrorStatusesByOpMatchesHandlerTemplate` | `openapi_status_drift_test.go` | OpenAPI 文档里唯一手工维护的那张错误状态码表与 `handler.tmpl` 的分支脱节（#91） |
 | `TestNoAmbiguousEntPackages` | `ent_package_ambiguity_test.go` | `internal/fixtures` 下任何包叫 `ent`（#49：同名 fixture 包曾让 goimports 按模块索引缓存选错包） |
 
 第 5 条的推理链值得单说：它**不渲染模板**。因为「某个已注册函数观察到这个旋钮」与
@@ -583,7 +727,7 @@ func isCreatePointer(f *gen.Field) bool {
 | # | 动作 | 文件 |
 |---|---|---|
 | 1 | 先判断它属于实体、字段还是边；在对应 `api` 注解类型上加导出字段与返回副本的 builder | `api/annotations.go` |
-| 2 | 写读取它的纯函数（选择器/判定） | 对应的 `funcs_*.go`（按 §3 表选文件） |
+| 2 | 写读取它的纯函数（选择器/判定）。**读注解只能经 `funcs_scope.go` 的三个归一化读取器**，绝不直接读注解 map | 对应的 `funcs_*.go`（按 §3 的分工表选文件） |
 | 3 | **在 `templateFuncs()` 注册** | `funcs.go` ← 漏这步 = 模板里根本调不到 |
 | 4 | 在模板里调用它 | `templates/*.tmpl` ← 漏这步 = `TestTemplateInvocationsAreRegistered` 变红 |
 | 5 | 新声明是导出顶层符号？加进派生名表 | `schema_conflicts.go` — `derivedEntityDecls()` |
@@ -593,19 +737,21 @@ func isCreatePointer(f *gen.Field) bool {
 | 9 | 同一改动让 surface probe 证明新字段可达；`pendingKnobs` 永久为空，不发布任何无消费方的旋钮 | `annotation_surface_test.go` |
 | 10 | `make check`（含 `test-modules`），确认树是干净的 | — |
 
-### 7.2 阅读顺序（Top 11，按理解价值）
+### 7.2 阅读顺序（Top 12，按理解价值）
 
 1. `extension.go` — `generatePerTypeFiles`：整个入口，两阶段在这里。
 2. `templates/http.tmpl` + `templates/handler.tmpl`：路由树、三段式 handler 与请求时定制点读取。
 3. `templates/wiring.tmpl`：默认中间步骤长什么样、以及「为什么是自由函数」。
 4. `runtime/query.go` — `ListPage` / `ListRequest.Offset`：运行期查询算法。
 5. `schema_conflicts.go` — `checkGraphConflicts`：拒绝策略与全部消息措辞。
-6. `api/annotations.go`：schema-time-only 注解模型、`schema.Merger` 与值接收者 builder 契约。
+6. `api/annotations.go` + `funcs_scope.go`：schema-time-only 注解模型、`schema.Merger` 与值接收者
+   builder 契约，以及注解到达生成器的两种形态与唯一的归一化读取入口。
 7. `funcs.go` — `templateFuncs()`：模板能问的问题的完整清单（一页看完）。
 8. `templates/filter.tmpl` + `funcs_filter.go`：查询面，安全性最集中的地方。
 9. `cleanup.go`：marker 归属契约（ADR-0004）。
 10. `funcs_presence.go`：「字段形状只有一个权威」的三条判定。
 11. `codegen_fixtures_test.go`：唯一证明产物**能编译**的测试，以及 fixture 契约。
+12. `funcs_openapi.go` + `templates/openapi.tmpl`：文档如何从既有选择器派生，以及为什么没有 YAML 库。
 
 配套裁决见 `docs/adr/README.md`；HTTP 拓扑与响应形状分别由 ADR-0008、ADR-0009 固定。
 
@@ -617,6 +763,7 @@ func isCreatePointer(f *gen.Field) bool {
 | **阶段 2 的 rename 循环非原子** | `extension.go` — `generatePerTypeFiles` | ADR-0003 明确接受。硬 kill 会留下两代混合 |
 | **唯一键判定漏判时闭合为 500** | `runtime/errors_dialect.go` — `UniqueViolation` | `API(client)` 按 dialect 自动安装；unknown dialect、未识别文本与无方法的非英文旧 lib/pq 都保持未分类。PostgreSQL 一旦有 SQLSTATE，非 `23505` 就禁止文本回退 |
 | **`ErrorMap` 是包级可变全局量** | `templates/errors.tmpl` — `ErrorMap` | 自身不带同步；必须在建 client 时、第一个请求之前赋值 |
+| **`openapi.yaml` 没有阶段 1 语法闸门** | `extension.go` — `renderOpenAPIFile` | 被迫的：`imports.Process` 按 Go 解析，喂它 YAML 会中止整轮生成。模板 bug 会落到磁盘，靠 fixture 断言与 `httpdemo/e2e` 的 3.1 元 schema 校验事后抓 |
 | **summary 带哪些标量字段未定** | `templates/dto.tmpl` — `Summary` 生成段 | 目前 = 全部非 `Hidden`、非 `Sensitive` 标量字段。收窄需要新注解，是独立决定 |
 | **软删除依赖 Ent 未公开的 partial 扩展点** | `templates/softdelete_config_init.tmpl` | `softdelete_config_init_test.go` 钉住生成的 `newConfig` 注入块，并逐字节比较无 mixin 图与纯 Ent 的 `client.go` |
 | **`make test` 漏五个嵌套模块** | `Makefile` — `test-modules` | 能过 `make test` 的改动仍可能被 `make test-modules` 抓住——这正是它存在的意义 |
@@ -635,10 +782,17 @@ func isCreatePointer(f *gen.Field) bool {
 | api 闭包不含生成器/runtime | `go list -deps ./api` | 2 个包，禁止依赖命中 **0** |
 | 生成器确实需要 ent | `go list -deps .` | `grep -c entgo.io` = **15** |
 | 测试基线绿 | 根模块与五个嵌套模块分别 `go test ./...` | 全部 `exit=0` |
-| 代码量 | `wc -l`（非测试 .go / `.tmpl`） | 生成器 2980 / api 173 / runtime 810 / 模板 1554 |
-| 测试规模 | `rg '^func Test'` | 全仓 274（根包 105、api 6、runtime 47、fixtures 116） |
+| 代码量 | `git ls-files` 过滤后 `wc -l`（非测试 .go / `.tmpl`） | 生成器 3518 / api 173 / runtime 810 / 模板 1796 |
+| 测试规模 | `grep '^func Test'` | 全仓 290（根包 113、api 6、runtime 47、`internal/` 124） |
+| fixture 表规模 | `grep -c '{dir: "'` / `grep -c 'wantGenErr:'`，均对 `codegen_fixtures_test.go` | 21 项，其中 8 项带 `wantGenErr` |
+| OpenAPI 与路由同源 | `grep -n 'resourceOps' funcs_openapi.go templates/http.tmpl` | `templates/http.tmpl` 三处 range 它；`openapiPathGroups`（`funcs_openapi.go:162`）也 range 它。同一个函数，不是同名的两份 |
+| 模板无 map 遍历 | `grep -n 'range ' funcs_openapi.go templates/openapi.tmpl` | 20 处全是 slice / `$.Nodes`；唯一的 map range 在 `openapiProblemStatuses`，其后 `sort.Ints` |
+| `_size` 无 `maximum` | `funcs_openapi.go:247-253` | 确认：`{"type": "integer", "minimum": 1}`，上界只写进 description |
 | 派生名表 / 模板顶层声明 | `grep '^type\|^func\|^var' templates/*.tmpl` | 与 `derivedEntityDecls()` 一致 |
 | 旋钮数 | 反射三个 api 注解结构体的导出字段 | 8 个全部消费，`pendingKnobs` 为空 |
+| 旧注解模型无残留 | 全文 grep `DomainField` / `ScopeCreate` / `ScopeResponse` | 命中 **0**（本行自身除外）。唯一含 `scope` 的是现存文件名 `funcs_scope.go`。#81（`7501b12`）在同一 commit 里重写了本文 257 行（+139/−118） |
+| 注解读取只有一条路径 | 读 `funcs_scope.go` — `decodeAnnotation` | `json.Marshal` + `json.Unmarshal` 的 round-trip，指针 / 值 / `map[string]interface{}` 三种形态归一 |
+| `funcs_*.go` 分工表 | `grep -n '^func ' funcs_*.go annotations_edge.go` 与 `funcs.go` — `templateFuncs()` 对账 | 与 §3 的分工表一致；`isComplexFieldType` 确认未注册 |
 
 **未验证 / 仅读代码得出**：覆盖率数字（CONTRIBUTING 的 >85%）未跑 `make cover` 复核。文中所有
 「消费者项目里会发生什么」的描述，证据来自 `internal/fixtures` 的生成产物与五个嵌套模块的行为

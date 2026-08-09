@@ -411,18 +411,27 @@ for _, route := range api.Routes() {
 ```go
 func mountGin(r *gin.Engine, api *ent.APIHandler) {
     for _, route := range api.Routes() {
-        path := strings.ReplaceAll(route.Path, "{id}", ":id")
-        handler := route.Handler
-        r.Handle(route.Method, path, func(c *gin.Context) {
-            c.Request.SetPathValue("id", c.Param("id"))
-            handler.ServeHTTP(c.Writer, c.Request)
+        r.Handle(route.Method, entapi.ColonPath(route.Path), func(c *gin.Context) {
+            route.Bind(c.Param).ServeHTTP(c.Writer, c.Request)
         })
     }
 }
 ```
 
-Echo 是同一种形状：把 `{id}` 换成 `:id`，将 `c.Param("id")` 写入
-`c.Request().SetPathValue`，再用 Echo 的 response writer 与 request 调用该 route handler。
+`ColonPath` 只把完整的 `{name}` segment 改写成 `:name`，其他 segment 原样保留。
+`Route.Bind` 接受一个 `func(string) string`，与 `gin.Context.Param`、
+`echo.Context.Param` 的签名完全一致。chi 与 fiber 各需一行 closure：`chi.URLParam`
+还要接收 request，而 `fiber.Ctx.Params` 带有 `defaultValue ...string` 变参，签名实为
+`func(string, ...string) string`，无法直接赋值。因此 Echo 使用 `entapi.ColonPath(route.Path)` 与
+`route.Bind(c.Param)` 这两个调用，再传入它的 response writer 与 request 即可。
+
+placeholder 名称取自 `Route.Path`，因此没有任何地方硬编码 `"id"`：如果生成器以后发射
+第二个 placeholder，这样写的 adapter 无需修改就会自动接上。路由没有 placeholder 时，
+`Bind` 返回 `r.Handler` 本身，所以每条路由都调用它不会给不需要绑定的路由增加成本。
+
+挂载时传入常量 closure 可以把路由钉到固定 id：
+`route.Bind(func(string) string { return actorID })` 能用同一条生成的
+`GET /users/{id}` 路由提供 `/v1/me`，无需再手写第二层 wrapper。
 
 有一个路由差异不会被这层 adapter 掩盖。Go 1.22 `ServeMux` 把 `%2F` 视为同一个编码 segment
 的一部分，并在 `PathValue` 中给 handler 解码后的 `/`；Gin 默认按已经解码的 `URL.Path` 匹配，

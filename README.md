@@ -479,19 +479,31 @@ A complete Gin adapter is consumer code; the framework takes no Gin dependency:
 ```go
 func mountGin(r *gin.Engine, api *ent.APIHandler) {
     for _, route := range api.Routes() {
-        path := strings.ReplaceAll(route.Path, "{id}", ":id")
-        handler := route.Handler
-        r.Handle(route.Method, path, func(c *gin.Context) {
-            c.Request.SetPathValue("id", c.Param("id"))
-            handler.ServeHTTP(c.Writer, c.Request)
+        r.Handle(route.Method, entapi.ColonPath(route.Path), func(c *gin.Context) {
+            route.Bind(c.Param).ServeHTTP(c.Writer, c.Request)
         })
     }
 }
 ```
 
-Echo has the same shape in one line: translate `{id}` to `:id`, copy
-`c.Param("id")` into `c.Request().SetPathValue`, then call the route handler
-with Echo's response writer and request.
+`ColonPath` rewrites whole `{name}` segments to `:name` and leaves every other
+segment alone. `Route.Bind` takes a `func(string) string` that exactly matches
+`gin.Context.Param` and `echo.Context.Param`. chi and fiber each need a one-line
+closure: `chi.URLParam` takes the request too, and `fiber.Ctx.Params` carries a
+`defaultValue ...string` variadic, which makes it `func(string, ...string) string`
+and therefore not assignable. Echo uses the same two calls,
+`entapi.ColonPath(route.Path)` and `route.Bind(c.Param)`, with its response
+writer and request.
+
+The placeholder names come from `Route.Path`, so nothing hard-codes `"id"`:
+if the generator ever emits a second placeholder, an adapter written this way
+picks it up without an edit. `Bind` returns `r.Handler` itself when the route has
+no placeholder, so wrapping every route costs nothing for those that do not
+need it.
+
+A mount-time constant closure pins a route to a fixed id:
+`route.Bind(func(string) string { return actorID })` can serve `/v1/me` from the
+same generated `GET /users/{id}` route without a second hand-written wrapper.
 
 One router difference is deliberately not bridged. Go 1.22 `ServeMux` treats
 `%2F` as part of one encoded segment and gives the handler a decoded `/` in

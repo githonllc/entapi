@@ -21,6 +21,18 @@ func (f DocFunc) Mutate(ctx context.Context, m softdeleteent.Mutation) (softdele
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *softdeleteent.DocMutation", m)
 }
 
+// The DraftFunc type is an adapter to allow the use of ordinary
+// function as Draft mutator.
+type DraftFunc func(context.Context, *softdeleteent.DraftMutation) (softdeleteent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f DraftFunc) Mutate(ctx context.Context, m softdeleteent.Mutation) (softdeleteent.Value, error) {
+	if mv, ok := m.(*softdeleteent.DraftMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *softdeleteent.DraftMutation", m)
+}
+
 // The LedgerFunc type is an adapter to allow the use of ordinary
 // function as Ledger mutator.
 type LedgerFunc func(context.Context, *softdeleteent.LedgerMutation) (softdeleteent.Value, error)

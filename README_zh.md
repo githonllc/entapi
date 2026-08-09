@@ -781,6 +781,49 @@ entapi.WithHardDelete(ctx)    // 这次删除是真删
 注入的 hook 位于索引 0，而 Ent 把索引 0 应用在最外层。因此以后通过 `client.Use` 添加的
 hook 都在软删除 hook 内层运行。
 
+过滤同样覆盖**预加载**，不只是顶层查询：`With<Edge>()` 发出的子查询就是目标类型 builder 上
+的一次普通查询，走的是同一个 interceptor，所以被删除的行也不会绕过父实体回来。
+
+软删除**不级联**。一行如果它的边指向一个被软删除的目标，它的外键原封不动，并且仍然出现在
+每一份列表里——没有任何东西给它打墓碑，也没有任何东西发出警告。把这两条放在一起读，就得到
+一个值得在撞上之前先知道的形状：一条声明为 `Required()` 且带 `api.Expand()` 的边，在目标被
+软删除之后会以 JSON `null` 的形式返回。这不是违反契约——`openapi.yaml` 为每条展开的边写的
+就是 `oneOf [<Target>Summary, null]`——但 schema 说过这条边是必填的，所以它读起来像违反。
+
+**手写代码必须通过 `<Edge>OrErr()` 读取边的状态。** 一次普通预加载之后，被软删除的目标留下
+的是 `Edges.X == nil` 且**没有 error**，这跟「根本没人加载这条边」看到的东西一模一样。而 nil
+判断正是消费者默认会写的那种代码，它会悄无声息地丢掉这个区分：
+
+```go
+d, err := client.Draft.Query().Where(draft.ID(id)).WithDoc().Only(ctx)
+// ...
+target, err := d.Edges.DocOrErr()
+switch {
+case err == nil:
+	// 目标是活的
+case ent.IsNotFound(err):
+	// 已加载，但没有对应的行：目标被软删除，或者外键悬空
+	target = nil
+default:
+	// 从未加载——这是查询写错了，不是一种数据状态
+	return err
+}
+```
+
+生成的代码本来就是这么做的；`{entity}_dto.go` 里的 `New<Entity>Response` 就是范例。
+
+要把这些行排除掉，就在普通 ent 里按边过滤。边谓词是一条普通的 SQL 子查询，自己不带
+traverser，所以墓碑条件必须显式写出来：
+
+```go
+client.Draft.Query().Where(draft.HasDocWith(doc.DeletedAtIsNil())).All(ctx)
+```
+
+> **证明：** `internal/softdeleteproof/softdelete_test.go` —
+> `TestRequiredExpandedEdgeToSoftDeletedTarget` 对着真实 SQLite 断言了全部四条：预加载到的边
+> 是「已加载但不存在」而不是「未加载」、`NewDraftResponse` 返回 `"doc": null` 且无 error、
+> 拥有这条边的 `Draft` 仍然在列表里、以及 `HasDocWith(DeletedAtIsNil())` 能把它排除掉。
+
 > **实现：** `softdelete.go` — `SoftDeleteMixin`、`SoftDeleteField`（`"deleted_at"`）、
 > `DomainSoftDelete`、`SoftDeleteAnnotationName`；
 > `funcs_softdelete.go` — `isSoftDeletable`、`softDeleteTypes`、`softDeleteField`、

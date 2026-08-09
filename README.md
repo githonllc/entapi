@@ -919,6 +919,59 @@ Neither implies the other — they use two distinct unexported context key types
 The injected hook occupies index 0 and Ent applies it outermost. Hooks added
 later with `client.Use` therefore run inside the soft-delete hook.
 
+The filter reaches **eager loads too**, not only top-level queries: a
+`With<Edge>()` sub-query is an ordinary query on the target's builder and runs
+through the same interceptor, so a deleted row does not come back through its
+parent either.
+
+Soft delete does **not cascade**. A row whose edge points at a soft-deleted
+target keeps its foreign key and stays in every list — nothing tombstones it and
+nothing warns. Read together with the line above, those two facts produce one
+shape worth knowing before you meet it: an edge declared `Required()` and
+expanded with `api.Expand()` comes back as JSON `null` once its target is soft
+deleted. That is not a contract violation — `openapi.yaml` documents every
+expanded edge as `oneOf [<Target>Summary, null]` — but the schema said the edge
+was required, so it reads like one.
+
+**Hand-written code must read edge state through `<Edge>OrErr()`.** After a
+plain eager load a soft-deleted target leaves `Edges.X == nil` with **no
+error**, which is byte-for-byte what a nil check sees for an edge nobody loaded.
+A nil check is what a consumer writes by default, and it silently loses the
+distinction:
+
+```go
+d, err := client.Draft.Query().Where(draft.ID(id)).WithDoc().Only(ctx)
+// ...
+target, err := d.Edges.DocOrErr()
+switch {
+case err == nil:
+	// the target is live
+case ent.IsNotFound(err):
+	// loaded, and there is no row: soft-deleted, or a dangling foreign key
+	target = nil
+default:
+	// never loaded — a query bug, not a data state
+	return err
+}
+```
+
+Generated code already does exactly this; `New<Entity>Response` in
+`{entity}_dto.go` is the worked example.
+
+To exclude those rows, filter on the edge in plain ent. An edge predicate is an
+ordinary SQL sub-query and carries no traverser of its own, so the tombstone
+condition is spelled out:
+
+```go
+client.Draft.Query().Where(draft.HasDocWith(doc.DeletedAtIsNil())).All(ctx)
+```
+
+> **Proof:** `internal/softdeleteproof/softdelete_test.go` —
+> `TestRequiredExpandedEdgeToSoftDeletedTarget` asserts all four against
+> real SQLite: the eager-loaded edge is loaded-and-absent rather than not
+> loaded, `NewDraftResponse` returns `"doc": null` with no error, the owning
+> `Draft` is still listed, and `HasDocWith(DeletedAtIsNil())` excludes it.
+
 > **Implementation:** `softdelete.go` — `SoftDeleteMixin`, `SoftDeleteField`
 > (`"deleted_at"`), `DomainSoftDelete`, `SoftDeleteAnnotationName`;
 > `funcs_softdelete.go` — `isSoftDeletable`, `softDeleteTypes`,

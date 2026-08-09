@@ -17,6 +17,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/draft"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
 )
@@ -28,6 +29,8 @@ type Client struct {
 	Schema *migrate.Schema
 	// Doc is the client for interacting with the Doc builders.
 	Doc *DocClient
+	// Draft is the client for interacting with the Draft builders.
+	Draft *DraftClient
 	// Ledger is the client for interacting with the Ledger builders.
 	Ledger *LedgerClient
 	// Note is the client for interacting with the Note builders.
@@ -44,6 +47,7 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Doc = NewDocClient(c.config)
+	c.Draft = NewDraftClient(c.config)
 	c.Ledger = NewLedgerClient(c.config)
 	c.Note = NewNoteClient(c.config)
 }
@@ -143,6 +147,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ctx:    ctx,
 		config: cfg,
 		Doc:    NewDocClient(cfg),
+		Draft:  NewDraftClient(cfg),
 		Ledger: NewLedgerClient(cfg),
 		Note:   NewNoteClient(cfg),
 	}, nil
@@ -165,6 +170,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ctx:    ctx,
 		config: cfg,
 		Doc:    NewDocClient(cfg),
+		Draft:  NewDraftClient(cfg),
 		Ledger: NewLedgerClient(cfg),
 		Note:   NewNoteClient(cfg),
 	}, nil
@@ -196,6 +202,7 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	c.Doc.Use(hooks...)
+	c.Draft.Use(hooks...)
 	c.Ledger.Use(hooks...)
 	c.Note.Use(hooks...)
 }
@@ -204,6 +211,7 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	c.Doc.Intercept(interceptors...)
+	c.Draft.Intercept(interceptors...)
 	c.Ledger.Intercept(interceptors...)
 	c.Note.Intercept(interceptors...)
 }
@@ -213,6 +221,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *DocMutation:
 		return c.Doc.mutate(ctx, m)
+	case *DraftMutation:
+		return c.Draft.mutate(ctx, m)
 	case *LedgerMutation:
 		return c.Ledger.mutate(ctx, m)
 	case *NoteMutation:
@@ -369,6 +379,155 @@ func (c *DocClient) mutate(ctx context.Context, m *DocMutation) (Value, error) {
 		return (&DocDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("softdeleteent: unknown Doc mutation op: %q", m.Op())
+	}
+}
+
+// DraftClient is a client for the Draft schema.
+type DraftClient struct {
+	config
+}
+
+// NewDraftClient returns a client for the Draft from the given config.
+func NewDraftClient(c config) *DraftClient {
+	return &DraftClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `draft.Hooks(f(g(h())))`.
+func (c *DraftClient) Use(hooks ...Hook) {
+	c.hooks.Draft = append(c.hooks.Draft, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `draft.Intercept(f(g(h())))`.
+func (c *DraftClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Draft = append(c.inters.Draft, interceptors...)
+}
+
+// Create returns a builder for creating a Draft entity.
+func (c *DraftClient) Create() *DraftCreate {
+	mutation := newDraftMutation(c.config, OpCreate)
+	return &DraftCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Draft entities.
+func (c *DraftClient) CreateBulk(builders ...*DraftCreate) *DraftCreateBulk {
+	return &DraftCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *DraftClient) MapCreateBulk(slice any, setFunc func(*DraftCreate, int)) *DraftCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &DraftCreateBulk{err: fmt.Errorf("calling to DraftClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*DraftCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &DraftCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Draft.
+func (c *DraftClient) Update() *DraftUpdate {
+	mutation := newDraftMutation(c.config, OpUpdate)
+	return &DraftUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *DraftClient) UpdateOne(d *Draft) *DraftUpdateOne {
+	mutation := newDraftMutation(c.config, OpUpdateOne, withDraft(d))
+	return &DraftUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *DraftClient) UpdateOneID(id uuid.UUID) *DraftUpdateOne {
+	mutation := newDraftMutation(c.config, OpUpdateOne, withDraftID(id))
+	return &DraftUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Draft.
+func (c *DraftClient) Delete() *DraftDelete {
+	mutation := newDraftMutation(c.config, OpDelete)
+	return &DraftDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *DraftClient) DeleteOne(d *Draft) *DraftDeleteOne {
+	return c.DeleteOneID(d.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *DraftClient) DeleteOneID(id uuid.UUID) *DraftDeleteOne {
+	builder := c.Delete().Where(draft.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &DraftDeleteOne{builder}
+}
+
+// Query returns a query builder for Draft.
+func (c *DraftClient) Query() *DraftQuery {
+	return &DraftQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeDraft},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Draft entity by its id.
+func (c *DraftClient) Get(ctx context.Context, id uuid.UUID) (*Draft, error) {
+	return c.Query().Where(draft.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *DraftClient) GetX(ctx context.Context, id uuid.UUID) *Draft {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryDoc queries the doc edge of a Draft.
+func (c *DraftClient) QueryDoc(d *Draft) *DocQuery {
+	query := (&DocClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := d.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(draft.Table, draft.FieldID, id),
+			sqlgraph.To(doc.Table, doc.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, draft.DocTable, draft.DocColumn),
+		)
+		fromV = sqlgraph.Neighbors(d.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *DraftClient) Hooks() []Hook {
+	return c.hooks.Draft
+}
+
+// Interceptors returns the client interceptors.
+func (c *DraftClient) Interceptors() []Interceptor {
+	return c.inters.Draft
+}
+
+func (c *DraftClient) mutate(ctx context.Context, m *DraftMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&DraftCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&DraftUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&DraftUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&DraftDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("softdeleteent: unknown Draft mutation op: %q", m.Op())
 	}
 }
 
@@ -657,9 +816,9 @@ func (c *NoteClient) mutate(ctx context.Context, m *NoteMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Doc, Ledger, Note []ent.Hook
+		Doc, Draft, Ledger, Note []ent.Hook
 	}
 	inters struct {
-		Doc, Ledger, Note []ent.Interceptor
+		Doc, Draft, Ledger, Note []ent.Interceptor
 	}
 )

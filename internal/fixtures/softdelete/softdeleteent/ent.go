@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/draft"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
 )
@@ -76,6 +77,7 @@ func checkColumn(table, column string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			doc.Table:    doc.ValidColumn,
+			draft.Table:  draft.ValidColumn,
 			ledger.Table: ledger.ValidColumn,
 			note.Table:   note.ValidColumn,
 		})

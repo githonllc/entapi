@@ -24,6 +24,7 @@ import (
 	// goimports has to resolve.
 	ent "github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/draft"
 	enttest "github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/enttest"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
@@ -402,6 +403,113 @@ func TestEagerLoadedEdgeExcludesSoftDeleted(t *testing.T) {
 	}
 	if len(loaded.Edges.Docs) != 1 || loaded.Edges.Docs[0].ID != kept.ID {
 		t.Fatalf("eager-loaded docs = %d rows %v; want only %s", len(loaded.Edges.Docs), ids(loaded.Edges.Docs), kept.ID)
+	}
+}
+
+func newDraft(t *testing.T, c *ent.Client, ctx context.Context, headline string, d *ent.Doc) *ent.Draft {
+	t.Helper()
+	dr, err := c.Draft.Create().SetHeadline(headline).SetDoc(d).Save(ctx)
+	if err != nil {
+		t.Fatalf("create draft %q: %v", headline, err)
+	}
+	return dr
+}
+
+func draftIDs(drafts []*ent.Draft) []uuid.UUID {
+	out := make([]uuid.UUID, len(drafts))
+	for i, d := range drafts {
+		out[i] = d.ID
+	}
+	return out
+}
+
+// TestRequiredExpandedEdgeToSoftDeletedTarget is #100, reproduced against a real
+// database rather than argued from the templates.
+//
+// Draft.doc is Unique, Required and api.Expand()ed, and Doc is soft-deletable.
+// The schema says every Draft has a Doc and the foreign key still says so after
+// the delete — the row is on disk. So this is the one place the two halves of
+// soft delete are visible at once, and each half is a separate assertion:
+//
+//   - the traverser reaches the EAGER-LOAD sub-query, not only top-level
+//     queries. templates/softdelete.tmpl claims this; before #100 nothing
+//     proved it for a to-one edge, and a compile proof cannot: the difference
+//     between "the predicate is generated" and "the predicate reaches the
+//     sub-query SQL" is invisible to the type checker.
+//   - soft delete does NOT cascade. The Draft is still there, and a consumer
+//     who never asked about Docs still lists it.
+//
+// The two together are what the reporter saw as `"user": null` on a row that
+// would not go away.
+func TestRequiredExpandedEdgeToSoftDeletedTarget(t *testing.T) {
+	c, _, ctx := newClient(t)
+
+	docKept := newDoc(t, c, ctx, "kept")
+	docGone := newDoc(t, c, ctx, "gone")
+	draftKept := newDraft(t, c, ctx, "keeps its doc", docKept)
+	draftGone := newDraft(t, c, ctx, "loses its doc", docGone)
+
+	if err := c.Doc.DeleteOneID(docGone.ID).Exec(ctx); err != nil {
+		t.Fatalf("soft delete doc: %v", err)
+	}
+
+	// (a) The eager load really is filtered. DocOrErr must report
+	// loaded-and-absent — a NotFoundError — and NOT a NotLoadedError, which is
+	// what a caller would get if WithDoc had simply been forgotten.
+	loaded, err := c.Draft.Query().Where(draft.ID(draftGone.ID)).WithDoc().Only(ctx)
+	if err != nil {
+		t.Fatalf("query draft with its doc: %v", err)
+	}
+	if loaded.Edges.Doc != nil {
+		t.Fatalf("eager-loaded doc = %v; the traverser did not reach the eager-load sub-query", loaded.Edges.Doc.ID)
+	}
+	if _, err := loaded.Edges.DocOrErr(); !ent.IsNotFound(err) {
+		t.Fatalf("DocOrErr on a draft whose required doc is soft-deleted = %v (IsNotLoaded=%t); want a NotFoundError", err, ent.IsNotLoaded(err))
+	}
+
+	// The positive control for that discriminator: without WithDoc the very
+	// same nil edge field must report NOT LOADED. Without this, (a) would pass
+	// for a build in which every unloaded edge reports not-found.
+	unloaded, err := c.Draft.Query().Where(draft.ID(draftGone.ID)).Only(ctx)
+	if err != nil {
+		t.Fatalf("query draft without its doc: %v", err)
+	}
+	if _, err := unloaded.Edges.DocOrErr(); !ent.IsNotLoaded(err) {
+		t.Fatalf("DocOrErr on a draft queried without WithDoc = %v; want a NotLoadedError, so that (a)'s NotFoundError means something", err)
+	}
+
+	// (b) The generated response constructor therefore succeeds and emits null,
+	// which is exactly what openapi.yaml documents for an expanded edge
+	// (oneOf [DocSummary, null]). The bug report is not a contract violation.
+	resp, err := ent.NewDraftResponse(loaded)
+	if err != nil {
+		t.Fatalf("NewDraftResponse on a loaded-and-absent required edge: %v; want no error", err)
+	}
+	if resp.Doc != nil {
+		t.Fatalf("NewDraftResponse doc = %+v; want nil, i.e. JSON null", resp.Doc)
+	}
+
+	// (c) Soft delete does not cascade: the owning row is untouched and still
+	// listed. This is the complaint that no annotation and no generated code
+	// answers today.
+	all, err := c.Draft.Query().All(ctx)
+	if err != nil {
+		t.Fatalf("list drafts: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("Draft.Query().All returned %d rows %v; want both drafts — soft delete must not cascade", len(all), draftIDs(all))
+	}
+
+	// (d) And the recipe that excludes it is plain ent, because an edge
+	// predicate is an ordinary SQL sub-query and carries no traverser of its
+	// own. Asserting the KEPT draft survives matters as much as the gone one
+	// disappearing: a predicate that excluded everything would pass otherwise.
+	live, err := c.Draft.Query().Where(draft.HasDocWith(doc.DeletedAtIsNil())).All(ctx)
+	if err != nil {
+		t.Fatalf("list drafts with a live doc: %v", err)
+	}
+	if len(live) != 1 || live[0].ID != draftKept.ID {
+		t.Fatalf("HasDocWith(DeletedAtIsNil()) returned %d rows %v; want only %s (draft %s must be excluded)", len(live), draftIDs(live), draftKept.ID, draftGone.ID)
 	}
 }
 

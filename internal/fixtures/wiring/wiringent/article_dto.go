@@ -425,7 +425,12 @@ func NewArticleResponse(e *Article) (*ArticleResponse, error) {
 	case err == nil:
 		r.Author = NewAuthorSummary(authorEdge)
 	case IsNotFound(err):
-		// Loaded, and there is no related row. A real state; report it as null.
+		// The schema declares this edge Required, so "no related row" is not a
+		// state the domain model has. It is reachable anyway: the target was
+		// excluded at query time — soft delete is the case that produces this,
+		// since it hides the row from the read side while the foreign key stays
+		// intact — or the foreign key dangles. Reported as null, which is what
+		// openapi.yaml documents for an expanded edge: oneOf [..., null].
 		r.Author = nil
 	default:
 		return nil, err

@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/draft"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/predicate"
@@ -28,6 +29,7 @@ const (
 
 	// Node types.
 	TypeDoc    = "Doc"
+	TypeDraft  = "Draft"
 	TypeLedger = "Ledger"
 	TypeNote   = "Note"
 )
@@ -505,6 +507,405 @@ func (m *DocMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Doc edge %s", name)
+}
+
+// DraftMutation represents an operation that mutates the Draft nodes in the graph.
+type DraftMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *uuid.UUID
+	headline      *string
+	clearedFields map[string]struct{}
+	doc           *uuid.UUID
+	cleareddoc    bool
+	done          bool
+	oldValue      func(context.Context) (*Draft, error)
+	predicates    []predicate.Draft
+}
+
+var _ ent.Mutation = (*DraftMutation)(nil)
+
+// draftOption allows management of the mutation configuration using functional options.
+type draftOption func(*DraftMutation)
+
+// newDraftMutation creates new mutation for the Draft entity.
+func newDraftMutation(c config, op Op, opts ...draftOption) *DraftMutation {
+	m := &DraftMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeDraft,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withDraftID sets the ID field of the mutation.
+func withDraftID(id uuid.UUID) draftOption {
+	return func(m *DraftMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Draft
+		)
+		m.oldValue = func(ctx context.Context) (*Draft, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Draft.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withDraft sets the old Draft of the mutation.
+func withDraft(node *Draft) draftOption {
+	return func(m *DraftMutation) {
+		m.oldValue = func(context.Context) (*Draft, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m DraftMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m DraftMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("softdeleteent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Draft entities.
+func (m *DraftMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *DraftMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *DraftMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Draft.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetHeadline sets the "headline" field.
+func (m *DraftMutation) SetHeadline(s string) {
+	m.headline = &s
+}
+
+// Headline returns the value of the "headline" field in the mutation.
+func (m *DraftMutation) Headline() (r string, exists bool) {
+	v := m.headline
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldHeadline returns the old "headline" field's value of the Draft entity.
+// If the Draft object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DraftMutation) OldHeadline(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldHeadline is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldHeadline requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldHeadline: %w", err)
+	}
+	return oldValue.Headline, nil
+}
+
+// ResetHeadline resets all changes to the "headline" field.
+func (m *DraftMutation) ResetHeadline() {
+	m.headline = nil
+}
+
+// SetDocID sets the "doc" edge to the Doc entity by id.
+func (m *DraftMutation) SetDocID(id uuid.UUID) {
+	m.doc = &id
+}
+
+// ClearDoc clears the "doc" edge to the Doc entity.
+func (m *DraftMutation) ClearDoc() {
+	m.cleareddoc = true
+}
+
+// DocCleared reports if the "doc" edge to the Doc entity was cleared.
+func (m *DraftMutation) DocCleared() bool {
+	return m.cleareddoc
+}
+
+// DocID returns the "doc" edge ID in the mutation.
+func (m *DraftMutation) DocID() (id uuid.UUID, exists bool) {
+	if m.doc != nil {
+		return *m.doc, true
+	}
+	return
+}
+
+// DocIDs returns the "doc" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// DocID instead. It exists only for internal usage by the builders.
+func (m *DraftMutation) DocIDs() (ids []uuid.UUID) {
+	if id := m.doc; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetDoc resets all changes to the "doc" edge.
+func (m *DraftMutation) ResetDoc() {
+	m.doc = nil
+	m.cleareddoc = false
+}
+
+// Where appends a list predicates to the DraftMutation builder.
+func (m *DraftMutation) Where(ps ...predicate.Draft) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the DraftMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *DraftMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Draft, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *DraftMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *DraftMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Draft).
+func (m *DraftMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *DraftMutation) Fields() []string {
+	fields := make([]string, 0, 1)
+	if m.headline != nil {
+		fields = append(fields, draft.FieldHeadline)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *DraftMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case draft.FieldHeadline:
+		return m.Headline()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *DraftMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case draft.FieldHeadline:
+		return m.OldHeadline(ctx)
+	}
+	return nil, fmt.Errorf("unknown Draft field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *DraftMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case draft.FieldHeadline:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetHeadline(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Draft field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *DraftMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *DraftMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *DraftMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Draft numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *DraftMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *DraftMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *DraftMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Draft nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *DraftMutation) ResetField(name string) error {
+	switch name {
+	case draft.FieldHeadline:
+		m.ResetHeadline()
+		return nil
+	}
+	return fmt.Errorf("unknown Draft field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *DraftMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.doc != nil {
+		edges = append(edges, draft.EdgeDoc)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *DraftMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case draft.EdgeDoc:
+		if id := m.doc; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *DraftMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *DraftMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *DraftMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.cleareddoc {
+		edges = append(edges, draft.EdgeDoc)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *DraftMutation) EdgeCleared(name string) bool {
+	switch name {
+	case draft.EdgeDoc:
+		return m.cleareddoc
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *DraftMutation) ClearEdge(name string) error {
+	switch name {
+	case draft.EdgeDoc:
+		m.ClearDoc()
+		return nil
+	}
+	return fmt.Errorf("unknown Draft unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *DraftMutation) ResetEdge(name string) error {
+	switch name {
+	case draft.EdgeDoc:
+		m.ResetDoc()
+		return nil
+	}
+	return fmt.Errorf("unknown Draft edge %s", name)
 }
 
 // LedgerMutation represents an operation that mutates the Ledger nodes in the graph.

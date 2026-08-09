@@ -29,6 +29,26 @@ var (
 			},
 		},
 	}
+	// DraftsColumns holds the columns for the "drafts" table.
+	DraftsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "headline", Type: field.TypeString},
+		{Name: "draft_doc", Type: field.TypeUUID},
+	}
+	// DraftsTable holds the schema information for the "drafts" table.
+	DraftsTable = &schema.Table{
+		Name:       "drafts",
+		Columns:    DraftsColumns,
+		PrimaryKey: []*schema.Column{DraftsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "drafts_docs_doc",
+				Columns:    []*schema.Column{DraftsColumns[2]},
+				RefColumns: []*schema.Column{DocsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+	}
 	// LedgersColumns holds the columns for the "ledgers" table.
 	LedgersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -55,6 +75,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		DocsTable,
+		DraftsTable,
 		LedgersTable,
 		NotesTable,
 	}
@@ -62,4 +83,5 @@ var (
 
 func init() {
 	DocsTable.ForeignKeys[0].RefTable = NotesTable
+	DraftsTable.ForeignKeys[0].RefTable = DocsTable
 }

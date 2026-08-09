@@ -9,6 +9,9 @@ import (
 // Doc is the predicate function for doc builders.
 type Doc func(*sql.Selector)
 
+// Draft is the predicate function for draft builders.
+type Draft func(*sql.Selector)
+
 // Ledger is the predicate function for ledger builders.
 type Ledger func(*sql.Selector)
 

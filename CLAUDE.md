@@ -304,6 +304,11 @@ family may disappear when `OpCreate` is explicitly excepted.
   tell an entity that opted in from one that merely owns a column with that
   name, and it only ever reached the write path), and #29 removed the last
   caller of `hasSoftDelete`/`isTimeField` along with `base_service.tmpl`.
+  **The traverser filters eager loads too**, not only top-level queries: a
+  `With<Edge>()` sub-query runs on the target's own builder. **Soft delete does
+  not cascade** — a row owning a soft-deleted target keeps its foreign key and
+  stays in every list, so a `Required()` + `api.Expand()` edge surfaces as JSON
+  `null` (#100); `internal/softdeleteproof` proves both against real SQLite.
 - **Five graph-level templates** are rendered once over `*gen.Graph` rather than
   per `*gen.Type`; their output files are cleaned up by the same marker scan as
   everything else (#63), with no per-name enumeration:

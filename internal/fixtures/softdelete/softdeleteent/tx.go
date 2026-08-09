@@ -14,6 +14,8 @@ type Tx struct {
 	config
 	// Doc is the client for interacting with the Doc builders.
 	Doc *DocClient
+	// Draft is the client for interacting with the Draft builders.
+	Draft *DraftClient
 	// Ledger is the client for interacting with the Ledger builders.
 	Ledger *LedgerClient
 	// Note is the client for interacting with the Note builders.
@@ -150,6 +152,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Doc = NewDocClient(tx.config)
+	tx.Draft = NewDraftClient(tx.config)
 	tx.Ledger = NewLedgerClient(tx.config)
 	tx.Note = NewNoteClient(tx.config)
 }

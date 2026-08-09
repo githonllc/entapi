@@ -69,6 +69,19 @@ type DocCreateRequest struct {
 // data, not as struct tags, to tell a case variant from an unrelated key.
 var docCreateRequestTags = []string{"title", "origin", "source"}
 
+// DocCreateRequestTags returns the canonical JSON key of every field on
+// DocCreateRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func DocCreateRequestTags() []string {
+	return append([]string(nil), docCreateRequestTags...)
+}
+
 // UnmarshalJSON records presence, then decodes normally.
 //
 // The wire format is unchanged: every exported field keeps its ordinary type
@@ -202,6 +215,19 @@ type DocPatchRequest struct {
 // docPatchRequestTags is the canonical JSON key of every field on
 // DocPatchRequest, in declaration order.
 var docPatchRequestTags = []string{"title"}
+
+// DocPatchRequestTags returns the canonical JSON key of every field on
+// DocPatchRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func DocPatchRequestTags() []string {
+	return append([]string(nil), docPatchRequestTags...)
+}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from

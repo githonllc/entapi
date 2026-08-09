@@ -477,7 +477,16 @@ func New{{ $.Name }}Response(e *{{ $.Name }}) (*{{ $.Name }}Response, error) {
 	     deliberately unqualified: this file is emitted into the consumer's
 	     package ent, so the bare name binds there and unwraps
 	     *ent.NotFoundError. See errors.go. */}}case IsNotFound(err):
+{{- if $edge.Optional }}
 		// Loaded, and there is no related row. A real state; report it as null.
+{{- else }}
+		// The schema declares this edge Required, so "no related row" is not a
+		// state the domain model has. It is reachable anyway: the target was
+		// excluded at query time — soft delete is the case that produces this,
+		// since it hides the row from the read side while the foreign key stays
+		// intact — or the foreign key dangles. Reported as null, which is what
+		// openapi.yaml documents for an expanded edge: oneOf [..., null].
+{{- end }}
 		r.{{ $edge.StructField }} = nil
 	default:
 		return nil, err

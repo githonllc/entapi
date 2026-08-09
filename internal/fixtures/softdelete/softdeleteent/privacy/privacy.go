@@ -134,6 +134,30 @@ func (f DocMutationRuleFunc) EvalMutation(ctx context.Context, m softdeleteent.M
 	return Denyf("softdeleteent/privacy: unexpected mutation type %T, expect *softdeleteent.DocMutation", m)
 }
 
+// The DraftQueryRuleFunc type is an adapter to allow the use of ordinary
+// functions as a query rule.
+type DraftQueryRuleFunc func(context.Context, *softdeleteent.DraftQuery) error
+
+// EvalQuery return f(ctx, q).
+func (f DraftQueryRuleFunc) EvalQuery(ctx context.Context, q softdeleteent.Query) error {
+	if q, ok := q.(*softdeleteent.DraftQuery); ok {
+		return f(ctx, q)
+	}
+	return Denyf("softdeleteent/privacy: unexpected query type %T, expect *softdeleteent.DraftQuery", q)
+}
+
+// The DraftMutationRuleFunc type is an adapter to allow the use of ordinary
+// functions as a mutation rule.
+type DraftMutationRuleFunc func(context.Context, *softdeleteent.DraftMutation) error
+
+// EvalMutation calls f(ctx, m).
+func (f DraftMutationRuleFunc) EvalMutation(ctx context.Context, m softdeleteent.Mutation) error {
+	if m, ok := m.(*softdeleteent.DraftMutation); ok {
+		return f(ctx, m)
+	}
+	return Denyf("softdeleteent/privacy: unexpected mutation type %T, expect *softdeleteent.DraftMutation", m)
+}
+
 // The LedgerQueryRuleFunc type is an adapter to allow the use of ordinary
 // functions as a query rule.
 type LedgerQueryRuleFunc func(context.Context, *softdeleteent.LedgerQuery) error

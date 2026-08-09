@@ -24,6 +24,9 @@ type APIHandler struct {
 	getDoc       GetDocFn
 	patchDoc     PatchDocFn
 	deleteDoc    DeleteDocFn
+	listDrafts   ListDraftsFn
+	getDraft     GetDraftFn
+	deleteDraft  DeleteDraftFn
 	listLedgers  ListLedgersFn
 	createLedger CreateLedgerFn
 	getLedger    GetLedgerFn
@@ -51,6 +54,9 @@ func API(client *Client) *APIHandler {
 		getDoc:       GetDoc,
 		patchDoc:     PatchDoc,
 		deleteDoc:    DeleteDoc,
+		listDrafts:   ListDrafts,
+		getDraft:     GetDraft,
+		deleteDraft:  DeleteDraft,
 		listLedgers:  ListLedgers,
 		createLedger: CreateLedger,
 		getLedger:    GetLedger,
@@ -96,6 +102,27 @@ func API(client *Client) *APIHandler {
 			Path:    "/docs/{id}",
 			Handler: http.HandlerFunc(h.handleDeleteDoc),
 			Entity:  "Doc",
+			Op:      "delete",
+		},
+		{
+			Method:  "GET",
+			Path:    "/drafts",
+			Handler: http.HandlerFunc(h.handleListDrafts),
+			Entity:  "Draft",
+			Op:      "list",
+		},
+		{
+			Method:  "GET",
+			Path:    "/drafts/{id}",
+			Handler: http.HandlerFunc(h.handleGetDraft),
+			Entity:  "Draft",
+			Op:      "get",
+		},
+		{
+			Method:  "DELETE",
+			Path:    "/drafts/{id}",
+			Handler: http.HandlerFunc(h.handleDeleteDraft),
+			Entity:  "Draft",
 			Op:      "delete",
 		},
 		{

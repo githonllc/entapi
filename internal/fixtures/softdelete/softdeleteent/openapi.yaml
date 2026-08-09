@@ -137,6 +137,75 @@ paths:
         "400": {"$ref": "#/components/responses/Problem400"}
         "404": {"$ref": "#/components/responses/Problem404"}
         "500": {"$ref": "#/components/responses/Problem500"}
+  "/drafts":
+    get:
+      operationId: "listDrafts"
+      summary: "ListDrafts"
+      tags: ["Draft"]
+      parameters:
+        - name: "id"
+          in: query
+          required: false
+          schema: {"type": "string", "pattern": "^(?:(eq|ne|in|not_in|gt|ge|lt|le|from|to|between):)?"}
+          description: "Filter on id. A bare value means eq. Any other comparison is written as \"<operator>:<value>\"; this field accepts eq, ne, in, not_in, gt, ge, lt, le, from, to, between. A prefix outside the global operator vocabulary is taken literally, so \"eq:\" is the escape for a value that begins with one. An operator in that vocabulary but outside this field's set is rejected with 400. Repeating the parameter is legal and ANDs the resulting predicates. \"in:\" and \"between:\" split their value on commas, so a value containing a comma cannot be expressed through them; \"is_null:\" and \"not_null:\" take no value at all."
+        - name: "_page"
+          in: query
+          required: false
+          schema: {"type": "integer", "minimum": 1}
+          description: "One-indexed page number. It must appear at most once; zero and negative values are rejected with 400."
+        - name: "_size"
+          in: query
+          required: false
+          schema: {"type": "integer", "minimum": 1}
+          description: "Page size. It must appear at most once; zero and negative values are rejected with 400. Omitted it is 20, and a value above 1000 is clamped to 1000 rather than refused."
+        - name: "_sort"
+          in: query
+          required: false
+          schema: {"type": "string"}
+          description: "Comma-separated sort keys, each optionally suffixed with \":asc\" or \":desc\" (ascending by default). Legal keys: id. The primary key is appended as a tiebreak when it is absent from the list. Any other key is rejected with 400."
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/DraftListResponse"}
+        "400": {"$ref": "#/components/responses/Problem400"}
+        "404": {"$ref": "#/components/responses/Problem404"}
+        "500": {"$ref": "#/components/responses/Problem500"}
+  "/drafts/{id}":
+    get:
+      operationId: "getDraft"
+      summary: "GetDraft"
+      tags: ["Draft"]
+      parameters:
+        - name: "id"
+          in: path
+          required: true
+          schema: {"type": "string", "format": "uuid"}
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/DraftResponse"}
+        "400": {"$ref": "#/components/responses/Problem400"}
+        "404": {"$ref": "#/components/responses/Problem404"}
+        "500": {"$ref": "#/components/responses/Problem500"}
+    delete:
+      operationId: "deleteDraft"
+      summary: "DeleteDraft"
+      tags: ["Draft"]
+      parameters:
+        - name: "id"
+          in: path
+          required: true
+          schema: {"type": "string", "format": "uuid"}
+      responses:
+        "204":
+          description: "No Content"
+        "400": {"$ref": "#/components/responses/Problem400"}
+        "404": {"$ref": "#/components/responses/Problem404"}
+        "500": {"$ref": "#/components/responses/Problem500"}
   "/ledgers":
     get:
       operationId: "listLedgers"
@@ -468,6 +537,50 @@ components:
       type: object
       properties:
         "title": {"type": "string"}
+    "DraftSummary":
+      description: "Draft as it appears on another entity's response. It carries no edges, which is what bounds expansion to one level."
+      type: object
+      properties:
+        "id": {"type": "string", "format": "uuid"}
+        "headline": {"type": "string"}
+      required:
+        - "id"
+        - "headline"
+    "DraftResponse":
+      type: object
+      properties:
+        "id": {"type": "string", "format": "uuid"}
+        "headline": {"type": "string"}
+        "doc": {"oneOf": [{"$ref": "#/components/schemas/DocSummary"}, {"type": "null"}]}
+      required:
+        - "id"
+        - "headline"
+        - "doc"
+    "DraftListResponse":
+      description: "One page. The envelope is flat: data, total, page and size, with no nested pagination object."
+      type: object
+      properties:
+        "data": {"type": "array", "items": {"$ref": "#/components/schemas/DraftResponse"}}
+        "total": {"type": "integer"}
+        "page": {"type": "integer"}
+        "size": {"type": "integer"}
+      required:
+        - "data"
+        - "total"
+        - "page"
+        - "size"
+    "DraftCreateRequest":
+      description: "An omitted key leaves the schema's own default in effect. An explicit null counts as omitted: a create request has nothing to clear."
+      type: object
+      properties:
+        "headline": {"type": "string"}
+      required:
+        - "headline"
+    "DraftPatchRequest":
+      description: "An omitted key is left alone. An explicit null clears the field, and is rejected with 422 on a field this schema declares non-nullable."
+      type: object
+      properties:
+        "headline": {"type": "string"}
     "LedgerSummary":
       description: "Ledger as it appears on another entity's response. It carries no edges, which is what bounds expansion to one level."
       type: object

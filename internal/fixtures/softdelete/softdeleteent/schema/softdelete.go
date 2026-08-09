@@ -9,6 +9,9 @@
 //	Ledger  declares a deleted_at field BY HAND,  -> NOT soft-deletable
 //	        Optional but not Nillable, with no
 //	        mixin
+//	Draft   hard delete, owns a UNIQUE + REQUIRED  -> the #100 shape: a required
+//	        api.Expand()ed edge to Doc                edge whose target can vanish
+//	                                                  from the read side
 //
 // Ledger is the fixture obligation transferred from #12, and it is what pins
 // the decision on the naming convention: before #18 an entity was soft-deletable
@@ -125,3 +128,48 @@ func (Ledger) Fields() []ent.Field {
 }
 
 func (Ledger) Annotations() []schema.Annotation { return []schema.Annotation{api.Resource()} }
+
+// Draft is the shape #100 was reported against, transplanted onto this fixture:
+// a hard-delete entity whose edge to a soft-deletable target is Unique,
+// Required and api.Expand()ed. The reporter's pair was Session -> User.
+//
+// The schema says every Draft has a Doc, and the foreign key still says so
+// after the Doc is soft-deleted — the row is on disk and the constraint holds.
+// Only the READ side changes: the traverser removes the Doc from the eager-load
+// sub-query, so the edge comes back loaded-and-absent and the response carries
+// `"doc": null`. Soft delete does not cascade, so the Draft itself stays in
+// every list. Both facts are asserted against a real database in
+// internal/softdeleteproof.
+type Draft struct {
+	ent.Schema
+}
+
+// Fields of the Draft.
+func (Draft) Fields() []ent.Field {
+	return []ent.Field{
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
+
+		field.String("headline"),
+	}
+}
+
+// Edges of the Draft.
+func (Draft) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("doc", Doc.Type).
+			Unique().
+			Required().
+			Annotations(api.Expand()),
+	}
+}
+
+// Draft excepts the write families for the same reason the consumer's Session
+// does: its required "doc" edge declares no edge.Field(), so the foreign key is
+// not an ent field, so nothing puts a setter for it in a create request and the
+// generated CreateDraft could never succeed. Generation does not refuse that
+// today — schema_conflicts.go's required-no-default rule reads node.Fields and
+// never looks at edges — which is #110. Excepting the write
+// families here keeps this fixture about #100 rather than about that gap.
+func (Draft) Annotations() []schema.Annotation {
+	return []schema.Annotation{api.Resource().Except(api.OpCreate, api.OpPatch)}
+}

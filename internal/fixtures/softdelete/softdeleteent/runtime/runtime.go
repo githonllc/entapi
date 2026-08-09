@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/doc"
+	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/draft"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/ledger"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/note"
 	"github.com/githonllc/entapi/internal/fixtures/softdelete/softdeleteent/schema"
@@ -34,6 +35,12 @@ func init() {
 	docDescID := docFields[0].Descriptor()
 	// doc.DefaultID holds the default value on creation for the id field.
 	doc.DefaultID = docDescID.Default.(func() uuid.UUID)
+	draftFields := schema.Draft{}.Fields()
+	_ = draftFields
+	// draftDescID is the schema descriptor for id field.
+	draftDescID := draftFields[0].Descriptor()
+	// draft.DefaultID holds the default value on creation for the id field.
+	draft.DefaultID = draftDescID.Default.(func() uuid.UUID)
 	ledgerFields := schema.Ledger{}.Fields()
 	_ = ledgerFields
 	// ledgerDescID is the schema descriptor for id field.

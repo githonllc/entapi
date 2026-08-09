@@ -81,7 +81,7 @@ go get github.com/githonllc/entapi
 |---|---|---|
 | `github.com/githonllc/entapi` | 你的 `entc.go`；嵌软删除的 schema | `Extension`、`SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | 你的 **schema** 文件 | `Resource`、`Hidden`、`ReadOnly`、`Searchable`、`Filterable`、`Sortable`、`Expand` |
-| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`WriteProblem`、`FieldError`、`Route`、`WithActor`/`ActorFrom`、错误 sentinel 与 mapper、filter/pointer/软删除 helper |
+| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`WriteProblem`、`FieldError`、`Route`/`Op`、`WithActor`/`ActorFrom`、错误 sentinel 与 mapper、filter/pointer/软删除 helper |
 
 这个切分是承重的，不是整洁癖：根包用 `//go:embed` 内嵌八个模板，并在**包初始化时**把八份
 全部从内嵌文件系统里读出来，读不到就 panic。只要 import 根包，这件事就会发生，无论你是否
@@ -355,9 +355,31 @@ POST 与 PATCH 只接受 `application/json`，允许 media-type 参数。body �
 
 ### 注册导出的路由
 
-`Routes()` 按确定的注册顺序返回 `[]entapi.Route{Method, Path, Handler}`。每次调用都返回一份
-新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。这是数据导出，不是
-修改 API：用 `Except` 删除生成端点，用 `With` 提供自定义实现，额外端点直接注册到消费者自己的路由器。
+`Routes()` 按确定的注册顺序返回 `[]entapi.Route{Method, Path, Handler, Entity, Op}`。每次
+调用都返回一份新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。这是
+数据导出，不是修改 API：用 `Except` 删除生成端点，用 `With` 提供自定义实现，额外端点直接
+注册到消费者自己的路由器。
+
+`Entity` 是 Ent 的类型名（`"Article"`），`Op` 是 `entapi.Op` —— `OpList`、`OpCreate`、
+`OpGet`、`OpPatch`、`OpDelete`，不属于任何资源的路由则是 `OpNone`。它们带上了过去被路径
+藏起来的身份，于是「按受众切分这棵树」变成一次编译器能检查的比较，而不是对路径文本做匹配
+——后者拼错了就什么都选不中，且什么都不报：
+
+```go
+for _, route := range api.Routes() {
+    switch {
+    case route.Entity == "AuditLog":            // 整个实体划进内网面
+        internal.Handle(route.Method+" "+route.Path, route.Handler)
+    case route.Op == entapi.OpNone:             // 文档本身，不属于任何资源
+        public.Handle(route.Method+" "+route.Path, route.Handler)
+    default:
+        public.Handle(route.Method+" "+route.Path, requireScope(route)(route.Handler))
+    }
+}
+```
+
+`Op` 是独立类型而不是裸 string，正是为了这一点；它没有复用 `api.Op`，因为 runtime 不 import
+任何 Ent 包，但两边的取值由一个 drift guard 钉在一起。
 
 完整的 Gin adapter 写在消费者侧；框架不依赖 Gin：
 
@@ -382,12 +404,14 @@ Echo 是同一种形状：把 `{id}` 换成 `:id`，将 `c.Param("id")` 写入
 所以 `/articles/a%2Fb` 不匹配 `/articles/:id`。若标识符需要编码斜杠，应显式选择并测试消费者
 路由器的策略。
 
-这份元数据也能按 Method 选择性包裹外层 middleware，不必在生成 handler 内增加 hook：
+这份元数据也能选择性包裹外层 middleware，不必在生成 handler 内增加 hook。`Op` 说明这条路由
+在做什么，于是「所有写操作」不必再拼成一串 method：
 
 ```go
 for _, route := range api.Routes() {
     handler := route.Handler
-    if route.Method == http.MethodDelete {
+    switch route.Op {
+    case entapi.OpCreate, entapi.OpPatch, entapi.OpDelete:
         handler = requireAuth(handler)
     }
     mux.Handle(route.Method+" "+route.Path, handler)

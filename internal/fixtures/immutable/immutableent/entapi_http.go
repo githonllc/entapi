@@ -47,26 +47,36 @@ func API(client *Client) *APIHandler {
 			Method:  "GET",
 			Path:    "/docs",
 			Handler: http.HandlerFunc(h.handleListDocs),
+			Entity:  "Doc",
+			Op:      "list",
 		},
 		{
 			Method:  "POST",
 			Path:    "/docs",
 			Handler: http.HandlerFunc(h.handleCreateDoc),
+			Entity:  "Doc",
+			Op:      "create",
 		},
 		{
 			Method:  "GET",
 			Path:    "/docs/{id}",
 			Handler: http.HandlerFunc(h.handleGetDoc),
+			Entity:  "Doc",
+			Op:      "get",
 		},
 		{
 			Method:  "PATCH",
 			Path:    "/docs/{id}",
 			Handler: http.HandlerFunc(h.handlePatchDoc),
+			Entity:  "Doc",
+			Op:      "patch",
 		},
 		{
 			Method:  "DELETE",
 			Path:    "/docs/{id}",
 			Handler: http.HandlerFunc(h.handleDeleteDoc),
+			Entity:  "Doc",
+			Op:      "delete",
 		},
 		// The document describing everything above. It is in the manifest, not
 		// beside it, so Routes() sees it and a consumer can wrap or drop it with

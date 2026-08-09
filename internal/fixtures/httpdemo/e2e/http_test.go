@@ -321,21 +321,25 @@ func TestRoutesShapeOrderAndCopyIsolation(t *testing.T) {
 	type routeKey struct {
 		method string
 		path   string
+		entity string
+		op     entapi.Op
 	}
 	want := []routeKey{
-		{http.MethodGet, "/articles"},
-		{http.MethodPost, "/articles"},
-		{http.MethodGet, "/articles/{id}"},
-		{http.MethodPatch, "/articles/{id}"},
-		{http.MethodDelete, "/articles/{id}"},
-		{http.MethodGet, "/audit_logs"},
-		{http.MethodPost, "/audit_logs"},
-		{http.MethodGet, "/audit_logs/{id}"},
-		{http.MethodPatch, "/audit_logs/{id}"},
+		{http.MethodGet, "/articles", "Article", entapi.OpList},
+		{http.MethodPost, "/articles", "Article", entapi.OpCreate},
+		{http.MethodGet, "/articles/{id}", "Article", entapi.OpGet},
+		{http.MethodPatch, "/articles/{id}", "Article", entapi.OpPatch},
+		{http.MethodDelete, "/articles/{id}", "Article", entapi.OpDelete},
+		{http.MethodGet, "/audit_logs", "AuditLog", entapi.OpList},
+		{http.MethodPost, "/audit_logs", "AuditLog", entapi.OpCreate},
+		{http.MethodGet, "/audit_logs/{id}", "AuditLog", entapi.OpGet},
+		{http.MethodPatch, "/audit_logs/{id}", "AuditLog", entapi.OpPatch},
 		// The generated document, last: it is appended after every entity's
 		// routes, so its position is a fact about registration order rather
-		// than an accident of the schema (#76).
-		{http.MethodGet, "/openapi.yaml"},
+		// than an accident of the schema (#76). It belongs to no resource, so
+		// Entity and Op are the zero value -- that is what makes "every route
+		// with an Op" a usable way to say "the resource surface".
+		{http.MethodGet, "/openapi.yaml", "", entapi.OpNone},
 	}
 	api := ent.API(newClient(t))
 	routes := api.Routes()
@@ -347,7 +351,7 @@ func TestRoutesShapeOrderAndCopyIsolation(t *testing.T) {
 		if route.Handler == nil {
 			t.Fatalf("route %d has a nil Handler", i)
 		}
-		if got := (routeKey{route.Method, route.Path}); got != want[i] {
+		if got := (routeKey{route.Method, route.Path, route.Entity, route.Op}); got != want[i] {
 			t.Errorf("route %d = %+v, want %+v", i, got, want[i])
 		}
 		legalityProbe.Handle(route.Method+" "+route.Path, route.Handler)
@@ -369,6 +373,68 @@ func TestRoutesShapeOrderAndCopyIsolation(t *testing.T) {
 	t.Cleanup(server.Close)
 	response, body := request(t, server.Client(), http.MethodGet, server.URL+"/articles", "", nil)
 	requireStatus(t, response, body, http.StatusOK)
+}
+
+// TestRouteIdentitySplitsTheManifestWithoutPathMatching is the reason
+// Route.Entity and Route.Op exist. Splitting the surface by audience -- mount
+// AuditLog behind an internal-only middleware, expose Article publicly, wrap
+// every write with an audit log -- used to require matching on Path text, where
+// a typo produces a selector that matches nothing and reports nothing.
+//
+// The assertions below are deliberately written the way a consumer would write
+// the routing itself, so the test fails for the same reason a consumer's split
+// would break.
+func TestRouteIdentitySplitsTheManifestWithoutPathMatching(t *testing.T) {
+	routes := ent.API(newClient(t)).Routes()
+
+	var public, internal, writes, unowned []entapi.Route
+	for _, route := range routes {
+		switch route.Entity {
+		case "Article":
+			public = append(public, route)
+		case "AuditLog":
+			internal = append(internal, route)
+		case "":
+			unowned = append(unowned, route)
+		default:
+			t.Errorf("route %s %s carries unknown entity %q", route.Method, route.Path, route.Entity)
+		}
+		switch route.Op {
+		case entapi.OpCreate, entapi.OpPatch, entapi.OpDelete:
+			writes = append(writes, route)
+		}
+	}
+
+	// Article is a full resource; AuditLog Excepts delete (see its schema), so
+	// the split has to come out asymmetric or it is not reading real identity.
+	if len(public) != 5 {
+		t.Errorf("Article routes = %d, want 5", len(public))
+	}
+	if len(internal) != 4 {
+		t.Errorf("AuditLog routes = %d, want 4 (delete is Excepted)", len(internal))
+	}
+	if len(writes) != 5 {
+		t.Errorf("write routes = %d, want 5 (3 Article + 2 AuditLog)", len(writes))
+	}
+	// Exactly one route belongs to no resource, and it is the document.
+	if len(unowned) != 1 || unowned[0].Path != "/openapi.yaml" {
+		t.Errorf("routes with no entity = %+v, want only GET /openapi.yaml", unowned)
+	}
+	for _, route := range unowned {
+		if route.Op != entapi.OpNone {
+			t.Errorf("%s %s has no entity but carries Op %q", route.Method, route.Path, route.Op)
+		}
+	}
+
+	// Every resource route carries both halves of its identity: an Op without
+	// an Entity, or the reverse, would make one of the two splits above silently
+	// incomplete rather than loudly wrong.
+	for _, route := range routes {
+		if (route.Entity == "") != (route.Op == entapi.OpNone) {
+			t.Errorf("%s %s has a half-filled identity: entity=%q op=%q",
+				route.Method, route.Path, route.Entity, route.Op)
+		}
+	}
 }
 
 func TestMountMatchesRoutes(t *testing.T) {

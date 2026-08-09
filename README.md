@@ -90,7 +90,7 @@ packages are named `entapi`; the schema package is named `api`.
 |---|---|---|
 | `github.com/githonllc/entapi` | your `entc.go`; schemas that embed soft delete | `Extension`, `SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | your **schema** files | `Resource`, `Hidden`, `ReadOnly`, `Searchable`, `Filterable`, `Sortable`, `Expand` |
-| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `WriteProblem`, `FieldError`, `Route`, `WithActor`/`ActorFrom`, error sentinels and mapper, filter/pointer/soft-delete helpers |
+| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `WriteProblem`, `FieldError`, `Route`/`Op`, `WithActor`/`ActorFrom`, error sentinels and mapper, filter/pointer/soft-delete helpers |
 
 The split is load-bearing, not cosmetic. The root package embeds eight templates
 with `//go:embed` and reads all eight out of the embedded filesystem **at package
@@ -416,11 +416,35 @@ nested module precisely so that validator dependency stays out of this one.
 
 ### Registering exported routes
 
-`Routes()` returns `[]entapi.Route{Method, Path, Handler}` in deterministic
-registration order. Every call returns a fresh slice, so changing its rows
-cannot change what `ServeHTTP` or a later `Mount` registers. The list is a data
-export, not a mutation API: remove generated endpoints with `Except`, provide
-custom implementations with `With`, and register extra endpoints on your own router.
+`Routes()` returns `[]entapi.Route{Method, Path, Handler, Entity, Op}` in
+deterministic registration order. Every call returns a fresh slice, so changing
+its rows cannot change what `ServeHTTP` or a later `Mount` registers. The list
+is a data export, not a mutation API: remove generated endpoints with `Except`,
+provide custom implementations with `With`, and register extra endpoints on your
+own router.
+
+`Entity` is the Ent type name (`"Article"`) and `Op` is an `entapi.Op` —
+`OpList`, `OpCreate`, `OpGet`, `OpPatch`, `OpDelete`, or `OpNone` for a route
+that belongs to no resource. They carry the identity the path used to hide, so
+splitting the surface by audience is a comparison the compiler checks rather
+than a match on path text, where a typo selects nothing and reports nothing:
+
+```go
+for _, route := range api.Routes() {
+    switch {
+    case route.Entity == "AuditLog":            // internal surface, whole entity
+        internal.Handle(route.Method+" "+route.Path, route.Handler)
+    case route.Op == entapi.OpNone:             // the document; not a resource
+        public.Handle(route.Method+" "+route.Path, route.Handler)
+    default:
+        public.Handle(route.Method+" "+route.Path, requireScope(route)(route.Handler))
+    }
+}
+```
+
+`Op` is a distinct type rather than a bare string for that reason: it does not
+reuse `api.Op`, because the runtime imports no Ent package, but the two are
+pinned to the same values by a drift guard.
 
 A complete Gin adapter is consumer code; the framework takes no Gin dependency:
 
@@ -448,12 +472,14 @@ One router difference is deliberately not bridged. Go 1.22 `ServeMux` treats
 an identifier, choose and test the consumer router's policy explicitly.
 
 The metadata also supports selective outer middleware without adding a hook
-inside generated handlers:
+inside generated handlers. `Op` says what the route does, so "every write" does
+not have to be spelled as a list of methods:
 
 ```go
 for _, route := range api.Routes() {
     handler := route.Handler
-    if route.Method == http.MethodDelete {
+    switch route.Op {
+    case entapi.OpCreate, entapi.OpPatch, entapi.OpDelete:
         handler = requireAuth(handler)
     }
     mux.Handle(route.Method+" "+route.Path, handler)

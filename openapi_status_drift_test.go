@@ -1,6 +1,7 @@
 package entapi
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/githonllc/entapi/api"
+	entapiruntime "github.com/githonllc/entapi/runtime"
 )
 
 // exemptStatuses records handler arms that are intentionally absent from the
@@ -17,6 +19,11 @@ import (
 // violation fails closed to 500. This was established in #76's review; this
 // guard was added in #89. Do not remove the arms from the template: doing so
 // would rewrite every committed fixture and is outside this guard's scope.
+//
+// List's 409 no longer comes from a literal IsAlreadyExists arm — #103 replaced
+// that switch with entapi.Status, which classifies the same sentinel — so the
+// exemption is reached through the probe below instead of through the text
+// scan. The values are unchanged, and so is the reason they are exempt.
 var exemptStatuses = map[api.Op][]int{
 	api.OpList:   {409},
 	api.OpGet:    {409},
@@ -28,13 +35,24 @@ var exemptStatuses = map[api.Op][]int{
 // belongs in a test rather than generation because a template function that
 // parses another template is worse than an explicit drift guard.
 //
-// The residue, stated rather than hidden: the scan sees an error status only
-// where handler.tmpl spells it as an http.Status<Name> identifier. A status
-// written as a numeric literal, or reached through a variable or a helper
-// constant, is invisible here. That asymmetry only weakens the ADDITION
-// direction -- a new arm the table does not list could slip past. Removals stay
-// loud, because they are caught from the table's side, which this test reads as
-// Go values rather than as text.
+// Since #103 the handler bodies no longer spell every status they can write:
+// entapi.BindJSON and entapi.Status decide most of them at run time. So each
+// branch's expected set is the union of two halves -- the literal http.Status
+// identifiers still in the text, plus the statuses obtained by CALLING
+// runtime.Status over a list of sentinels at each call site's onValidation
+// argument. Importing the runtime from this test is the same direction
+// funcs_openapi.go already takes for a non-test import.
+//
+// The residue, stated rather than hidden, is now in two places. The text half
+// sees an error status only where handler.tmpl spells it as an http.Status<Name>
+// identifier: a numeric literal, or a status reached through a variable or a
+// helper constant, is invisible. The probe half is only as complete as the two
+// sentinel lists below, which are HAND-CHOSEN -- a sentinel added to
+// runtime.Status later maps to a status this guard never sees until someone
+// adds it to middleSentinels or bindSentinels here. Both asymmetries weaken only
+// the ADDITION direction -- a new status the table does not list could slip
+// past. Removals stay loud, because they are caught from the table's side, which
+// this test reads as Go values rather than as text.
 func TestErrorStatusesByOpMatchesHandlerTemplate(t *testing.T) {
 	content, err := templateFS.ReadFile("templates/handler.tmpl")
 	if err != nil {
@@ -86,8 +104,28 @@ func TestErrorStatusesByOpMatchesHandlerTemplate(t *testing.T) {
 		t.Errorf("handler.tmpl preamble writes status %d outside every operation branch", code)
 	}
 
+	// The sentinels each runtime entry point classifies. Hand-chosen; see the
+	// residue paragraph above.
+	opaque := errors.New("an error carrying no entapi sentinel")
+	middleSentinels := []error{
+		entapiruntime.ErrNotFound, entapiruntime.ErrAlreadyExists,
+		entapiruntime.ErrValidation, opaque,
+	}
+	bindSentinels := []error{
+		entapiruntime.ErrUnsupportedMediaType, entapiruntime.ErrRequestTooLarge,
+		entapiruntime.ErrValidation,
+	}
+	statusCallPattern := regexp.MustCompile(`entapi\.Status\([A-Za-z]+, (http\.Status[A-Za-z]+)\)`)
+
 	scanStatuses := func(op api.Op, body string) map[int]bool {
 		statuses := map[int]bool{}
+		probe := func(onValidation int, sentinels []error) {
+			for _, err := range sentinels {
+				if code := entapiruntime.Status(err, onValidation); code >= 400 {
+					statuses[code] = true
+				}
+			}
+		}
 		for _, name := range statusPattern.FindAllString(body, -1) {
 			if name == "http.StatusText" {
 				continue
@@ -99,6 +137,41 @@ func TestErrorStatusesByOpMatchesHandlerTemplate(t *testing.T) {
 			if code >= 400 {
 				statuses[code] = true
 			}
+		}
+
+		// Every entapi.Status call site classifies the middle step's error.
+		calls := statusCallPattern.FindAllStringSubmatchIndex(body, -1)
+		onValidationAfter := func(offset int) (int, bool) {
+			for _, call := range calls {
+				if call[0] < offset {
+					continue
+				}
+				return statusCodeByIdentifier[body[call[2]:call[3]]], true
+			}
+			return 0, false
+		}
+		for _, call := range calls {
+			ident := body[call[2]:call[3]]
+			code, ok := statusCodeByIdentifier[ident]
+			if !ok {
+				t.Fatalf("handler.tmpl %s operation passes unmapped status %s to entapi.Status; extend statusCodeByIdentifier", op, ident)
+			}
+			probe(code, middleSentinels)
+		}
+
+		// Every entapi.BindJSON call site classifies the bind step's error, and
+		// reports it through the entapi.Status call that immediately follows.
+		for offset := 0; ; {
+			idx := strings.Index(body[offset:], "entapi.BindJSON")
+			if idx < 0 {
+				break
+			}
+			offset += idx + len("entapi.BindJSON")
+			onValidation, ok := onValidationAfter(offset)
+			if !ok {
+				t.Fatalf("handler.tmpl %s operation calls entapi.BindJSON with no entapi.Status call after it to read onValidation from", op)
+			}
+			probe(onValidation, bindSentinels)
 		}
 		return statuses
 	}

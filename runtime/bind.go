@@ -75,6 +75,12 @@ func BindJSON(w http.ResponseWriter, r *http.Request, tags []string, dst any) er
 // Status returns the HTTP status for err. Validation errors use onValidation
 // because binding failures are 400 while create and patch validation failures
 // are 422.
+//
+// The two bind sentinels are classified wherever they appear, so a custom With
+// replacement that returns ErrUnsupportedMediaType or ErrRequestTooLarge now
+// answers 415 or 413 rather than 500. Generated wiring cannot reach that — it
+// never returns either sentinel — which is why the OpenAPI document does not
+// grow those statuses for operations whose bodies it describes.
 func Status(err error, onValidation int) int {
 	switch {
 	case err == nil:

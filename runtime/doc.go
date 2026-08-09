@@ -65,6 +65,33 @@
 // [AppendEach] and [AppendEachSlice] when filter slots became slices. See the
 // README migration notes for the old-to-new wire spelling table.
 //
+// # Binding, classifying and writing
+//
+// [BindJSON], [Status] and [WriteJSON] are the three steps every generated HTTP
+// handler is built from, exported so a hand-written endpoint on any router can
+// call them instead of copying a generated body.
+//
+//	func BindJSON(w http.ResponseWriter, r *http.Request, tags []string, dst any) error
+//	func Status(err error, onValidation int) int
+//	func WriteJSON(w http.ResponseWriter, status int, v any) error
+//
+// [BindJSON] applies the three bind rules that have no knobs: a 1 MiB
+// http.MaxBytesReader cap, an application/json media-type check, and rejection
+// of any body key absent from tags. Its error is total — every error it returns
+// wraps exactly one of [ErrUnsupportedMediaType], [ErrRequestTooLarge] or
+// [ErrValidation], so [Status] classifies all of them and there is no fourth
+// case. It takes w only because http.MaxBytesReader needs it and writes nothing
+// itself, so the caller owns the response and its shape.
+//
+// [Status] answers 415 and 413 for the two bind sentinels, 404 for [ErrNotFound],
+// 409 for [ErrAlreadyExists], onValidation for [ErrValidation], 500 for anything
+// else and 0 for a nil error. onValidation is the whole 400-vs-422 convention:
+// generated handlers pass 400 for a bind failure and 422 for a middle-step
+// failure — malformed versus well-formed-but-rejected.
+//
+// [WriteJSON] marshals before touching the response, so a marshal failure
+// becomes a clean 500 problem response rather than a truncated 200.
+//
 // # Error mapping
 //
 // [ErrorMapper] translates a persistence layer's errors into [ErrNotFound] and

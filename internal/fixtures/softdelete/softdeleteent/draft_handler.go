@@ -6,7 +6,6 @@ package softdeleteent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -35,27 +34,12 @@ func (h *APIHandler) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.listDrafts(r.Context(), h.client, filter, request)
 	if err != nil {
-		status := http.StatusInternalServerError
-		switch {
-		case entapi.IsNotFound(err):
-			status = http.StatusNotFound
-		case entapi.IsAlreadyExists(err):
-			status = http.StatusConflict
-		case entapi.IsValidation(err):
-			status = http.StatusBadRequest
-		}
+		status := entapi.Status(err, http.StatusBadRequest)
 		entapi.WriteProblem(w, status, http.StatusText(status), err)
 		return
 	}
 
-	body, err := json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusOK, response)
 }
 
 // GetDraftFn is byte-identical to GetDraft.
@@ -89,14 +73,7 @@ func (h *APIHandler) handleGetDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := json.Marshal(response)
-	if err != nil {
-		entapi.WriteProblem(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(body, '\n'))
+	_ = entapi.WriteJSON(w, http.StatusOK, response)
 }
 
 // DeleteDraftFn is byte-identical to DeleteDraft.

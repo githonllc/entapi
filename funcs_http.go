@@ -92,25 +92,12 @@ func handlerImports(node *gen.Type) []string {
 	if len(ops) == 0 {
 		return nil
 	}
+	// Bodies delegate binding, classification and writing to the runtime, so
+	// the only imports left are the ones a signature or a path-id parse names.
 	specs := map[string]bool{`"context"`: true, `"net/http"`: true}
-	var hasBody, hasJSON, hasID bool
+	var hasID bool
 	for _, op := range ops {
-		switch op.Name {
-		case api.OpCreate, api.OpPatch:
-			hasBody = true
-			hasJSON = true
-		case api.OpList, api.OpGet:
-			hasJSON = true
-		}
 		hasID = hasID || op.PathSuffix != ""
-	}
-	if hasJSON {
-		specs[`"encoding/json"`] = true
-	}
-	if hasBody {
-		for _, spec := range []string{`"errors"`, `"fmt"`, `"io"`, `"mime"`} {
-			specs[spec] = true
-		}
 	}
 	if hasID && node.ID != nil && node.ID.Type != nil {
 		switch {

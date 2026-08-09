@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/schema/field"
 
@@ -163,6 +164,128 @@ func TestCheckGraphConflicts_AsymmetricSelfEdgeRemainsRefused(t *testing.T) {
 	inverse.Annotations = gen.Annotations{edgeAnnotationName: edgePtr(api.Expand())}
 	if err := checkGraphConflicts(&gen.Graph{Nodes: []*gen.Type{node}}); err != nil {
 		t.Fatalf("symmetric expanded self edge was refused: %v", err)
+	}
+}
+
+// TestCheckGraphConflicts_RequiredEdgeWithoutFieldMatrix covers both halves of
+// #110's message, and each half is the other's control: the remedy list has to
+// offer edge.Field(...) exactly when ent would accept it, which is when the
+// edge holds the foreign key.
+//
+// The hand-built edges carry an explicit gen.Relation because Edge.OwnFK()
+// reads Rel.Type and nothing else. Edge.Field() stays nil either way — the
+// foreign key it would return lives in gen's unexported Rel.fk, which is also
+// why the "declares edge.Field()" negative below has to load a real graph.
+func TestCheckGraphConflicts_RequiredEdgeWithoutFieldMatrix(t *testing.T) {
+	target := &gen.Type{Name: "User", ID: newIntField("id", nil)}
+	for _, tc := range []struct {
+		name string
+		// rel is what ent derives for the shape named in the sub-test.
+		rel gen.Rel
+		// unique mirrors the schema's .Unique(), so the two facts stay
+		// independent here the way they are in a real graph.
+		unique bool
+		// wantFieldRemedy is whether "add edge.Field(...)" is sound advice.
+		wantFieldRemedy bool
+	}{
+		// edge.To("user", User.Type).Unique().Required() with no inverse.
+		{name: "to-one holding the foreign key", rel: gen.M2O, unique: true, wantFieldRemedy: true},
+		// edge.To("posts", Post.Type).Required(): the key is on the far table.
+		{name: "to-many", rel: gen.O2M, wantFieldRemedy: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			node := newTestType("Session", newStringField("token", nil))
+			node.Edges = []*gen.Edge{{
+				Name:   "user",
+				Type:   target,
+				Unique: tc.unique,
+				Rel:    gen.Relation{Type: tc.rel},
+			}}
+
+			got := conflictText(t, node)
+			requireConflict(t, got, "Session.user", "Required()", "SessionCreateRequest",
+				"Except(api.OpCreate)", "Optional")
+
+			hasFieldRemedy := strings.Contains(got, "by adding edge.Field(")
+			if hasFieldRemedy != tc.wantFieldRemedy {
+				t.Errorf("edge.Field(...) offered as a remedy = %v, want %v:\n%s", hasFieldRemedy, tc.wantFieldRemedy, got)
+			}
+		})
+	}
+}
+
+func TestCheckGraphConflicts_RequiredEdgeWithoutFieldNegatives(t *testing.T) {
+	target := &gen.Type{Name: "User", ID: newIntField("id", nil)}
+
+	newSession := func() *gen.Type {
+		node := newTestType("Session", newStringField("token", nil))
+		node.Edges = []*gen.Edge{{
+			Name:   "user",
+			Type:   target,
+			Unique: true,
+			Rel:    gen.Relation{Type: gen.M2O},
+		}}
+		return node
+	}
+
+	t.Run("optional edge", func(t *testing.T) {
+		node := newSession()
+		node.Edges[0].Optional = true
+		if err := checkGraphConflicts(&gen.Graph{Nodes: []*gen.Type{node}}); err != nil {
+			t.Fatalf("an Optional edge without edge.Field() was refused: %v", err)
+		}
+	})
+
+	t.Run("create excepted", func(t *testing.T) {
+		node := newSession()
+		node.Annotations[resourceAnnotationName] = resourcePtr(api.Resource().Except(api.OpCreate))
+		if err := checkGraphConflicts(&gen.Graph{Nodes: []*gen.Type{node}}); err != nil {
+			t.Fatalf("Except(OpCreate) did not repair the required edge: %v", err)
+		}
+	})
+}
+
+// TestCheckGraphConflicts_RequiredEdgeWithFieldIsAccepted is the negative that
+// cannot be hand-built: gen.Edge.Field() reads Rel.fk, which is unexported and
+// is only ever set by gen's own graph resolution. So it loads the "edges"
+// fixture — whose Post.author is Required, Unique and declares
+// Field("author_id") — through the real loader.
+//
+// The two positive controls are the point of the test as much as the nil error
+// is: an absence assertion over a graph that no longer contains the shape it
+// claims to cover would pass for the wrong reason.
+func TestCheckGraphConflicts_RequiredEdgeWithFieldIsAccepted(t *testing.T) {
+	root := repoRoot(t)
+	g, err := entc.LoadGraph(fixtureSchemaDir(root, "edges"), &gen.Config{
+		Package: fixtureEntPkgPath("edges"),
+	})
+	if err != nil {
+		t.Fatalf("loading the edges fixture graph: %v", err)
+	}
+
+	var author *gen.Edge
+	for _, node := range g.Nodes {
+		if node.Name != "Post" {
+			continue
+		}
+		for _, e := range node.Edges {
+			if e.Name == "author" {
+				author = e
+			}
+		}
+	}
+	if author == nil {
+		t.Fatal("control: the edges fixture no longer has a Post.author edge")
+	}
+	if author.Optional {
+		t.Fatal("control: Post.author is no longer Required(), so this test no longer covers a required edge")
+	}
+	if author.Field() == nil {
+		t.Fatal("control: Post.author no longer declares edge.Field(), so this test no longer covers the accepted shape")
+	}
+
+	if err := checkGraphConflicts(g); err != nil {
+		t.Fatalf("a Required edge that declares edge.Field() was refused: %v", err)
 	}
 }
 

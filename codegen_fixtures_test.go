@@ -115,6 +115,14 @@ var fixtures = []fixtureCase{
 	{dir: "misplacedword", wantGenErr: []string{"Record.misplaced_expand", "Expand() is attached to a field", "Record.owners", "field deviation word is attached to an edge"}},
 	{dir: "wordonid", wantGenErr: []string{"Widget.id", "primary key", "Sortable"}},
 	{dir: "expandnonresource", wantGenErr: []string{"Post.authors", "api.Expand() targets Author", "not an api.Resource"}},
+	// #110: Ent requires the edge on every create, no setter for it can reach
+	// the create request, so the create family is dead on arrival. The three
+	// remedies are all listed because which one is right is the author's call,
+	// not this generator's.
+	{dir: "requirededge", wantGenErr: []string{
+		"Session.user", "Required()", "SessionCreateRequest",
+		"by adding edge.Field(", "Except(api.OpCreate)", "Optional",
+	}},
 	{dir: "createexcepted"},
 	{dir: "wiring"},
 	{dir: "httpdemo"},

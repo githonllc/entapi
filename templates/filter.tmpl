@@ -196,7 +196,11 @@ func Parse{{ $.Name }}Query(q url.Values) (*{{ $.Name }}Filter, entapi.ListReque
 					if entapi.KnownQueryOperator(op) {
 						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "{{ $pf.Allowed }}")
 					}
+					{{- if strictQueryOperators }}
+					return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses unknown operator prefix %q; legal operators: %s; prefix the value with \"eq:\" to filter for a literal value containing a colon", entapi.ErrValidation, key, whole, op, "{{ $pf.Allowed }}")
+					{{- else }}
 					op, raw = "eq", whole
+					{{- end }}
 				}
 				switch op {
 {{- range $op := $pf.Operators }}

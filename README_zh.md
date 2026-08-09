@@ -125,9 +125,11 @@ func main() {
 }
 ```
 
-一共三个选项。`WithEntAPIPackage` 改写生成文件 import 的 runtime 路径，默认值就是
+一共四个选项。`WithEntAPIPackage` 改写生成文件 import 的 runtime 路径，默认值就是
 `github.com/githonllc/entapi/runtime`，所以只在你 vendor 了一份副本时才有意义。
-`WithOpenAPITitle` 与 `WithOpenAPIVersion` 设置生成的 `openapi.yaml` 的 `info.title`
+`WithStrictQueryOperators()` 会把无法识别的操作符前缀变成校验错误；它默认关闭，让裸
+RFC-3339 时间戳仍能作为整值等值字面量工作。`WithOpenAPITitle` 与
+`WithOpenAPIVersion` 设置生成的 `openapi.yaml` 的 `info.title`
 与 `info.version`；不设时分别默认为 ent 包名加 `" API"` 和 `0.0.0`。version **刻意不读
 git tag**：生成不得依赖工作树状态，否则一次测试跑完，干净的 checkout 就不再干净。
 `NewExtension(cfg)` 直接接受 `*ExtensionConfig` 且对 nil 安全。
@@ -136,9 +138,9 @@ git tag**：生成不得依赖工作树状态，否则一次测试跑完，干�
 所有独立输出都由 hook 自己渲染并写盘。
 
 > **实现：** `extension.go` — `Extension`、`ExtensionConfig`、`NewExtension`、
-> `NewExtensionWithOptions`、`Option`、`WithEntAPIPackage`、`WithOpenAPITitle`、
-> `WithOpenAPIVersion`、`defaultEntAPIPackage`、`Hooks`、`Templates`、`Annotations`、
-> `Options`、`ConfigAnnotation`
+> `NewExtensionWithOptions`、`Option`、`WithEntAPIPackage`、`WithStrictQueryOperators`、
+> `WithOpenAPITitle`、`WithOpenAPIVersion`、`defaultEntAPIPackage`、`Hooks`、`Templates`、
+> `Annotations`、`Options`、`ConfigAnnotation`
 
 ## 注解模型
 
@@ -620,9 +622,10 @@ wire 采用 `field=op:value`，只在第一个冒号处分割；无前缀值就�
 仍是普通等值字面量，不会隐式变成 `LIKE`。
 
 解析严格按六条规则执行：空的无前缀值忽略，但空 `eq:` 有效；无冒号就是等值；字段允许的
-前缀应用该操作符；全局已知但字段不允许的前缀报校验错误；未知前缀把整个值回退为等值；
-显式 `eq:` 用来转义看似操作符的值。转换错误会点名字段和值并包裹
-`entapi.ErrValidation`。
+前缀应用该操作符；全局已知但字段不允许的前缀报校验错误；未知前缀把整个值回退为等值
+（因此裸 RFC-3339 时间戳可用），但启用 `WithStrictQueryOperators()` 后改为校验错误，
+此时时间戳必须写成 `eq:`；显式 `eq:` 用来转义看似操作符的值。转换错误会点名字段和值并
+包裹 `entapi.ErrValidation`。
 
 同一字段的重复参数形成多个独立且以 `AND` 连接的谓词，重复等值也一样。因此标量 filter
 槽位是 slice，`in:`/`not_in:` 槽位是 slice-of-slices。主键天然 Filterable，遵循相同规则，
@@ -989,7 +992,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 |---|---|
 | §1.6 产物移到 `ent/dto` 子包 | **未做，且已被取代**。产物落在消费者的 `ent` 包里，handler 解耦由生成的自由函数达成，而不是由包放置达成 |
 | §8.1 目录里存在「不是我的」文件 → 拒绝生成 | **未做**。清理把这类文件**留下并记日志**。它原本依赖 §1.6 的独占目录 |
-| §8.4 `OutputPackage` 配置项 | **未做**，因 §1.6 未做而无意义。唯一的选项是 `WithEntAPIPackage` |
+| §8.4 `OutputPackage` 配置项 | **未做**，因 §1.6 未做而无意义。现有选项只配置 runtime import 路径、严格 query 解析或 OpenAPI info；没有一个会移动输出目录 |
 
 设计文档里明确「延后」的 T2（受众维度）同样没有实现，这与设计一致。
 

@@ -47,26 +47,36 @@ func API(client *Client) *APIHandler {
 			Method:  "GET",
 			Path:    "/counters",
 			Handler: http.HandlerFunc(h.handleListCounters),
+			Entity:  "Counter",
+			Op:      "list",
 		},
 		{
 			Method:  "POST",
 			Path:    "/counters",
 			Handler: http.HandlerFunc(h.handleCreateCounter),
+			Entity:  "Counter",
+			Op:      "create",
 		},
 		{
 			Method:  "GET",
 			Path:    "/counters/{id}",
 			Handler: http.HandlerFunc(h.handleGetCounter),
+			Entity:  "Counter",
+			Op:      "get",
 		},
 		{
 			Method:  "PATCH",
 			Path:    "/counters/{id}",
 			Handler: http.HandlerFunc(h.handlePatchCounter),
+			Entity:  "Counter",
+			Op:      "patch",
 		},
 		{
 			Method:  "DELETE",
 			Path:    "/counters/{id}",
 			Handler: http.HandlerFunc(h.handleDeleteCounter),
+			Entity:  "Counter",
+			Op:      "delete",
 		},
 		// The document describing everything above. It is in the manifest, not
 		// beside it, so Routes() sees it and a consumer can wrap or drop it with

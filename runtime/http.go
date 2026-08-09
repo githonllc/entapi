@@ -36,11 +36,46 @@ func (e *FieldError) Unwrap() error {
 	return e.Err
 }
 
+// Op names the CRUD operation a Route implements. It is a distinct type rather
+// than a bare string so that routing a subset of the manifest — "everything on
+// AuditLog", "every write" — is a comparison the compiler checks. A misspelled
+// string literal matches nothing and reports nothing, which is exactly the
+// failure that routing by Path prefix already has.
+//
+// It deliberately does NOT reuse api.Op. That package imports
+// entgo.io/ent/schema, and TestRuntimePackageIsGeneratorFree pins this
+// package's transitive entgo.io count at zero; importing api to save a
+// declaration would trade the whole runtime/generator seam for it. The values
+// are the same strings, and the generator writes them from its own api.Op.
+type Op string
+
+// The operations a generated route can carry. OpNone is the zero value, held
+// by routes that are not part of the resource surface — today only
+// GET /openapi.yaml.
+const (
+	OpNone   Op = ""
+	OpList   Op = "list"
+	OpCreate Op = "create"
+	OpGet    Op = "get"
+	OpPatch  Op = "patch"
+	OpDelete Op = "delete"
+)
+
 // Route describes one generated stdlib HTTP route.
+//
+// Entity and Op carry the identity the path used to hide: they let a consumer
+// split the manifest by audience, wrap only writes, or drop one entity's
+// surface without matching on Path text. Both are empty for a route that
+// belongs to no resource.
 type Route struct {
 	Method  string
 	Path    string
 	Handler http.Handler
+
+	// Entity is the Ent type name this route was generated for, e.g. "Article".
+	Entity string
+	// Op is the CRUD operation this route implements.
+	Op Op
 }
 
 type problem struct {

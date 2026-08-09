@@ -141,6 +141,15 @@ func (r *PostCreateRequest) HasReviewerID() bool { return r.has("reviewer_id") }
 // validator that runs only when someone remembers it.
 type ValidPostCreateRequest struct{ r *PostCreateRequest }
 
+// HasTitle reports whether the payload carried "title".
+func (v *ValidPostCreateRequest) HasTitle() bool { return v.r.HasTitle() }
+
+// HasAuthorID reports whether the payload carried "author_id".
+func (v *ValidPostCreateRequest) HasAuthorID() bool { return v.r.HasAuthorID() }
+
+// HasReviewerID reports whether the payload carried "reviewer_id".
+func (v *ValidPostCreateRequest) HasReviewerID() bool { return v.r.HasReviewerID() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *PostCreateRequest) Validate() (*ValidPostCreateRequest, error) {
 	if r == nil {
@@ -246,6 +255,30 @@ func (r *PostPatchRequest) HasReviewerID() bool { return r.has("reviewer_id") }
 // ValidPostPatchRequest wraps a PostPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidPostPatchRequest struct{ r *PostPatchRequest }
+
+// HasTitle reports whether the payload carried "title".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidPostPatchRequest) HasTitle() bool { return v.r.HasTitle() }
+
+// HasAuthorID reports whether the payload carried "author_id".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidPostPatchRequest) HasAuthorID() bool { return v.r.HasAuthorID() }
+
+// HasReviewerID reports whether the payload carried "reviewer_id".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidPostPatchRequest) HasReviewerID() bool { return v.r.HasReviewerID() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

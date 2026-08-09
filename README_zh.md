@@ -447,6 +447,21 @@ schema 的 `Default()` 因而生效。这也正是「必填创建字段上的显
 
 必填性**按存在性检查，而不是按零值**（字符串是例外：`== ""` 说的是同一件事）。
 
+`Has<Field>()` 在请求类型和它的 `Valid…` 包装器上**都会**生成。定制点的签名只交给它
+验证过的类型——原始请求是包装器里的未导出字段，而 body 已被 handler 读完——所以存在性
+若止步于 `Validate`，真正要用它的那段代码就永远读不到：
+
+```go
+func (s *UserService) Patch(ctx context.Context, db *ent.Client,
+	id uuid.UUID, v *ent.ValidUserPatchRequest) (*ent.UserResponse, error) {
+	resp, err := ent.PatchUser(ctx, db, id, v)
+	if err == nil && v.HasStatus() {          // 包装器自己就能回答，不必回到原始请求
+		s.mailer.NotifyStatusChange(ctx, id)
+	}
+	return resp, err
+}
+```
+
 ### key 是严格匹配的
 
 `encoding/json` 在精确匹配**或**大小写不敏感匹配时都会填充结构体字段，而存在性是按原始
@@ -955,6 +970,11 @@ T3 已经全部落地。三处偏离，都是有意的：
 | §2.1 / §2.5 `ent.API(client)` 返回 `*API`；`func (a *API) Routes()` | 类型是 **`*APIHandler`**（`templates/http.tmpl` — `API`）。`API` 是构造函数的名字，同一个包里 handler 不可能也叫这个 |
 | §4.3 软删除由生成的 `init()` 注册，失败回落显式 `RegisterSoftDelete(client)` | 两者都不存在。#78 改用 Ent 在 `newConfig` 内部执行的 `config/init/fields/*` **partial**（`templates/softdelete_config_init.tmpl`）直接填 hook 与 interceptor，于是 `NewClient`、`Open`、`enttest.Open` 以及之后每一份 config 拷贝都自带它们，既无注册调用也无初始化顺序依赖。`RegisterSoftDelete` 是被**删除**，不是留作回落 |
 | §2.3 生成的 handler 开 `DisallowUnknownFields`，被拒字段名从 `encoding/json` 的错误文本里抠 | handler 先把 body 解进 `map[string]json.RawMessage`，再拿 key 与生成的 `{entity}{Op}RequestTags` 数据比对（`templates/handler.tmpl`），经 `entapi.FieldError` 报出那个 key。设计文档把「抠错误文本」列为已知残余，这个实现把它消掉了——字段名现在是生成的数据，不是解析出来的字符串。`DisallowUnknownFields` 仍然是消费者自己单独解 DTO 时的决定 |
+
+还有第四条，它既不是被取代、也不是本来就为真：service 示例在验证过的 patch 请求上调
+`v.HasStatus()`，而 `Valid…` 包装器根本没有这个方法。这个缺口是**靠生成转发方法**补上的，
+不是记成一条偏离——示例对定制点的需要判断得没错，因为定制点收到的只有验证过的类型。
+那份文档里的这一行现在能编译了。
 
 那份文档里的其余内容——五个偏离词、`Except` 的三层语义与 create 一族例外、op-in-value 线
 格式、`_` 命名空间、413/415 请求硬化、RFC 9457 错误、`Routes()`，以及 OpenAPI 那几条

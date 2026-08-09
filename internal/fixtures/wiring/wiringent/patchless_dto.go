@@ -134,6 +134,9 @@ func (r *PatchlessCreateRequest) HasLabel() bool { return r.has("label") }
 // validator that runs only when someone remembers it.
 type ValidPatchlessCreateRequest struct{ r *PatchlessCreateRequest }
 
+// HasLabel reports whether the payload carried "label".
+func (v *ValidPatchlessCreateRequest) HasLabel() bool { return v.r.HasLabel() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *PatchlessCreateRequest) Validate() (*ValidPatchlessCreateRequest, error) {
 	if r == nil {

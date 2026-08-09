@@ -137,6 +137,12 @@ func (r *NodeCreateRequest) HasParentID() bool { return r.has("parent_id") }
 // validator that runs only when someone remembers it.
 type ValidNodeCreateRequest struct{ r *NodeCreateRequest }
 
+// HasLabel reports whether the payload carried "label".
+func (v *ValidNodeCreateRequest) HasLabel() bool { return v.r.HasLabel() }
+
+// HasParentID reports whether the payload carried "parent_id".
+func (v *ValidNodeCreateRequest) HasParentID() bool { return v.r.HasParentID() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *NodeCreateRequest) Validate() (*ValidNodeCreateRequest, error) {
 	if r == nil {
@@ -234,6 +240,22 @@ func (r *NodePatchRequest) HasParentID() bool { return r.has("parent_id") }
 // ValidNodePatchRequest wraps a NodePatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidNodePatchRequest struct{ r *NodePatchRequest }
+
+// HasLabel reports whether the payload carried "label".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNodePatchRequest) HasLabel() bool { return v.r.HasLabel() }
+
+// HasParentID reports whether the payload carried "parent_id".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNodePatchRequest) HasParentID() bool { return v.r.HasParentID() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

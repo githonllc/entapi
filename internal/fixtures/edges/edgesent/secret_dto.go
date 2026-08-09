@@ -133,6 +133,9 @@ func (r *SecretCreateRequest) HasToken() bool { return r.has("token") }
 // validator that runs only when someone remembers it.
 type ValidSecretCreateRequest struct{ r *SecretCreateRequest }
 
+// HasToken reports whether the payload carried "token".
+func (v *ValidSecretCreateRequest) HasToken() bool { return v.r.HasToken() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *SecretCreateRequest) Validate() (*ValidSecretCreateRequest, error) {
 	if r == nil {
@@ -223,6 +226,14 @@ func (r *SecretPatchRequest) HasToken() bool { return r.has("token") }
 // ValidSecretPatchRequest wraps a SecretPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidSecretPatchRequest struct{ r *SecretPatchRequest }
+
+// HasToken reports whether the payload carried "token".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidSecretPatchRequest) HasToken() bool { return v.r.HasToken() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

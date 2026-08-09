@@ -133,6 +133,9 @@ func (r *NoteCreateRequest) HasBody() bool { return r.has("body") }
 // validator that runs only when someone remembers it.
 type ValidNoteCreateRequest struct{ r *NoteCreateRequest }
 
+// HasBody reports whether the payload carried "body".
+func (v *ValidNoteCreateRequest) HasBody() bool { return v.r.HasBody() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *NoteCreateRequest) Validate() (*ValidNoteCreateRequest, error) {
 	if r == nil {
@@ -223,6 +226,14 @@ func (r *NotePatchRequest) HasBody() bool { return r.has("body") }
 // ValidNotePatchRequest wraps a NotePatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidNotePatchRequest struct{ r *NotePatchRequest }
+
+// HasBody reports whether the payload carried "body".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNotePatchRequest) HasBody() bool { return v.r.HasBody() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

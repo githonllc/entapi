@@ -137,6 +137,12 @@ func (r *CategoryCreateRequest) HasParentID() bool { return r.has("parent_id") }
 // validator that runs only when someone remembers it.
 type ValidCategoryCreateRequest struct{ r *CategoryCreateRequest }
 
+// HasName reports whether the payload carried "name".
+func (v *ValidCategoryCreateRequest) HasName() bool { return v.r.HasName() }
+
+// HasParentID reports whether the payload carried "parent_id".
+func (v *ValidCategoryCreateRequest) HasParentID() bool { return v.r.HasParentID() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *CategoryCreateRequest) Validate() (*ValidCategoryCreateRequest, error) {
 	if r == nil {
@@ -234,6 +240,22 @@ func (r *CategoryPatchRequest) HasParentID() bool { return r.has("parent_id") }
 // ValidCategoryPatchRequest wraps a CategoryPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidCategoryPatchRequest struct{ r *CategoryPatchRequest }
+
+// HasName reports whether the payload carried "name".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidCategoryPatchRequest) HasName() bool { return v.r.HasName() }
+
+// HasParentID reports whether the payload carried "parent_id".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidCategoryPatchRequest) HasParentID() bool { return v.r.HasParentID() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

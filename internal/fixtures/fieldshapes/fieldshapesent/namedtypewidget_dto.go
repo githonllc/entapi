@@ -146,6 +146,18 @@ func (r *NamedTypeWidgetCreateRequest) HasRequiredAttrs() bool { return r.has("r
 // validator that runs only when someone remembers it.
 type ValidNamedTypeWidgetCreateRequest struct{ r *NamedTypeWidgetCreateRequest }
 
+// HasLabels reports whether the payload carried "labels".
+func (v *ValidNamedTypeWidgetCreateRequest) HasLabels() bool { return v.r.HasLabels() }
+
+// HasAttrs reports whether the payload carried "attrs".
+func (v *ValidNamedTypeWidgetCreateRequest) HasAttrs() bool { return v.r.HasAttrs() }
+
+// HasRequiredLabels reports whether the payload carried "required_labels".
+func (v *ValidNamedTypeWidgetCreateRequest) HasRequiredLabels() bool { return v.r.HasRequiredLabels() }
+
+// HasRequiredAttrs reports whether the payload carried "required_attrs".
+func (v *ValidNamedTypeWidgetCreateRequest) HasRequiredAttrs() bool { return v.r.HasRequiredAttrs() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *NamedTypeWidgetCreateRequest) Validate() (*ValidNamedTypeWidgetCreateRequest, error) {
 	if r == nil {
@@ -258,6 +270,38 @@ func (r *NamedTypeWidgetPatchRequest) HasRequiredAttrs() bool { return r.has("re
 // ValidNamedTypeWidgetPatchRequest wraps a NamedTypeWidgetPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidNamedTypeWidgetPatchRequest struct{ r *NamedTypeWidgetPatchRequest }
+
+// HasLabels reports whether the payload carried "labels".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNamedTypeWidgetPatchRequest) HasLabels() bool { return v.r.HasLabels() }
+
+// HasAttrs reports whether the payload carried "attrs".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNamedTypeWidgetPatchRequest) HasAttrs() bool { return v.r.HasAttrs() }
+
+// HasRequiredLabels reports whether the payload carried "required_labels".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNamedTypeWidgetPatchRequest) HasRequiredLabels() bool { return v.r.HasRequiredLabels() }
+
+// HasRequiredAttrs reports whether the payload carried "required_attrs".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNamedTypeWidgetPatchRequest) HasRequiredAttrs() bool { return v.r.HasRequiredAttrs() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

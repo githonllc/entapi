@@ -138,6 +138,12 @@ func (r *WidgetCreateRequest) HasDescription() bool { return r.has("description"
 // validator that runs only when someone remembers it.
 type ValidWidgetCreateRequest struct{ r *WidgetCreateRequest }
 
+// HasName reports whether the payload carried "name".
+func (v *ValidWidgetCreateRequest) HasName() bool { return v.r.HasName() }
+
+// HasDescription reports whether the payload carried "description".
+func (v *ValidWidgetCreateRequest) HasDescription() bool { return v.r.HasDescription() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *WidgetCreateRequest) Validate() (*ValidWidgetCreateRequest, error) {
 	if r == nil {
@@ -235,6 +241,22 @@ func (r *WidgetPatchRequest) HasDescription() bool { return r.has("description")
 // ValidWidgetPatchRequest wraps a WidgetPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidWidgetPatchRequest struct{ r *WidgetPatchRequest }
+
+// HasName reports whether the payload carried "name".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidWidgetPatchRequest) HasName() bool { return v.r.HasName() }
+
+// HasDescription reports whether the payload carried "description".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidWidgetPatchRequest) HasDescription() bool { return v.r.HasDescription() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

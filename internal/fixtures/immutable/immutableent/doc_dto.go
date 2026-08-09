@@ -142,6 +142,15 @@ func (r *DocCreateRequest) HasSource() bool { return r.has("source") }
 // validator that runs only when someone remembers it.
 type ValidDocCreateRequest struct{ r *DocCreateRequest }
 
+// HasTitle reports whether the payload carried "title".
+func (v *ValidDocCreateRequest) HasTitle() bool { return v.r.HasTitle() }
+
+// HasOrigin reports whether the payload carried "origin".
+func (v *ValidDocCreateRequest) HasOrigin() bool { return v.r.HasOrigin() }
+
+// HasSource reports whether the payload carried "source".
+func (v *ValidDocCreateRequest) HasSource() bool { return v.r.HasSource() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *DocCreateRequest) Validate() (*ValidDocCreateRequest, error) {
 	if r == nil {
@@ -239,6 +248,14 @@ func (r *DocPatchRequest) HasTitle() bool { return r.has("title") }
 // ValidDocPatchRequest wraps a DocPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidDocPatchRequest struct{ r *DocPatchRequest }
+
+// HasTitle reports whether the payload carried "title".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidDocPatchRequest) HasTitle() bool { return v.r.HasTitle() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

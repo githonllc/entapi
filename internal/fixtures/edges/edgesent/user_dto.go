@@ -133,6 +133,9 @@ func (r *UserCreateRequest) HasName() bool { return r.has("name") }
 // validator that runs only when someone remembers it.
 type ValidUserCreateRequest struct{ r *UserCreateRequest }
 
+// HasName reports whether the payload carried "name".
+func (v *ValidUserCreateRequest) HasName() bool { return v.r.HasName() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *UserCreateRequest) Validate() (*ValidUserCreateRequest, error) {
 	if r == nil {
@@ -223,6 +226,14 @@ func (r *UserPatchRequest) HasName() bool { return r.has("name") }
 // ValidUserPatchRequest wraps a UserPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidUserPatchRequest struct{ r *UserPatchRequest }
+
+// HasName reports whether the payload carried "name".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidUserPatchRequest) HasName() bool { return v.r.HasName() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

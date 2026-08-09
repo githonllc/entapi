@@ -137,6 +137,12 @@ func (r *AuthorCreateRequest) HasEmail() bool { return r.has("email") }
 // validator that runs only when someone remembers it.
 type ValidAuthorCreateRequest struct{ r *AuthorCreateRequest }
 
+// HasName reports whether the payload carried "name".
+func (v *ValidAuthorCreateRequest) HasName() bool { return v.r.HasName() }
+
+// HasEmail reports whether the payload carried "email".
+func (v *ValidAuthorCreateRequest) HasEmail() bool { return v.r.HasEmail() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *AuthorCreateRequest) Validate() (*ValidAuthorCreateRequest, error) {
 	if r == nil {
@@ -234,6 +240,22 @@ func (r *AuthorPatchRequest) HasEmail() bool { return r.has("email") }
 // ValidAuthorPatchRequest wraps a AuthorPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidAuthorPatchRequest struct{ r *AuthorPatchRequest }
+
+// HasName reports whether the payload carried "name".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAuthorPatchRequest) HasName() bool { return v.r.HasName() }
+
+// HasEmail reports whether the payload carried "email".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAuthorPatchRequest) HasEmail() bool { return v.r.HasEmail() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

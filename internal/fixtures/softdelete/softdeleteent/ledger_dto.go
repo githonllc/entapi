@@ -133,6 +133,9 @@ func (r *LedgerCreateRequest) HasEntry() bool { return r.has("entry") }
 // validator that runs only when someone remembers it.
 type ValidLedgerCreateRequest struct{ r *LedgerCreateRequest }
 
+// HasEntry reports whether the payload carried "entry".
+func (v *ValidLedgerCreateRequest) HasEntry() bool { return v.r.HasEntry() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *LedgerCreateRequest) Validate() (*ValidLedgerCreateRequest, error) {
 	if r == nil {
@@ -223,6 +226,14 @@ func (r *LedgerPatchRequest) HasEntry() bool { return r.has("entry") }
 // ValidLedgerPatchRequest wraps a LedgerPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidLedgerPatchRequest struct{ r *LedgerPatchRequest }
+
+// HasEntry reports whether the payload carried "entry".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidLedgerPatchRequest) HasEntry() bool { return v.r.HasEntry() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

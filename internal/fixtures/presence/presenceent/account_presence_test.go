@@ -173,6 +173,49 @@ func TestPatchDistinguishesAbsentNullAndValue(t *testing.T) {
 	})
 }
 
+// TestPresenceSurvivesValidation is the property a custom implementation
+// depends on. A customization point's signature hands it the VALIDATED request
+// and nothing else -- the raw request is unexported inside the wrapper and the
+// body has already been consumed by the handler -- so presence that stops at
+// Validate is presence no business logic can ever read.
+//
+// The cases below are the same absent/null/value distinction the test above
+// pins on the raw request. They are repeated through the wrapper on purpose:
+// this is the path a consumer actually has.
+func TestPresenceSurvivesValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		body            string
+		nickname, quota bool
+	}{
+		{"absent", `{}`, false, false},
+		{"explicit null is present", `{"nickname":null}`, true, false},
+		{"a value is present", `{"nickname":"sam"}`, true, false},
+		{"presence is per field", `{"quota":7}`, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := mustValidatePatch(t, tc.body)
+			if got := v.HasNickname(); got != tc.nickname {
+				t.Errorf("HasNickname() = %v, want %v for %s", got, tc.nickname, tc.body)
+			}
+			if got := v.HasQuota(); got != tc.quota {
+				t.Errorf("HasQuota() = %v, want %v for %s", got, tc.quota, tc.body)
+			}
+		})
+	}
+
+	// The create side answers the opposite default, and the wrapper must not
+	// quietly change it: an omitted create field is absent on a DECODED request.
+	// validCreate supplies every required field and omits nickname.
+	created := mustValidateCreate(t, validCreate)
+	if created.HasNickname() {
+		t.Error("HasNickname() = true on a decoded create request that omitted it")
+	}
+	if !created.HasEmail() {
+		t.Error("HasEmail() = false on a decoded create request that supplied it")
+	}
+}
+
 // TestPatchRejectsAnExplicitNullOnANonOptionalField: only fields the SCHEMA
 // declares optional can be cleared, because ent emits Clear<Field>() for those
 // and only those.

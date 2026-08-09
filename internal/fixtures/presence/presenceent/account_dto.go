@@ -158,6 +158,27 @@ func (r *AccountCreateRequest) HasOrigin() bool { return r.has("origin") }
 // validator that runs only when someone remembers it.
 type ValidAccountCreateRequest struct{ r *AccountCreateRequest }
 
+// HasEmail reports whether the payload carried "email".
+func (v *ValidAccountCreateRequest) HasEmail() bool { return v.r.HasEmail() }
+
+// HasSeats reports whether the payload carried "seats".
+func (v *ValidAccountCreateRequest) HasSeats() bool { return v.r.HasSeats() }
+
+// HasAcceptedTerms reports whether the payload carried "accepted_terms".
+func (v *ValidAccountCreateRequest) HasAcceptedTerms() bool { return v.r.HasAcceptedTerms() }
+
+// HasPlan reports whether the payload carried "plan".
+func (v *ValidAccountCreateRequest) HasPlan() bool { return v.r.HasPlan() }
+
+// HasNickname reports whether the payload carried "nickname".
+func (v *ValidAccountCreateRequest) HasNickname() bool { return v.r.HasNickname() }
+
+// HasQuota reports whether the payload carried "quota".
+func (v *ValidAccountCreateRequest) HasQuota() bool { return v.r.HasQuota() }
+
+// HasOrigin reports whether the payload carried "origin".
+func (v *ValidAccountCreateRequest) HasOrigin() bool { return v.r.HasOrigin() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *AccountCreateRequest) Validate() (*ValidAccountCreateRequest, error) {
 	if r == nil {
@@ -294,6 +315,54 @@ func (r *AccountPatchRequest) HasQuota() bool { return r.has("quota") }
 // ValidAccountPatchRequest wraps a AccountPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidAccountPatchRequest struct{ r *AccountPatchRequest }
+
+// HasEmail reports whether the payload carried "email".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasEmail() bool { return v.r.HasEmail() }
+
+// HasSeats reports whether the payload carried "seats".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasSeats() bool { return v.r.HasSeats() }
+
+// HasAcceptedTerms reports whether the payload carried "accepted_terms".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasAcceptedTerms() bool { return v.r.HasAcceptedTerms() }
+
+// HasPlan reports whether the payload carried "plan".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasPlan() bool { return v.r.HasPlan() }
+
+// HasNickname reports whether the payload carried "nickname".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasNickname() bool { return v.r.HasNickname() }
+
+// HasQuota reports whether the payload carried "quota".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasQuota() bool { return v.r.HasQuota() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

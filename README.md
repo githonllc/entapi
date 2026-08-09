@@ -519,6 +519,23 @@ applies. That is also what makes an explicit null on a required create field a
 Requiredness is checked **by presence, not by the zero value** — `0` and `false`
 are values. (Strings are the exception: `== ""` says the same thing.)
 
+`Has<Field>()` is generated on **both** the request and its `Valid…` wrapper. A
+customization point's signature hands it the validated type and nothing else —
+the raw request is unexported inside the wrapper, and the handler has already
+consumed the body — so presence that stopped at `Validate` would be unreadable
+from the very code that acts on it:
+
+```go
+func (s *UserService) Patch(ctx context.Context, db *ent.Client,
+	id uuid.UUID, v *ent.ValidUserPatchRequest) (*ent.UserResponse, error) {
+	resp, err := ent.PatchUser(ctx, db, id, v)
+	if err == nil && v.HasStatus() {          // the wrapper answers, not just the request
+		s.mailer.NotifyStatusChange(ctx, id)
+	}
+	return resp, err
+}
+```
+
 ### Keys match strictly
 
 `encoding/json` fills a struct field on an exact match **or** a case-insensitive
@@ -1140,6 +1157,13 @@ shipped:
 | §2.1 / §2.5 `ent.API(client)` returns `*API`; `func (a *API) Routes()` | The type is **`*APIHandler`** (`templates/http.tmpl` — `API`). `API` is the constructor's name, so the handler could not also be called that |
 | §4.3 soft delete registers from a generated `init()`, falling back to an explicit `RegisterSoftDelete(client)` | Neither exists. #78 installs the hook and interceptor from a `config/init/fields/*` **partial that Ent executes inside `newConfig`** (`templates/softdelete_config_init.tmpl`), so `NewClient`, `Open`, `enttest.Open` and every later config copy carry them with no registration call and no initialization-order dependency. `RegisterSoftDelete` was removed rather than kept as a fallback |
 | §2.3 the generated handler enables `DisallowUnknownFields`, and the rejected field name is scraped out of `encoding/json`'s error text | The handler decodes the body into a `map[string]json.RawMessage` first and compares its keys against generated `{entity}{Op}RequestTags` data (`templates/handler.tmpl`), reporting the offending key through `entapi.FieldError`. The design called the error-text scrape a known residue; this removes it — the field name is now generated data, not a parsed string. `DisallowUnknownFields` stays the consumer handler's decision for à la carte DTO decoding |
+
+A fourth item was neither superseded nor already true: the service example
+calls `v.HasStatus()` on a validated patch request, and the `Valid…` wrapper
+answered no such method. That gap was closed by **generating the forwarder**
+rather than by recording a deviation — the example was right about what a
+customization point needs, since it receives the validated type and nothing
+else. The document's line now compiles.
 
 Everything else in that document — the five deviation words, `Except`'s three
 layers plus the create-family exception, the op-in-value wire format, the `_`

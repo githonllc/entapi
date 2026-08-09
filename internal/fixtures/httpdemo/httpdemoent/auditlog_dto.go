@@ -133,6 +133,9 @@ func (r *AuditLogCreateRequest) HasMessage() bool { return r.has("message") }
 // validator that runs only when someone remembers it.
 type ValidAuditLogCreateRequest struct{ r *AuditLogCreateRequest }
 
+// HasMessage reports whether the payload carried "message".
+func (v *ValidAuditLogCreateRequest) HasMessage() bool { return v.r.HasMessage() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *AuditLogCreateRequest) Validate() (*ValidAuditLogCreateRequest, error) {
 	if r == nil {
@@ -223,6 +226,14 @@ func (r *AuditLogPatchRequest) HasMessage() bool { return r.has("message") }
 // ValidAuditLogPatchRequest wraps a AuditLogPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidAuditLogPatchRequest struct{ r *AuditLogPatchRequest }
+
+// HasMessage reports whether the payload carried "message".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAuditLogPatchRequest) HasMessage() bool { return v.r.HasMessage() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

@@ -13,6 +13,12 @@ var (
 
 	// ErrValidation indicates the input failed validation.
 	ErrValidation = errors.New("validation failed")
+
+	// ErrUnsupportedMediaType indicates the request body was not application/json.
+	ErrUnsupportedMediaType = errors.New("unsupported media type")
+
+	// ErrRequestTooLarge indicates the request body exceeded the allowed size.
+	ErrRequestTooLarge = errors.New("request too large")
 )
 
 // IsNotFound reports whether err (or any error in its chain) is ErrNotFound.

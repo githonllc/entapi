@@ -142,7 +142,10 @@ func (r *{{ $.Name }}CreateRequest) Has{{ $f.StructField }}() bool { return r.ha
 // who skips validation has no method to call — a compile error rather than a
 // validator that runs only when someone remembers it.
 type Valid{{ $.Name }}CreateRequest struct{ r *{{ $.Name }}CreateRequest }
-
+{{ range $f := $createFields }}
+// Has{{ $f.StructField }} reports whether the payload carried "{{ $f.StorageKey }}".
+func (v *Valid{{ $.Name }}CreateRequest) Has{{ $f.StructField }}() bool { return v.r.Has{{ $f.StructField }}() }
+{{ end }}
 // Validate checks the request and returns the only type Apply accepts.
 func (r *{{ $.Name }}CreateRequest) Validate() (*Valid{{ $.Name }}CreateRequest, error) {
 	if r == nil {
@@ -281,7 +284,15 @@ func (r *{{ $.Name }}PatchRequest) Has{{ $f.StructField }}() bool { return r.has
 // Valid{{ $.Name }}PatchRequest wraps a {{ $.Name }}PatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type Valid{{ $.Name }}PatchRequest struct{ r *{{ $.Name }}PatchRequest }
-
+{{ range $f := $patchFields }}
+// Has{{ $f.StructField }} reports whether the payload carried "{{ $f.StorageKey }}".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *Valid{{ $.Name }}PatchRequest) Has{{ $f.StructField }}() bool { return v.r.Has{{ $f.StructField }}() }
+{{ end }}
 // Validate rejects an explicit null on a field that cannot be cleared.
 //
 // ent emits Clear<Field>() for Optional fields and for no others, so a null on

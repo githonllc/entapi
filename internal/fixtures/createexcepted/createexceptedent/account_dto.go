@@ -109,6 +109,14 @@ func (r *AccountPatchRequest) HasName() bool { return r.has("name") }
 // Validate. It is the only type Apply is defined on.
 type ValidAccountPatchRequest struct{ r *AccountPatchRequest }
 
+// HasName reports whether the payload carried "name".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasName() bool { return v.r.HasName() }
+
 // Validate rejects an explicit null on a field that cannot be cleared.
 //
 // ent emits Clear<Field>() for Optional fields and for no others, so a null on

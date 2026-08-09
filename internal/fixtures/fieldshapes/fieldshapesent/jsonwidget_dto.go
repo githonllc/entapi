@@ -145,6 +145,18 @@ func (r *JSONWidgetCreateRequest) HasRequiredMeta() bool { return r.has("require
 // validator that runs only when someone remembers it.
 type ValidJSONWidgetCreateRequest struct{ r *JSONWidgetCreateRequest }
 
+// HasTags reports whether the payload carried "tags".
+func (v *ValidJSONWidgetCreateRequest) HasTags() bool { return v.r.HasTags() }
+
+// HasMeta reports whether the payload carried "meta".
+func (v *ValidJSONWidgetCreateRequest) HasMeta() bool { return v.r.HasMeta() }
+
+// HasRequiredTags reports whether the payload carried "required_tags".
+func (v *ValidJSONWidgetCreateRequest) HasRequiredTags() bool { return v.r.HasRequiredTags() }
+
+// HasRequiredMeta reports whether the payload carried "required_meta".
+func (v *ValidJSONWidgetCreateRequest) HasRequiredMeta() bool { return v.r.HasRequiredMeta() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *JSONWidgetCreateRequest) Validate() (*ValidJSONWidgetCreateRequest, error) {
 	if r == nil {
@@ -257,6 +269,38 @@ func (r *JSONWidgetPatchRequest) HasRequiredMeta() bool { return r.has("required
 // ValidJSONWidgetPatchRequest wraps a JSONWidgetPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidJSONWidgetPatchRequest struct{ r *JSONWidgetPatchRequest }
+
+// HasTags reports whether the payload carried "tags".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidJSONWidgetPatchRequest) HasTags() bool { return v.r.HasTags() }
+
+// HasMeta reports whether the payload carried "meta".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidJSONWidgetPatchRequest) HasMeta() bool { return v.r.HasMeta() }
+
+// HasRequiredTags reports whether the payload carried "required_tags".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidJSONWidgetPatchRequest) HasRequiredTags() bool { return v.r.HasRequiredTags() }
+
+// HasRequiredMeta reports whether the payload carried "required_meta".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidJSONWidgetPatchRequest) HasRequiredMeta() bool { return v.r.HasRequiredMeta() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

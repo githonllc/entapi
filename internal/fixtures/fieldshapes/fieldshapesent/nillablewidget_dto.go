@@ -141,6 +141,15 @@ func (r *NillableWidgetCreateRequest) HasQuota() bool { return r.has("quota") }
 // validator that runs only when someone remembers it.
 type ValidNillableWidgetCreateRequest struct{ r *NillableWidgetCreateRequest }
 
+// HasNickname reports whether the payload carried "nickname".
+func (v *ValidNillableWidgetCreateRequest) HasNickname() bool { return v.r.HasNickname() }
+
+// HasHandle reports whether the payload carried "handle".
+func (v *ValidNillableWidgetCreateRequest) HasHandle() bool { return v.r.HasHandle() }
+
+// HasQuota reports whether the payload carried "quota".
+func (v *ValidNillableWidgetCreateRequest) HasQuota() bool { return v.r.HasQuota() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *NillableWidgetCreateRequest) Validate() (*ValidNillableWidgetCreateRequest, error) {
 	if r == nil {
@@ -244,6 +253,30 @@ func (r *NillableWidgetPatchRequest) HasQuota() bool { return r.has("quota") }
 // ValidNillableWidgetPatchRequest wraps a NillableWidgetPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidNillableWidgetPatchRequest struct{ r *NillableWidgetPatchRequest }
+
+// HasNickname reports whether the payload carried "nickname".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNillableWidgetPatchRequest) HasNickname() bool { return v.r.HasNickname() }
+
+// HasHandle reports whether the payload carried "handle".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNillableWidgetPatchRequest) HasHandle() bool { return v.r.HasHandle() }
+
+// HasQuota reports whether the payload carried "quota".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidNillableWidgetPatchRequest) HasQuota() bool { return v.r.HasQuota() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

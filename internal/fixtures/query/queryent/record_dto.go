@@ -159,6 +159,27 @@ func (r *RecordCreateRequest) HasSecret() bool { return r.has("secret") }
 // validator that runs only when someone remembers it.
 type ValidRecordCreateRequest struct{ r *RecordCreateRequest }
 
+// HasTitle reports whether the payload carried "title".
+func (v *ValidRecordCreateRequest) HasTitle() bool { return v.r.HasTitle() }
+
+// HasBody reports whether the payload carried "body".
+func (v *ValidRecordCreateRequest) HasBody() bool { return v.r.HasBody() }
+
+// HasRef reports whether the payload carried "reference".
+func (v *ValidRecordCreateRequest) HasRef() bool { return v.r.HasRef() }
+
+// HasStatus reports whether the payload carried "status".
+func (v *ValidRecordCreateRequest) HasStatus() bool { return v.r.HasStatus() }
+
+// HasScore reports whether the payload carried "score".
+func (v *ValidRecordCreateRequest) HasScore() bool { return v.r.HasScore() }
+
+// HasNote reports whether the payload carried "note".
+func (v *ValidRecordCreateRequest) HasNote() bool { return v.r.HasNote() }
+
+// HasSecret reports whether the payload carried "secret".
+func (v *ValidRecordCreateRequest) HasSecret() bool { return v.r.HasSecret() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *RecordCreateRequest) Validate() (*ValidRecordCreateRequest, error) {
 	if r == nil {
@@ -298,6 +319,62 @@ func (r *RecordPatchRequest) HasSecret() bool { return r.has("secret") }
 // ValidRecordPatchRequest wraps a RecordPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidRecordPatchRequest struct{ r *RecordPatchRequest }
+
+// HasTitle reports whether the payload carried "title".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidRecordPatchRequest) HasTitle() bool { return v.r.HasTitle() }
+
+// HasBody reports whether the payload carried "body".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidRecordPatchRequest) HasBody() bool { return v.r.HasBody() }
+
+// HasRef reports whether the payload carried "reference".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidRecordPatchRequest) HasRef() bool { return v.r.HasRef() }
+
+// HasStatus reports whether the payload carried "status".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidRecordPatchRequest) HasStatus() bool { return v.r.HasStatus() }
+
+// HasScore reports whether the payload carried "score".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidRecordPatchRequest) HasScore() bool { return v.r.HasScore() }
+
+// HasNote reports whether the payload carried "note".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidRecordPatchRequest) HasNote() bool { return v.r.HasNote() }
+
+// HasSecret reports whether the payload carried "secret".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidRecordPatchRequest) HasSecret() bool { return v.r.HasSecret() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

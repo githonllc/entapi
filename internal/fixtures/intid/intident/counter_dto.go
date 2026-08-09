@@ -132,6 +132,9 @@ func (r *CounterCreateRequest) HasLabel() bool { return r.has("label") }
 // validator that runs only when someone remembers it.
 type ValidCounterCreateRequest struct{ r *CounterCreateRequest }
 
+// HasLabel reports whether the payload carried "label".
+func (v *ValidCounterCreateRequest) HasLabel() bool { return v.r.HasLabel() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *CounterCreateRequest) Validate() (*ValidCounterCreateRequest, error) {
 	if r == nil {
@@ -222,6 +225,14 @@ func (r *CounterPatchRequest) HasLabel() bool { return r.has("label") }
 // ValidCounterPatchRequest wraps a CounterPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidCounterPatchRequest struct{ r *CounterPatchRequest }
+
+// HasLabel reports whether the payload carried "label".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidCounterPatchRequest) HasLabel() bool { return v.r.HasLabel() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

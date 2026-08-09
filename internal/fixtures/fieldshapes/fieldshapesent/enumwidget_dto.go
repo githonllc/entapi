@@ -138,6 +138,12 @@ func (r *EnumWidgetCreateRequest) HasTier() bool { return r.has("tier") }
 // validator that runs only when someone remembers it.
 type ValidEnumWidgetCreateRequest struct{ r *EnumWidgetCreateRequest }
 
+// HasStatus reports whether the payload carried "status".
+func (v *ValidEnumWidgetCreateRequest) HasStatus() bool { return v.r.HasStatus() }
+
+// HasTier reports whether the payload carried "tier".
+func (v *ValidEnumWidgetCreateRequest) HasTier() bool { return v.r.HasTier() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *EnumWidgetCreateRequest) Validate() (*ValidEnumWidgetCreateRequest, error) {
 	if r == nil {
@@ -243,6 +249,22 @@ func (r *EnumWidgetPatchRequest) HasTier() bool { return r.has("tier") }
 // ValidEnumWidgetPatchRequest wraps a EnumWidgetPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidEnumWidgetPatchRequest struct{ r *EnumWidgetPatchRequest }
+
+// HasStatus reports whether the payload carried "status".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidEnumWidgetPatchRequest) HasStatus() bool { return v.r.HasStatus() }
+
+// HasTier reports whether the payload carried "tier".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidEnumWidgetPatchRequest) HasTier() bool { return v.r.HasTier() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

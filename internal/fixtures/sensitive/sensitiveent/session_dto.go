@@ -133,6 +133,9 @@ func (r *SessionCreateRequest) HasUserAgent() bool { return r.has("user_agent") 
 // validator that runs only when someone remembers it.
 type ValidSessionCreateRequest struct{ r *SessionCreateRequest }
 
+// HasUserAgent reports whether the payload carried "user_agent".
+func (v *ValidSessionCreateRequest) HasUserAgent() bool { return v.r.HasUserAgent() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *SessionCreateRequest) Validate() (*ValidSessionCreateRequest, error) {
 	if r == nil {
@@ -223,6 +226,14 @@ func (r *SessionPatchRequest) HasUserAgent() bool { return r.has("user_agent") }
 // ValidSessionPatchRequest wraps a SessionPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidSessionPatchRequest struct{ r *SessionPatchRequest }
+
+// HasUserAgent reports whether the payload carried "user_agent".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidSessionPatchRequest) HasUserAgent() bool { return v.r.HasUserAgent() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

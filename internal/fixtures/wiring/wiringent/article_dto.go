@@ -142,6 +142,15 @@ func (r *ArticleCreateRequest) HasAuthorID() bool { return r.has("author_id") }
 // validator that runs only when someone remembers it.
 type ValidArticleCreateRequest struct{ r *ArticleCreateRequest }
 
+// HasTitle reports whether the payload carried "title".
+func (v *ValidArticleCreateRequest) HasTitle() bool { return v.r.HasTitle() }
+
+// HasRank reports whether the payload carried "rank".
+func (v *ValidArticleCreateRequest) HasRank() bool { return v.r.HasRank() }
+
+// HasAuthorID reports whether the payload carried "author_id".
+func (v *ValidArticleCreateRequest) HasAuthorID() bool { return v.r.HasAuthorID() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *ArticleCreateRequest) Validate() (*ValidArticleCreateRequest, error) {
 	if r == nil {
@@ -247,6 +256,30 @@ func (r *ArticlePatchRequest) HasAuthorID() bool { return r.has("author_id") }
 // ValidArticlePatchRequest wraps a ArticlePatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidArticlePatchRequest struct{ r *ArticlePatchRequest }
+
+// HasTitle reports whether the payload carried "title".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidArticlePatchRequest) HasTitle() bool { return v.r.HasTitle() }
+
+// HasRank reports whether the payload carried "rank".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidArticlePatchRequest) HasRank() bool { return v.r.HasRank() }
+
+// HasAuthorID reports whether the payload carried "author_id".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidArticlePatchRequest) HasAuthorID() bool { return v.r.HasAuthorID() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

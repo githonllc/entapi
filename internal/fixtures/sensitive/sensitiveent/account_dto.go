@@ -142,6 +142,15 @@ func (r *AccountCreateRequest) HasLoginWindow() bool { return r.has("login_windo
 // validator that runs only when someone remembers it.
 type ValidAccountCreateRequest struct{ r *AccountCreateRequest }
 
+// HasPasswordHash reports whether the payload carried "password_hash".
+func (v *ValidAccountCreateRequest) HasPasswordHash() bool { return v.r.HasPasswordHash() }
+
+// HasName reports whether the payload carried "name".
+func (v *ValidAccountCreateRequest) HasName() bool { return v.r.HasName() }
+
+// HasLoginWindow reports whether the payload carried "login_window".
+func (v *ValidAccountCreateRequest) HasLoginWindow() bool { return v.r.HasLoginWindow() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *AccountCreateRequest) Validate() (*ValidAccountCreateRequest, error) {
 	if r == nil {
@@ -248,6 +257,30 @@ func (r *AccountPatchRequest) HasLoginWindow() bool { return r.has("login_window
 // ValidAccountPatchRequest wraps a AccountPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidAccountPatchRequest struct{ r *AccountPatchRequest }
+
+// HasPasswordHash reports whether the payload carried "password_hash".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasPasswordHash() bool { return v.r.HasPasswordHash() }
+
+// HasName reports whether the payload carried "name".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasName() bool { return v.r.HasName() }
+
+// HasLoginWindow reports whether the payload carried "login_window".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidAccountPatchRequest) HasLoginWindow() bool { return v.r.HasLoginWindow() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

@@ -161,8 +161,11 @@ Never read the EntAPI annotation maps directly. Always use the three readers in 
 ### Create and patch requests (#26)
 
 `dto.tmpl` emits, per entity: `{Entity}CreateRequest`, `{Entity}PatchRequest`,
-a `Valid…` wrapper for each, an `UnmarshalJSON`, one `Has<Field>()` per field,
-and `Apply` on the validated types only. Five rules are load-bearing:
+a `Valid…` wrapper for each, an `UnmarshalJSON`, one `Has<Field>()` per field on
+**both** the request and its wrapper, and `Apply` on the validated types only.
+The wrapper's `Has<Field>()` forwards; it exists because a customization point
+receives only the validated type, so presence stopping at `Validate` would be
+unreachable from the business logic that acts on it. Five rules are load-bearing:
 
 - **Field shape comes from ent, never from a second opinion.** `funcs_presence.go`
   is the whole rule set: a create field is `*T` when `Optional || Default ||

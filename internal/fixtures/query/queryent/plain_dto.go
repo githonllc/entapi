@@ -133,6 +133,9 @@ func (r *PlainCreateRequest) HasLabel() bool { return r.has("label") }
 // validator that runs only when someone remembers it.
 type ValidPlainCreateRequest struct{ r *PlainCreateRequest }
 
+// HasLabel reports whether the payload carried "label".
+func (v *ValidPlainCreateRequest) HasLabel() bool { return v.r.HasLabel() }
+
 // Validate checks the request and returns the only type Apply accepts.
 func (r *PlainCreateRequest) Validate() (*ValidPlainCreateRequest, error) {
 	if r == nil {
@@ -223,6 +226,14 @@ func (r *PlainPatchRequest) HasLabel() bool { return r.has("label") }
 // ValidPlainPatchRequest wraps a PlainPatchRequest that has passed
 // Validate. It is the only type Apply is defined on.
 type ValidPlainPatchRequest struct{ r *PlainPatchRequest }
+
+// HasLabel reports whether the payload carried "label".
+//
+// A custom implementation receives only the validated type, so without this
+// forwarder the patch's presence — the one thing that distinguishes "clear it"
+// from "leave it alone" — is unreachable from the customization point that is
+// supposed to act on it.
+func (v *ValidPlainPatchRequest) HasLabel() bool { return v.r.HasLabel() }
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

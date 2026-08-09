@@ -619,6 +619,7 @@ request — skipping validation is a compile error.
 > `patchFields` (intersected with `node.MutableFields()`); `templates/dto.tmpl`;
 > generated example: `internal/fixtures/basic/basicent/widget_dto.go` —
 > `WidgetPatchRequest.present`, `UnmarshalJSON`, `widgetPatchRequestTags`,
+> `WidgetPatchRequestTags()`,
 > `ValidWidgetCreateRequest`, `Validate`, `Apply`
 
 ## Response, summary and edges
@@ -1196,7 +1197,7 @@ shipped:
 |---|---|
 | §2.1 / §2.5 `ent.API(client)` returns `*API`; `func (a *API) Routes()` | The type is **`*APIHandler`** (`templates/http.tmpl` — `API`). `API` is the constructor's name, so the handler could not also be called that |
 | §4.3 soft delete registers from a generated `init()`, falling back to an explicit `RegisterSoftDelete(client)` | Neither exists. #78 installs the hook and interceptor from a `config/init/fields/*` **partial that Ent executes inside `newConfig`** (`templates/softdelete_config_init.tmpl`), so `NewClient`, `Open`, `enttest.Open` and every later config copy carry them with no registration call and no initialization-order dependency. `RegisterSoftDelete` was removed rather than kept as a fallback |
-| §2.3 the generated handler enables `DisallowUnknownFields`, and the rejected field name is scraped out of `encoding/json`'s error text | The handler decodes the body into a `map[string]json.RawMessage` first and compares its keys against generated `{entity}{Op}RequestTags` data (`templates/handler.tmpl`), reporting the offending key through `entapi.FieldError`. The design called the error-text scrape a known residue; this removes it — the field name is now generated data, not a parsed string. `DisallowUnknownFields` stays the consumer handler's decision for à la carte DTO decoding |
+| §2.3 the generated handler enables `DisallowUnknownFields`, and the rejected field name is scraped out of `encoding/json`'s error text | The handler decodes the body into a `map[string]json.RawMessage` first and compares its keys against generated `{entity}{Op}RequestTags` data (`templates/handler.tmpl`), reporting the offending key through `entapi.FieldError`. A consumer that writes its own bind step gets the same data from the exported `{Entity}{Op}RequestTags()` accessor, which returns a copy. The design called the error-text scrape a known residue; this removes it — the field name is now generated data, not a parsed string. `DisallowUnknownFields` stays the consumer handler's decision for à la carte DTO decoding |
 
 A fourth item was neither superseded nor already true: the service example
 calls `v.HasStatus()` on a validated patch request, and the `Valid…` wrapper

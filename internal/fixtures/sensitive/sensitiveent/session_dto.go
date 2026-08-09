@@ -66,6 +66,19 @@ type SessionCreateRequest struct {
 // data, not as struct tags, to tell a case variant from an unrelated key.
 var sessionCreateRequestTags = []string{"user_agent"}
 
+// SessionCreateRequestTags returns the canonical JSON key of every field on
+// SessionCreateRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func SessionCreateRequestTags() []string {
+	return append([]string(nil), sessionCreateRequestTags...)
+}
+
 // UnmarshalJSON records presence, then decodes normally.
 //
 // The wire format is unchanged: every exported field keeps its ordinary type
@@ -180,6 +193,19 @@ type SessionPatchRequest struct {
 // sessionPatchRequestTags is the canonical JSON key of every field on
 // SessionPatchRequest, in declaration order.
 var sessionPatchRequestTags = []string{"user_agent"}
+
+// SessionPatchRequestTags returns the canonical JSON key of every field on
+// SessionPatchRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func SessionPatchRequestTags() []string {
+	return append([]string(nil), sessionPatchRequestTags...)
+}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from

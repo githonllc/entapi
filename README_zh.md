@@ -532,6 +532,7 @@ art, err := ent.CreateArticle(ctx, client, valid)
 > `funcs_fields.go` — `createFields`、`patchFields`（与 `node.MutableFields()` 求交）；
 > `templates/dto.tmpl`；生成物样例：`internal/fixtures/basic/basicent/widget_dto.go` —
 > `WidgetPatchRequest.present`、`UnmarshalJSON`、`widgetPatchRequestTags`、
+> `WidgetPatchRequestTags()`、
 > `ValidWidgetCreateRequest`、`Validate`、`Apply`
 
 ## 响应、摘要与边
@@ -1003,7 +1004,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 |---|---|
 | §2.1 / §2.5 `ent.API(client)` 返回 `*API`；`func (a *API) Routes()` | 类型是 **`*APIHandler`**（`templates/http.tmpl` — `API`）。`API` 是构造函数的名字，同一个包里 handler 不可能也叫这个 |
 | §4.3 软删除由生成的 `init()` 注册，失败回落显式 `RegisterSoftDelete(client)` | 两者都不存在。#78 改用 Ent 在 `newConfig` 内部执行的 `config/init/fields/*` **partial**（`templates/softdelete_config_init.tmpl`）直接填 hook 与 interceptor，于是 `NewClient`、`Open`、`enttest.Open` 以及之后每一份 config 拷贝都自带它们，既无注册调用也无初始化顺序依赖。`RegisterSoftDelete` 是被**删除**，不是留作回落 |
-| §2.3 生成的 handler 开 `DisallowUnknownFields`，被拒字段名从 `encoding/json` 的错误文本里抠 | handler 先把 body 解进 `map[string]json.RawMessage`，再拿 key 与生成的 `{entity}{Op}RequestTags` 数据比对（`templates/handler.tmpl`），经 `entapi.FieldError` 报出那个 key。设计文档把「抠错误文本」列为已知残余，这个实现把它消掉了——字段名现在是生成的数据，不是解析出来的字符串。`DisallowUnknownFields` 仍然是消费者自己单独解 DTO 时的决定 |
+| §2.3 生成的 handler 开 `DisallowUnknownFields`，被拒字段名从 `encoding/json` 的错误文本里抠 | handler 先把 body 解进 `map[string]json.RawMessage`，再拿 key 与生成的 `{entity}{Op}RequestTags` 数据比对（`templates/handler.tmpl`），经 `entapi.FieldError` 报出那个 key。自行编写 bind 步骤的消费者可从导出的 `{Entity}{Op}RequestTags()` 访问器取得同一份数据，该访问器返回副本。设计文档把「抠错误文本」列为已知残余，这个实现把它消掉了——字段名现在是生成的数据，不是解析出来的字符串。`DisallowUnknownFields` 仍然是消费者自己单独解 DTO 时的决定 |
 
 还有第四条，它既不是被取代、也不是本来就为真：service 示例在验证过的 patch 请求上调
 `v.HasStatus()`，而 `Valid…` 包装器根本没有这个方法。这个缺口是**靠生成转发方法**补上的，

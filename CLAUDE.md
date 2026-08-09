@@ -161,8 +161,10 @@ Never read the EntAPI annotation maps directly. Always use the three readers in 
 ### Create and patch requests (#26)
 
 `dto.tmpl` emits, per entity: `{Entity}CreateRequest`, `{Entity}PatchRequest`,
-a `Valid…` wrapper for each, an `UnmarshalJSON`, one `Has<Field>()` per field on
-**both** the request and its wrapper, and `Apply` on the validated types only.
+a `Valid…` wrapper for each, `{Entity}CreateRequestTags()` and
+`{Entity}PatchRequestTags()` accessors, an `UnmarshalJSON`, one `Has<Field>()`
+per field on **both** the request and its wrapper, and `Apply` on the validated
+types only.
 The wrapper's `Has<Field>()` forwards; it exists because a customization point
 receives only the validated type, so presence stopping at `Validate` would be
 unreachable from the business logic that acts on it. Five rules are load-bearing:

@@ -66,6 +66,19 @@ type UserCreateRequest struct {
 // data, not as struct tags, to tell a case variant from an unrelated key.
 var userCreateRequestTags = []string{"name"}
 
+// UserCreateRequestTags returns the canonical JSON key of every field on
+// UserCreateRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func UserCreateRequestTags() []string {
+	return append([]string(nil), userCreateRequestTags...)
+}
+
 // UnmarshalJSON records presence, then decodes normally.
 //
 // The wire format is unchanged: every exported field keeps its ordinary type
@@ -180,6 +193,19 @@ type UserPatchRequest struct {
 // userPatchRequestTags is the canonical JSON key of every field on
 // UserPatchRequest, in declaration order.
 var userPatchRequestTags = []string{"name"}
+
+// UserPatchRequestTags returns the canonical JSON key of every field on
+// UserPatchRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func UserPatchRequestTags() []string {
+	return append([]string(nil), userPatchRequestTags...)
+}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from

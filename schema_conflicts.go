@@ -571,6 +571,8 @@ func derivedEntityDecls(node *gen.Type) []derivedName {
 		{n + "QueryWithResponseEdges", dto},
 		{n + "ListResponse", dto},
 		{"New" + n + "ListResponse", dto},
+		{n + "CreateRequestTags", dto},
+		{n + "PatchRequestTags", dto},
 		// templates/filter.tmpl
 		{n + "Filter", filter},
 		{"Parse" + n + "Query", filter},

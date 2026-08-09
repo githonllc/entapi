@@ -69,6 +69,19 @@ type ArticleCreateRequest struct {
 // data, not as struct tags, to tell a case variant from an unrelated key.
 var articleCreateRequestTags = []string{"title", "rank", "slug", "internal_note"}
 
+// ArticleCreateRequestTags returns the canonical JSON key of every field on
+// ArticleCreateRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func ArticleCreateRequestTags() []string {
+	return append([]string(nil), articleCreateRequestTags...)
+}
+
 // UnmarshalJSON records presence, then decodes normally.
 //
 // The wire format is unchanged: every exported field keeps its ordinary type
@@ -212,6 +225,19 @@ type ArticlePatchRequest struct {
 // articlePatchRequestTags is the canonical JSON key of every field on
 // ArticlePatchRequest, in declaration order.
 var articlePatchRequestTags = []string{"title", "rank", "internal_note"}
+
+// ArticlePatchRequestTags returns the canonical JSON key of every field on
+// ArticlePatchRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func ArticlePatchRequestTags() []string {
+	return append([]string(nil), articlePatchRequestTags...)
+}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from

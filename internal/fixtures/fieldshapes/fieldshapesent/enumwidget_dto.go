@@ -68,6 +68,19 @@ type EnumWidgetCreateRequest struct {
 // data, not as struct tags, to tell a case variant from an unrelated key.
 var enumWidgetCreateRequestTags = []string{"status", "tier"}
 
+// EnumWidgetCreateRequestTags returns the canonical JSON key of every field on
+// EnumWidgetCreateRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func EnumWidgetCreateRequestTags() []string {
+	return append([]string(nil), enumWidgetCreateRequestTags...)
+}
+
 // UnmarshalJSON records presence, then decodes normally.
 //
 // The wire format is unchanged: every exported field keeps its ordinary type
@@ -200,6 +213,19 @@ type EnumWidgetPatchRequest struct {
 // enumWidgetPatchRequestTags is the canonical JSON key of every field on
 // EnumWidgetPatchRequest, in declaration order.
 var enumWidgetPatchRequestTags = []string{"status", "tier"}
+
+// EnumWidgetPatchRequestTags returns the canonical JSON key of every field on
+// EnumWidgetPatchRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func EnumWidgetPatchRequestTags() []string {
+	return append([]string(nil), enumWidgetPatchRequestTags...)
+}
 
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from

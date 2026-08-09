@@ -63,6 +63,19 @@ type AccountPatchRequest struct {
 // AccountPatchRequest, in declaration order.
 var accountPatchRequestTags = []string{"name"}
 
+// AccountPatchRequestTags returns the canonical JSON key of every field on
+// AccountPatchRequest, in declaration order. Generated handlers compare raw
+// request keys against this data to reject unknown keys.
+//
+// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// exporting the variable would let any consumer mutate validation data that
+// every generated handler in the process reads. The unexported variable remains
+// the source of truth; this accessor is for consumers that decline the generated
+// handler and write their own bind step.
+func AccountPatchRequestTags() []string {
+	return append([]string(nil), accountPatchRequestTags...)
+}
+
 // UnmarshalJSON records which keys the payload carried, including the ones
 // whose value was null — that is the whole point here, and the difference from
 // the create request, where a null has nothing to clear.

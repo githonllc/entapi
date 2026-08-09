@@ -316,6 +316,31 @@ POST 与 PATCH 只接受 `application/json`，允许 media-type 参数。body �
 
 `WithActor` / `ActorFrom` 让认证主体穿过 middleware。
 
+**它们走的是 request context，而生成的 handler 只看得到这一个容器。** handler 读的是
+`r.Context()`，所以 actor 必须用 `r.WithContext(entapi.WithActor(...))` 写进去：
+
+```go
+next.ServeHTTP(w, r.WithContext(entapi.WithActor(r.Context(), user.ID)))
+```
+
+第三方 router 自带的 per-request 存储是**另一个**容器：Gin 的 `c.Set` 写进 `gin.Context`，
+Echo 的 `c.Set` 写进 `echo.Context`。两者都到不了 `r.Context()`，于是生成的 handler 以及
+它背后的定制点根本找不到 actor——又因为 `ActorFrom` 报告的是「不存在」而不是报错，这件事
+的表现是 actor 莫名其妙是 nil，而不是一个错误。在这类框架的 middleware 里认证时，要把
+request 本身替换掉：
+
+```go
+func withAuth(c *gin.Context) {
+	user, err := verifyToken(c.GetHeader("Authorization"))
+	if err != nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	c.Request = c.Request.WithContext(entapi.WithActor(c.Request.Context(), user.ID))
+	c.Next()
+}
+```
+
 ### 生成的 OpenAPI 文档
 
 `ent/openapi.yaml` 与代码一起生成、一起提交，所以对外暴露的面出现在 PR diff 里，可以像代码

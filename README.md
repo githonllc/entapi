@@ -359,6 +359,34 @@ so an immutable PATCH key is rejected by name rather than silently discarded.
 
 `WithActor` and `ActorFrom` carry authentication state through middleware.
 
+**They travel on the request context, and a generated handler sees nothing
+else.** It reads `r.Context()`, so the actor has to be written with
+`r.WithContext(entapi.WithActor(...))`:
+
+```go
+next.ServeHTTP(w, r.WithContext(entapi.WithActor(r.Context(), user.ID)))
+```
+
+A third-party router's own per-request store is a **different** container:
+Gin's `c.Set` writes to the `gin.Context`, Echo's `c.Set` to the `echo.Context`.
+Neither reaches `r.Context()`, so a generated handler and any customization
+point behind it find no actor at all — and because `ActorFrom` reports absence
+rather than failing, this surfaces as an actor that is mysteriously nil rather
+than as an error. When you authenticate in such a framework's middleware,
+replace the request:
+
+```go
+func withAuth(c *gin.Context) {
+	user, err := verifyToken(c.GetHeader("Authorization"))
+	if err != nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	c.Request = c.Request.WithContext(entapi.WithActor(c.Request.Context(), user.ID))
+	c.Next()
+}
+```
+
 ### The generated OpenAPI document
 
 `ent/openapi.yaml` is generated beside the code and committed with it, so the

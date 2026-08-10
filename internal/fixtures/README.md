@@ -103,6 +103,8 @@ when the case passes.
 | `misplacedword` | `Expand` on a field and a field word on an edge | generation refused |
 | `wordonid` | a query word on a user-declared ID | generation refused |
 | `expandnonresource` | `Expand` targeting an entity without `Resource` | generation refused |
+| `requirededge` | an edge Ent marks `Required()` that declares no `edge.Field(...)`, on a Resource whose create family is reachable | generation refused — no setter for it can reach the create request |
+| `methodcollision` | a field whose Go name is `Apply`, and a separate entity with an `X` / `HasX` pair | generation refused — both would be a duplicate method or a field/method clash on the generated request |
 | `createexcepted` | blocked required create field plus `Except(OpCreate)` | generates without the create family; patch remains callable |
 | `wiring` | expanded edges, all query dimensions, `Except(OpDelete)` with callable delete wiring, and an empty patch with `UpdateDefault` | generates, compiles, and is exercised against SQLite by `wiring/e2e` |
 | `softdelete` | the soft-delete mixin: one entity embedding it, one hard-delete entity owning it by a to-many edge, and one declaring a `deleted_at` by hand that is NOT `Nillable` | generates and compiles, plus `internal/softdeleteproof` |

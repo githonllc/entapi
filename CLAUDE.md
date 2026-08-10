@@ -182,7 +182,7 @@ the third state presence cannot express: `ok` is a carried value, `!ok` with
 absent. Its body is a deliberate mirror of `Apply` and is uniform across every
 field shape — every patch field is `*T` — and it uses `var zero {{ $f.Type }}`
 because the type may be a slice or a map. Only the wrapper gets one: the raw
-request already exports its `*T` fields. Six rules are load-bearing:
+request already exports its `*T` fields. These rules are load-bearing:
 
 - **Field shape comes from ent, never from a second opinion.** `funcs_presence.go`
   is the whole rule set: a create field is `*T` when `Optional || Default ||

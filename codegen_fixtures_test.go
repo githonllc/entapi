@@ -133,6 +133,16 @@ var fixtures = []fixtureCase{
 	// message that only says "conflict" leaves the author with a `redeclared`
 	// error in a file they did not write.
 	{dir: "reservednames", wantGenErr: []string{"ErrorMap", "entapi_errors.go", "APIOption", "entapi_http.go", "rename"}},
+	// #113: the method-level sibling of reservednames. A field's Go name is
+	// also a method the patch DTO puts on the same receiver, so the collision
+	// is inside a method set rather than in the package's identifier
+	// namespace — which is why reservedNameConflicts cannot see it.
+	{dir: "methodcollision", wantGenErr: []string{
+		"2 schema problem(s)",
+		"Gadget.apply", "ValidGadgetPatchRequest", "Apply(b *GadgetUpdateOne)",
+		"Widget.x", "Widget.has_x", "HasX",
+		"rename", "StorageKey",
+	}},
 }
 
 // TestCodegenFixtures is the only test in this repository that proves the

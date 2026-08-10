@@ -335,3 +335,69 @@ func TestCheckGraphConflicts_HandlerFnNamesUseMaximumBreadth(t *testing.T) {
 	got := conflictText(t, resource, collision)
 	requireConflict(t, got, "DeleteWidgetFn", "widget_handler.go", "reserved even if")
 }
+
+// TestCheckGraphConflicts_PatchReaderCollidesWithApply is #113's new row. The
+// value readers put one method per patch-visible field on
+// Valid<Entity>PatchRequest, which is the receiver Apply already lives on.
+func TestCheckGraphConflicts_PatchReaderCollidesWithApply(t *testing.T) {
+	apply := newStringField("apply", nil)
+	apply.Optional = true
+	node := newTestType("Gadget", apply, newStringField("name", nil))
+
+	got := conflictText(t, node)
+	requireConflict(t, got, "Gadget.apply", "ValidGadgetPatchRequest",
+		"Apply(b *GadgetUpdateOne)", "rename", "StorageKey")
+}
+
+// TestCheckGraphConflicts_PatchReaderCollidesWithPresenceMethod is the second
+// row: a field whose Go name is Has<Other> for another patch-visible field.
+// Unlike the Apply row this one predates the readers — #98 put Has<Field>() on
+// the RAW request, where has_x is a struct field of the same name — so the
+// message has to be true for both occurrences.
+func TestCheckGraphConflicts_PatchReaderCollidesWithPresenceMethod(t *testing.T) {
+	x := newStringField("x", nil)
+	x.Optional = true
+	hasX := newStringField("has_x", nil)
+	hasX.Optional = true
+	node := newTestType("Widget", x, hasX)
+
+	got := conflictText(t, node)
+	requireConflict(t, got, "Widget.has_x", "Widget.x", "HasX",
+		"WidgetPatchRequest", "ValidWidgetPatchRequest", "rename", "StorageKey")
+}
+
+// TestCheckGraphConflicts_PatchMethodCollisionsNeedPatchVisibility is the gate.
+// A field ent marks Immutable() derives out of the patch request, so no reader
+// and no presence method is generated for it and there is nothing to collide
+// with — refusing it would be a refusal for a symbol that does not exist.
+func TestCheckGraphConflicts_PatchMethodCollisionsNeedPatchVisibility(t *testing.T) {
+	apply := newStringField("apply", nil)
+	apply.Immutable = true
+	x := newStringField("x", nil)
+	x.Optional = true
+	hasX := newStringField("has_x", nil)
+	hasX.Immutable = true
+	node := newTestType("Gadget", apply, x, hasX)
+
+	if err := checkGraphConflicts(&gen.Graph{Nodes: []*gen.Type{node}}); err != nil {
+		t.Fatalf("fields that never reach the patch request were refused: %v", err)
+	}
+}
+
+// TestCheckGraphConflicts_PatchMethodCollisionsSurviveExceptPatch pins the
+// gate that is deliberately NOT there. templates/dto.tmpl renders the patch
+// request, its wrapper, Apply and the readers unconditionally — Except only
+// removes routes and wiring, never a request DTO (see
+// internal/fixtures/wiring/wiringent/patchless_dto.go, whose entity Excepts
+// api.OpPatch and still carries ValidPatchlessPatchRequest.Apply). So the
+// colliding methods are still generated and the consumer's package still fails
+// to compile.
+func TestCheckGraphConflicts_PatchMethodCollisionsSurviveExceptPatch(t *testing.T) {
+	apply := newStringField("apply", nil)
+	apply.Optional = true
+	node := newTestType("Gadget", apply, newStringField("name", nil))
+	node.Annotations[resourceAnnotationName] = resourcePtr(api.Resource().Except(api.OpPatch))
+
+	got := conflictText(t, node)
+	requireConflict(t, got, "Gadget.apply", "Apply(b *GadgetUpdateOne)")
+}

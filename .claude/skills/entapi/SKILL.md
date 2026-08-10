@@ -102,6 +102,15 @@ For entity `Courier`, three files are generated in `ent/`:
     a field the schema does not declare `Optional()`
   - `Has<Field>() bool` — absent, explicit `null` and value are three states:
     absent leaves the field alone, `null` clears it, a value sets it
+  - `<Field>() (T, bool)` on the `Valid…` wrapper only — the value the payload
+    carried, and whether `Apply` will `Set` it. `ok` is the third state
+    `Has<Field>()` cannot answer: `ok` means a value, `!ok` with
+    `Has<Field>()` means an explicit `null` that `Apply` will `Clear`, and
+    `!ok` without it means absent. So a cross-field rule reads the wrapper
+    instead of applying the request to a throwaway update builder and reading
+    back `Mutation()`. Two field names are refused because of it — a
+    patch-visible field whose Go name is `Apply`, and a patch-visible pair
+    `x` / `has_x`
 - `CourierResponse` — Ent fields minus `Hidden` and `Sensitive`, plus expanded edges
 - `CourierListResponse` — paginated response wrapper: `data`, `total`, `page`, `size`.
   The same four fields as `entapi.Page`, which is what the wiring returns.

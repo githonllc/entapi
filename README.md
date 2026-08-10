@@ -648,6 +648,50 @@ func (s *UserService) Patch(ctx context.Context, db *ent.Client,
 }
 ```
 
+### Reading the value, not only the presence
+
+Presence is two of the three states. It separates **absent** from **carried**;
+it does not separate *carried a value* from *carried an explicit null*, and
+those are opposite requests. So every field on the `Valid…PatchRequest` also
+has a comma-ok **value reader**, spelled with the field's own name:
+
+```go
+func (v *ValidUserPatchRequest) SuspendedUntil() (time.Time, bool)
+```
+
+| Reader | `Has<Field>()` | The payload carried | `Apply` will |
+|---|---|---|---|
+| `ok == true` | `true` | a value | `Set` it |
+| `ok == false` | `true` | an explicit `null` | `Clear` it |
+| `ok == false` | `false` | nothing | write nothing |
+
+The middle row is reachable only for a clearable field — `Validate` rejects an
+explicit null on anything the schema does not declare `Optional()`, so `ok` is
+exactly `Has<Field>()` everywhere else. A request built in Go rather than
+decoded reads as absent, which is the same answer `Apply` acts on.
+
+That is what lets a cross-field rule be written against the wrapper alone:
+
+```go
+if _, ok := v.SuspendedUntil(); ok && status != user.StatusSuspended {
+	return nil, fieldError("suspended_until", "only settable while suspended")
+}
+```
+
+Before the readers, the only way out of the wrapper was `Apply`, so the rule had
+to allocate an update builder it never executed, apply the request to it and
+read back `Mutation()` — coupling the business logic to Ent's mutation
+vocabulary to answer a question about the request (#113).
+
+Only the wrapper gets readers. The **raw** request already exposes its `*T`
+fields as exported struct fields, so the value is reachable there; the wrapper
+is the only thing that hides it, and the only thing a customization point
+receives.
+
+Two field names are refused because of them: a patch-visible field whose Go name
+is `Apply`, and a patch-visible pair `x` / `has_x` — see
+[generation can fail](#generation-can-fail-and-that-is-the-design).
+
 ### Keys match strictly
 
 `encoding/json` fills a struct field on an exact match **or** a case-insensitive
@@ -1088,6 +1132,7 @@ The refusal matrix covers these contradictions:
 | A tombstone field that is not `Optional` | ent generates no `DeletedAtIsNil` predicate and the traverser would not compile |
 | A self-referential edge pair annotated on one end only | ent hands chained `edge.To(…).From(…).Annotations(…)` to the *inverse* builder, so the assoc end silently loses its annotation |
 | **An entity name colliding with a symbol this extension generates** | see below |
+| **A patch-visible field name colliding with a method the patch DTO generates** | see below |
 
 Graph-level `API`, `APIHandler` and `ErrorMap` are reserved. An entity called `ErrorMap` makes ent emit `type ErrorMap` while
 `entapi_errors.go` emits `var ErrorMap` — and Go gives types, variables and
@@ -1105,6 +1150,27 @@ just as hard, and the node loop skips exactly those. The derived list is the
 not have collided today is the
 accepted cost of a refusal that is stable.
 
+Field names have their own, **method-level** version of the same problem, and
+neither check subsumes the other: a method name lives in its receiver's
+namespace rather than the package's. The
+[value readers](#reading-the-value-not-only-the-presence) are spelled with the
+field's own name, so two patch-visible field names now break the build:
+
+| Refused | Collides with |
+|---|---|
+| a field whose Go name is `Apply` | `Apply(b *<Entity>UpdateOne)` on the same wrapper — `method Apply already declared` |
+| a pair `x` and `has_x` | `HasX()`, the presence method generated for `x`, against the struct field `HasX` — `field and method with the same name HasX` |
+
+The second one is **older than the readers**: `Has<Field>()` has been on the raw
+request since #98, where `has_x` is a struct field of that very name, so the
+pair already failed to compile. Both messages point at `.StorageKey(…)`, because
+the JSON tag is spelled from it — the wire key does not have to move when the Go
+name does.
+
+`Except(api.OpPatch)` does not exempt either one. It removes routes and wiring,
+never a request DTO, so the patch request, its wrapper, `Apply` and the readers
+are all still generated.
+
 Every HTTP check skips an entity without `api.Resource()` — the same condition
 the generation loop uses. Soft-delete checks and reserved names remain graph-wide.
 
@@ -1117,7 +1183,8 @@ generated, because correct output exists for them. See
 > `unusableSoftDeleteField`, `asymmetricSelfEdgeConflicts`,
 > `asymmetricSelfEdgeConflict`, `reservedNameConflicts`, `graphSymbolConflicts`,
 > `derivedName`, `derivedEntityDecls`, `derivedEntityNames`,
-> `derivedNameConflict`, `fieldHasOp`, `markerList`, `errorMapSymbol`,
+> `derivedNameConflict`, `patchMethodCollisions`, `patchApplyCollision`,
+> `patchPresenceCollision`, `fieldHasOp`, `markerList`, `errorMapSymbol`,
 > `registerSoftDeleteSymbol`, `entPlural`
 
 ## What the generator does to your directory

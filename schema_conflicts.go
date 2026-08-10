@@ -177,8 +177,64 @@ func nodeConflicts(node *gen.Type) []string {
 		}
 	}
 
+	out = append(out, requiredEdgeWithoutFieldConflicts(node)...)
 	out = append(out, asymmetricSelfEdgeConflicts(node)...)
 	return out
+}
+
+// requiredEdgeWithoutFieldConflicts reports every edge Ent marks Required() on
+// a Resource whose create family is reachable, but which declares no
+// edge.Field(...).
+//
+// It is the edge-side twin of blockedCreateFields, and it exists because that
+// one cannot see it: blockedCreateFields walks node.Fields, and so does
+// createFields, so an edge is invisible to both. The create family is
+// nonetheless dead on arrival — ent's generated create.tmpl iterates
+// EdgesWithID filtered by `not $e.Optional` and its check() returns
+// `missing required edge "X.y"` before any SQL, while nothing puts a setter
+// for that edge in {Entity}CreateRequest. Every POST would fail at run time,
+// against a request type that offers no way to make it succeed.
+//
+// Gated on Except(api.OpCreate) exactly like blockedCreateFields: with no
+// public create there is no request to be unable to satisfy, which is how the
+// softdelete fixture's Draft and the consumer Session it was transplanted from
+// keep generating.
+func requiredEdgeWithoutFieldConflicts(node *gen.Type) []string {
+	if resourceExcepts(node, api.OpCreate) {
+		return nil
+	}
+	var out []string
+	for _, edge := range node.Edges {
+		if edge.Optional || edge.Field() != nil {
+			continue
+		}
+		out = append(out, requiredEdgeWithoutFieldConflict(node, edge))
+	}
+	return out
+}
+
+// requiredEdgeWithoutFieldConflict describes one such edge.
+//
+// The remedy list branches on Edge.OwnFK(), not on Edge.Unique, because OwnFK
+// is ent's OWN test for whether edge.Field(...) may be declared at all:
+// entc/gen/type.go rejects `edge %q has a field %q but it is not holding a
+// foreign key` for any other end. Unique is necessary but not sufficient: an
+// O2O owns the key only when it is the inverse end or a self-referential Bidi
+// one, so the assoc end of a two-type edge.To(...).Unique() / edge.From(...)
+// pair is unique and still cannot name the key. Branching on Unique would hand
+// that author a repair ent refuses, which is a worse failure than the one being
+// reported.
+func requiredEdgeWithoutFieldConflict(node *gen.Type, edge *gen.Edge) string {
+	repair := "Repair it by adding api.Resource().Except(api.OpCreate), or by making the edge Optional"
+	if edge.OwnFK() {
+		repair = "Repair it by adding edge.Field(...) so the foreign key becomes an ordinary Ent field the create request can carry, " +
+			"by adding api.Resource().Except(api.OpCreate), or by making the edge Optional"
+	}
+	return fmt.Sprintf(
+		"%s.%s: Ent marks the edge Required(), so every create must set it, but the edge declares no edge.Field(...), "+
+			"so the foreign key is not an Ent field and no setter for it reaches %sCreateRequest; "+
+			"every create would fail ent's own `missing required edge` check before any SQL. %s",
+		node.Name, edge.Name, node.Name, repair)
 }
 
 func hasRawAnnotation(annotations gen.Annotations, name string) bool {

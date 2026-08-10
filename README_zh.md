@@ -912,6 +912,7 @@ client.Draft.Query().Where(draft.HasDocWith(doc.DeletedAtIsNil())).All(ctx)
 | Ent `Sensitive()` 与查询词或 `api.ReadOnly()` 并用 | secret 不能成为查询 oracle；完全不可访问的数据用 `Hidden` |
 | required-no-default 字段被 `Hidden`/`ReadOnly` 挡出 create，且未 `Except(OpCreate)` | Ent 无法从该请求插入行 |
 | PATCH 字段集为空且未 `Except(OpPatch)` | 公开 PATCH 面没有用途 |
+| 边被 Ent 标为 `Required()` 却没有声明 `edge.Field(…)`，且未 `Except(OpCreate)` | Ent 要求每次 create 都设置这条边，但没有任何 setter 能进入 create 请求，于是每次 create 都会栽在 `missing required edge` 上。修复建议只对**持有外键**的那一端提供 `edge.Field(…)`——那是 Ent 唯一接受它的一端 |
 | 字段词挂在 edge，或 `Expand` 挂在 field | 词挂错了 schema 元素 |
 | 主键上出现任何 EntAPI 词 | ID 已天然 Filterable 与 Sortable；其固定查询面不使用注解 |
 | `OpList` 被 except，同时字段带查询词 | 查询面已关闭 |

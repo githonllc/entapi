@@ -218,10 +218,12 @@ func requiredEdgeWithoutFieldConflicts(node *gen.Type) []string {
 // The remedy list branches on Edge.OwnFK(), not on Edge.Unique, because OwnFK
 // is ent's OWN test for whether edge.Field(...) may be declared at all:
 // entc/gen/type.go rejects `edge %q has a field %q but it is not holding a
-// foreign key` for any other end. Unique is necessary but not sufficient — the
-// assoc end of a bidirectional O2O is unique and still cannot name the key —
-// so branching on it would hand the author a repair that ent refuses, which is
-// a worse failure than the one being reported.
+// foreign key` for any other end. Unique is necessary but not sufficient: an
+// O2O owns the key only when it is the inverse end or a self-referential Bidi
+// one, so the assoc end of a two-type edge.To(...).Unique() / edge.From(...)
+// pair is unique and still cannot name the key. Branching on Unique would hand
+// that author a repair ent refuses, which is a worse failure than the one being
+// reported.
 func requiredEdgeWithoutFieldConflict(node *gen.Type, edge *gen.Edge) string {
 	repair := "Repair it by adding api.Resource().Except(api.OpCreate), or by making the edge Optional"
 	if edge.OwnFK() {

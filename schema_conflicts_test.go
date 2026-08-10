@@ -177,14 +177,22 @@ func TestCheckGraphConflicts_AsymmetricSelfEdgeRemainsRefused(t *testing.T) {
 }
 
 // TestCheckGraphConflicts_RequiredEdgeWithoutFieldMatrix covers both halves of
-// #110's message, and each half is the other's control: the remedy list has to
-// offer edge.Field(...) exactly when ent would accept it, which is when the
-// edge holds the foreign key.
+// #110's message: the remedy list has to offer edge.Field(...) exactly when ent
+// would accept it, which is when the edge holds the foreign key.
+//
+// The third row is what makes the other two mean anything. With only M2O and
+// O2M, `unique` and `OwnFK()` co-vary, so an implementation that branched on
+// Edge.Unique — the exact mistake requiredEdgeWithoutFieldConflict's comment
+// exists to prevent — would pass the whole matrix. The assoc end of a
+// two-type O2O pair separates them: Unique is true, OwnFK() is false
+// (entc/gen/type.go — O2O owns the key only when IsInverse or Bidi), so a
+// Unique-branching implementation fails there and only there.
 //
 // The hand-built edges carry an explicit gen.Relation because Edge.OwnFK()
-// reads Rel.Type and nothing else. Edge.Field() stays nil either way — the
-// foreign key it would return lives in gen's unexported Rel.fk, which is also
-// why the "declares edge.Field()" negative below has to load a real graph.
+// reads Rel.Type, Inverse and Bidi and nothing else. Edge.Field() stays nil in
+// every row — the foreign key it would return lives in gen's unexported
+// Rel.fk, which is also why the "declares edge.Field()" negative below has to
+// load a real graph.
 func TestCheckGraphConflicts_RequiredEdgeWithoutFieldMatrix(t *testing.T) {
 	target := &gen.Type{Name: "User", ID: newIntField("id", nil)}
 	for _, tc := range []struct {
@@ -201,6 +209,9 @@ func TestCheckGraphConflicts_RequiredEdgeWithoutFieldMatrix(t *testing.T) {
 		{name: "to-one holding the foreign key", rel: gen.M2O, unique: true, wantFieldRemedy: true},
 		// edge.To("posts", Post.Type).Required(): the key is on the far table.
 		{name: "to-many", rel: gen.O2M, wantFieldRemedy: false},
+		// The assoc end of edge.To(...).Unique() + edge.From(...).Unique():
+		// unique, but the inverse end is the one that may name the key.
+		{name: "assoc end of an O2O pair", rel: gen.O2O, unique: true, wantFieldRemedy: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			node := newTestType("Session", newStringField("token", nil))

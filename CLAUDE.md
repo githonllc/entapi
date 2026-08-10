@@ -171,11 +171,18 @@ Never read the EntAPI annotation maps directly. Always use the three readers in 
 `dto.tmpl` emits, per entity: `{Entity}CreateRequest`, `{Entity}PatchRequest`,
 a `Valid…` wrapper for each, `{Entity}CreateRequestTags()` and
 `{Entity}PatchRequestTags()` accessors, an `UnmarshalJSON`, one `Has<Field>()`
-per field on **both** the request and its wrapper, and `Apply` on the validated
-types only.
+per field on **both** the request and its wrapper, one comma-ok value reader
+`<Field>() (T, bool)` per field on the **patch wrapper only**, and `Apply` on the
+validated types only.
 The wrapper's `Has<Field>()` forwards; it exists because a customization point
 receives only the validated type, so presence stopping at `Validate` would be
-unreachable from the business logic that acts on it. Five rules are load-bearing:
+unreachable from the business logic that acts on it. The value reader (#113) is
+the third state presence cannot express: `ok` is a carried value, `!ok` with
+`Has<Field>()` is an explicit null `Apply` will Clear, `!ok` without it is
+absent. Its body is a deliberate mirror of `Apply` and is uniform across every
+field shape — every patch field is `*T` — and it uses `var zero {{ $f.Type }}`
+because the type may be a slice or a map. Only the wrapper gets one: the raw
+request already exports its `*T` fields. These rules are load-bearing:
 
 - **Field shape comes from ent, never from a second opinion.** `funcs_presence.go`
   is the whole rule set: a create field is `*T` when `Optional || Default ||
@@ -206,6 +213,15 @@ unreachable from the business logic that acts on it. Five rules are load-bearing
 - **`patchFields` starts from ent's `MutableFields`, then removes `Hidden` and
   `ReadOnly`.** A surviving field provably has a `Set<Field>`. It is clearable
   exactly when Ent marks it `Optional`.
+- **The value readers put a field-derived name in a method set, which is new,
+  so two field names are now refused** (`patchMethodCollisions`): a
+  patch-visible field whose Go name is `Apply`, and a patch-visible pair `x` /
+  `has_x`. The second one predates the readers — #98 put `Has<Field>()` on the
+  raw request, where `has_x` is a struct field of that very name — and it is
+  gated on patch visibility ONLY. `Except(api.OpPatch)` is deliberately not a
+  gate: `dto.tmpl` renders the patch request, its wrapper, `Apply` and the
+  readers unconditionally, which `internal/fixtures/wiring/wiringent/patchless_dto.go`
+  shows.
 
 An `Immutable()` field is absent from the PATCH DTO. The generated HTTP handler
 closes the resulting silent-drop case by comparing raw keys against the
@@ -388,7 +404,9 @@ cannot satisfy required-no-default Ent fields, required edges that declare no
 `edge.Field(...)` while the create family is reachable, empty public PATCH surfaces,
 misplaced words, words on IDs, query words with `OpList` excepted, `_`-prefixed
 query storage keys, expansion to non-resources, asymmetric self edges, invalid
-soft-delete declarations, and generated-name collisions. HTTP rows skip nodes
+soft-delete declarations, generated-name collisions, and the two patch-visible
+field names that collide with a method the patch DTO generates on the same
+receiver. HTTP rows skip nodes
 without `api.Resource()`; soft-delete and symbol checks remain graph-wide.
 
 Conversely, `Optional().Nillable()` and named `GoType`s over slices/maps *are*
@@ -416,7 +434,8 @@ Every row has a fixture. A fixture whose generation must fail carries
   - `internal/fixtures/httpdemo/e2e` — the HTTP tracer bullet: all five endpoints, problem+json statuses, direct/Mount/StripPrefix composition, actor context, middleware short-circuiting and Excepted routes against real SQLite. It is also where #76's document is validated against the OpenAPI 3.1 meta-schema (`pb33f/libopenapi` + `libopenapi-validator`, which live here and nowhere else — the root module must stay free of a YAML parser) and where it is checked against reality three ways: schemas versus the generated structs by reflection, documented paths versus `Routes()`, and each field's documented operator prefixes versus what the live parser accepts. Any one of the three alone proves only that the file parses.
   - `internal/softdeleteproof` — the only evidence for #18's load-bearing claim: a direct `client.Doc.Query()`, with nothing generated in the call path, does not return deleted rows. A compile proof cannot tell "the predicate is generated" from "the predicate reaches the SQL".
   - `internal/uniqueproof` — #74's dialect determinations against the **real** driver error types. It exists because a hand-written stand-in would prove only that the detector matches the stand-in: it takes `jackc/pgx/v5` (a genuine `*pgconn.PgError`, so the `SQLState()` probe is exercised, `23503` included as the negative) and `go-sql-driver/mysql` (a genuine `*mysql.MySQLError`, which is the negative case for the probe — `Number` and `SQLState` are fields, not methods — and the positive case for the `Error 1062` text). Those two drivers live here and nowhere else; the root module must stay free of them.
-- `internal/fixtures/edges/edgesent/orerr_contract_test.go` is one of the few hand-written files under a generated `<dir>ent/` directory. It must be in `package edgesent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database. The others include `basic/basicent/listresponse_shape_test.go`, `createexcepted/createexceptedent/create_family_test.go`, the two `httpdemo/httpdemoent/*_test.go` contract proofs, `presence/presenceent/account_presence_test.go`, `query/queryent/filter_contract_test.go`, `strictquery/strictqueryent/strictquery_filter_contract_test.go`, `sensitive/sensitiveent/sensitive_wire_test.go` and `stale/staleent/trinket_dto.go`; `go build` ignores `_test.go` files, so only the last of those is visible to the codegen harness — and it is there precisely to prove cleanup leaves files it did not write alone.
+- `internal/fixtures/edges/edgesent/orerr_contract_test.go` is one of the few hand-written files under a generated `<dir>ent/` directory. It must be in `package edgesent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database. The others include `basic/basicent/listresponse_shape_test.go`, `createexcepted/createexceptedent/create_family_test.go`, the two `httpdemo/httpdemoent/*_test.go` contract proofs, `presence/presenceent/account_presence_test.go`,
+`fieldshapes/fieldshapesent/jsonwidget_reader_test.go`, `query/queryent/filter_contract_test.go`, `strictquery/strictqueryent/strictquery_filter_contract_test.go`, `sensitive/sensitiveent/sensitive_wire_test.go` and `stale/staleent/trinket_dto.go`; `go build` ignores `_test.go` files, so only the last of those is visible to the codegen harness — and it is there precisely to prove cleanup leaves files it did not write alone.
 - The three nested modules that import a fixture package (`internal/fixtures/wiring/e2e`, `internal/fixtures/httpdemo/e2e`, `internal/softdeleteproof`) alias it back to `ent` in their imports. They are hand-written and read from the consumer's side, where the generated package really is named `ent`; the alias is spelled out, so goimports has nothing to resolve.
 
 ## Dead code is now a test failure, not a convention (#7)

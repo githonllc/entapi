@@ -558,6 +558,44 @@ func (s *UserService) Patch(ctx context.Context, db *ent.Client,
 }
 ```
 
+### 读出值，而不只是存在性
+
+存在性只是三态里的两态。它区分**缺席**与**带来了**，但不区分*带来了一个值*与*带来了一个
+显式 null*——而这两者是相反的请求。所以 `Valid…PatchRequest` 上每个字段还有一个 comma-ok
+的**值读取器**，用字段自己的名字命名：
+
+```go
+func (v *ValidUserPatchRequest) SuspendedUntil() (time.Time, bool)
+```
+
+| 读取器 | `Has<Field>()` | payload 带来的 | `Apply` 将会 |
+|---|---|---|---|
+| `ok == true` | `true` | 一个值 | `Set` 它 |
+| `ok == false` | `true` | 一个显式 `null` | `Clear` 它 |
+| `ok == false` | `false` | 什么都没有 | 什么都不写 |
+
+中间那一行只对可清空字段可达——`Validate` 会拒绝任何 schema 未声明 `Optional()` 的字段上的
+显式 null，所以在其余字段上 `ok` 恰好等于 `Has<Field>()`。用 Go 手工构造、没有经过解码的
+请求一律读作缺席，这与 `Apply` 的行为是同一个答案。
+
+这正是让跨字段规则只靠包装器就能写出来的东西：
+
+```go
+if _, ok := v.SuspendedUntil(); ok && status != user.StatusSuspended {
+	return nil, fieldError("suspended_until", "only settable while suspended")
+}
+```
+
+在读取器出现之前，出包装器的唯一出口是 `Apply`，所以这条规则必须分配一个永不执行的 update
+builder，把请求 apply 上去，再从 `Mutation()` 读回来——为回答一个关于请求的问题，把业务逻辑
+耦合到了 Ent 的 mutation 词汇上（#113）。
+
+只有包装器有读取器。**原始**请求本就把它的 `*T` 字段导出为结构体字段，值在那里已经可达；
+包装器是唯一藏起它的东西，也是定制点唯一拿得到的东西。
+
+因此有两个字段名会被拒绝：Go 名为 `Apply` 的 patch 可见字段，以及 `x` / `has_x` 这样的
+patch 可见字段对——见[生成会失败，而这正是设计](#生成会失败而这正是设计)。
+
 ### key 是严格匹配的
 
 `encoding/json` 在精确匹配**或**大小写不敏感匹配时都会填充结构体字段，而存在性是按原始
@@ -926,6 +964,7 @@ client.Draft.Query().Where(draft.HasDocWith(doc.DeletedAtIsNil())).All(ctx)
 | 墓碑字段不是 `Optional` | ent 不生成 `DeletedAtIsNil` 谓词，traverser 编译不过 |
 | 自引用边只在一端带注解 | ent 把链式的 `edge.To(…).From(…).Annotations(…)` 交给了*反向* builder，于是关联端静默丢失了它的注解 |
 | **实体名与本扩展生成的符号相撞** | 见下 |
+| **patch 可见字段名与 patch DTO 生成的方法相撞** | 见下 |
 
 图级的 `API`、`APIHandler`、`ErrorMap` 都是保留名。一个名为 `ErrorMap` 的实体会让 ent 发射 `type ErrorMap`，而 `entapi_errors.go` 发射
 `var ErrorMap`——Go 每个包只有一个标识符命名空间，于是 `redeclared in this block`，发生在
@@ -938,6 +977,22 @@ client.Draft.Query().Where(draft.HasDocWith(doc.DeletedAtIsNil())).All(ctx)
 恰好会跳过它。派生名单取 resource 可能产出的**最大集合**，宁可拒绝一个理论上今天不会相撞
 的名字，也不因日后加注解而突然报错。
 
+字段名有它自己的、**方法层面**的同类问题，而两个检查谁也不覆盖谁：方法名活在接收者的命名
+空间里，而不是包的命名空间里。[值读取器](#读出值而不只是存在性)用字段自己的名字命名，于是
+有两种 patch 可见的字段名会把构建弄坏：
+
+| 被拒绝的 | 撞上了 |
+|---|---|
+| Go 名为 `Apply` 的字段 | 同一个包装器上的 `Apply(b *<Entity>UpdateOne)`——`method Apply already declared` |
+| `x` 与 `has_x` 这一对 | 为 `x` 生成的存在性方法 `HasX()` 撞上结构体字段 `HasX`——`field and method with the same name HasX` |
+
+第二种**比读取器更老**：`Has<Field>()` 自 #98 起就在原始请求上，而 `has_x` 在那里正是一个
+同名的结构体字段，所以这一对早就编译不过。两条消息都指向 `.StorageKey(…)`，因为 JSON tag
+是从它拼出来的——Go 名要改，wire key 不必跟着改。
+
+`Except(api.OpPatch)` 不能豁免其中任何一条。它移除的是路由与 wiring，从不移除请求 DTO，
+所以 patch 请求、它的包装器、`Apply` 和读取器照样会生成。
+
 HTTP 检查全部跳过没有 `api.Resource()` 的实体——与生成循环条件一致；软删除与保留名仍是
 全图检查。
 
@@ -948,7 +1003,8 @@ HTTP 检查全部跳过没有 `api.Resource()` 的实体——与生成循环条
 > `queryConflicts`、`immutableUpdateConflict`、`unusableSoftDeleteField`、
 > `asymmetricSelfEdgeConflicts`、`asymmetricSelfEdgeConflict`、`reservedNameConflicts`、
 > `graphSymbolConflicts`、`derivedName`、`derivedEntityDecls`、`derivedEntityNames`、
-> `derivedNameConflict`、`fieldHasOp`、`markerList`、`errorMapSymbol`、
+> `derivedNameConflict`、`patchMethodCollisions`、`patchApplyCollision`、
+> `patchPresenceCollision`、`fieldHasOp`、`markerList`、`errorMapSymbol`、
 > `registerSoftDeleteSymbol`、`entPlural`
 
 ## 生成器对你的目录做了什么

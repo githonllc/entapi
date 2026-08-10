@@ -179,7 +179,92 @@ func nodeConflicts(node *gen.Type) []string {
 
 	out = append(out, requiredEdgeWithoutFieldConflicts(node)...)
 	out = append(out, asymmetricSelfEdgeConflicts(node)...)
+	out = append(out, patchMethodCollisions(node)...)
 	return out
+}
+
+// patchMethodCollisions reports every patch-visible field whose Go name is
+// already a method templates/dto.tmpl declares on the same receiver.
+//
+// It is the method-level sibling of reservedNameConflicts, and neither check
+// subsumes the other. That one compares ENTITY names against the package's
+// identifier namespace; a method name lives in its receiver's namespace
+// instead, which is exactly why derivedEntityDecls leaves Validate and Apply
+// out. What #113 changed is that a method name is now DERIVED FROM A FIELD's Go
+// name — the value reader is spelled <Field>() — so two field names can now
+// collide with a method the same templates emit.
+//
+// Two ways that happens, and they are not the same age:
+//
+//   - a field called "apply". Its reader is `Apply() (T, bool)` on
+//     Valid<Entity>PatchRequest, where `Apply(b *<Entity>UpdateOne)` already
+//     lives. This one is NEW, introduced by the readers.
+//   - a pair "x" and "has_x". Their Go names are X and HasX, and HasX is also
+//     the presence method generated for X. This one is OLDER than the readers:
+//     #98 put Has<Field>() on the RAW request, where has_x is a struct field of
+//     the same name, so `field and method with the same name HasX` was already
+//     a compile error before the readers existed. The readers add a second
+//     occurrence, on the wrapper. The message names both, because which one the
+//     compiler reports first is not something the author can influence.
+//
+// Gated on patch VISIBILITY and nothing else. A field ent marks Immutable()
+// derives out of patchFields, so no reader and no presence method exist for it
+// and there would be nothing to collide with. Except(api.OpPatch) is
+// deliberately NOT a gate: templates/dto.tmpl renders the patch request, its
+// wrapper, Apply and the readers unconditionally — Except removes routes and
+// wiring, never a request DTO — so the colliding methods reach the consumer's
+// package either way. internal/fixtures/wiring/wiringent/patchless_dto.go is
+// the standing proof: its entity Excepts api.OpPatch and still carries
+// ValidPatchlessPatchRequest.Apply.
+func patchMethodCollisions(node *gen.Type) []string {
+	fields := patchFields(node)
+
+	var out []string
+	for _, f := range fields {
+		if f.StructField() == "Apply" {
+			out = append(out, patchApplyCollision(node, f))
+		}
+		for _, other := range fields {
+			if f.StructField() == "Has"+other.StructField() {
+				out = append(out, patchPresenceCollision(node, f, other))
+			}
+		}
+	}
+	return out
+}
+
+// patchApplyCollision describes a patch field whose reader is Apply.
+//
+// The repair names StorageKey because the wire format does not have to move
+// with the Go name: templates/dto.tmpl spells every JSON tag from
+// f.StorageKey(), so `field.String("apply_mode").StorageKey("apply")` keeps the
+// key the callers already send while giving the reader a name of its own.
+func patchApplyCollision(node *gen.Type, f *gen.Field) string {
+	return fmt.Sprintf(
+		"%s.%s: the field's Go name is Apply, so the patch value reader generated for it is `func (v *Valid%sPatchRequest) Apply() (%s, bool)` — "+
+			"but Valid%sPatchRequest already declares `Apply(b *%sUpdateOne)`, and a receiver cannot declare one method name twice, "+
+			"so the generated package fails to compile with `method Apply already declared` in a file the author did not write. "+
+			"So rename the ent field; the wire key can stay where it is with .StorageKey(%q), which is what the JSON tag is spelled from",
+		node.Name, f.Name, node.Name, f.Type, node.Name, node.Name, f.StorageKey(),
+	)
+}
+
+// patchPresenceCollision describes the pair whose Go names are X and HasX.
+//
+// The pair is named in the subject line because neither field is wrong on its
+// own and the author has to pick which one moves — the same reason
+// derivedNameConflict names two entities.
+func patchPresenceCollision(node *gen.Type, f, other *gen.Field) string {
+	return fmt.Sprintf(
+		"%s.%s / %s.%s: the field's Go name is %s, which is also the presence method generated for %s — "+
+			"`Has%s()` is declared on %sPatchRequest, where %s is a struct field of that very name, and again on Valid%sPatchRequest, where the value reader generated for %s is spelled %s() as well. "+
+			"A struct field and a method cannot share a name and a receiver cannot declare one method name twice, "+
+			"so the generated package fails to compile with `field and method with the same name %s` in files the author did not write. "+
+			"So rename one of the two ent fields; the wire key can stay where it is with .StorageKey(%q), which is what the JSON tag is spelled from",
+		node.Name, f.Name, node.Name, other.Name, f.StructField(), other.StructField(),
+		other.StructField(), node.Name, f.StructField(), node.Name, f.Name, f.StructField(),
+		f.StructField(), f.StorageKey(),
+	)
 }
 
 // requiredEdgeWithoutFieldConflicts reports every edge Ent marks Required() on
@@ -600,7 +685,9 @@ type derivedName struct {
 //
 // Methods are absent for the same class of reason — a method name lives in its
 // receiver's namespace, not the package's, so Predicates, Validate and Apply
-// collide with nothing.
+// collide with no ENTITY name. They can collide with each other, which is a
+// different check: patchMethodCollisions covers the two method names #113
+// derives from a FIELD's Go name.
 //
 // The plural forms go through ent's own plural function rather than a rule
 // written here. templates/wiring.tmpl calls `plural` from gen.Funcs, so a second

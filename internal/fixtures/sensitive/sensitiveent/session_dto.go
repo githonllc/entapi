@@ -261,6 +261,29 @@ type ValidSessionPatchRequest struct{ r *SessionPatchRequest }
 // supposed to act on it.
 func (v *ValidSessionPatchRequest) HasUserAgent() bool { return v.r.HasUserAgent() }
 
+// UserAgent reports the value the payload carried for
+// "user_agent", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasUserAgent(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidSessionPatchRequest) UserAgent() (string, bool) {
+	if !v.r.HasUserAgent() || v.r.UserAgent == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.UserAgent, true
+}
+
 // Validate rejects an explicit null on a field that cannot be cleared.
 //
 // ent emits Clear<Field>() for Optional fields and for no others, so a null on

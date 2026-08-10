@@ -354,6 +354,29 @@ type ValidRecordPatchRequest struct{ r *RecordPatchRequest }
 // supposed to act on it.
 func (v *ValidRecordPatchRequest) HasTitle() bool { return v.r.HasTitle() }
 
+// Title reports the value the payload carried for
+// "title", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasTitle(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidRecordPatchRequest) Title() (string, bool) {
+	if !v.r.HasTitle() || v.r.Title == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Title, true
+}
+
 // HasBody reports whether the payload carried "body".
 //
 // A custom implementation receives only the validated type, so without this
@@ -361,6 +384,29 @@ func (v *ValidRecordPatchRequest) HasTitle() bool { return v.r.HasTitle() }
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidRecordPatchRequest) HasBody() bool { return v.r.HasBody() }
+
+// Body reports the value the payload carried for
+// "body", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasBody(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidRecordPatchRequest) Body() (string, bool) {
+	if !v.r.HasBody() || v.r.Body == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Body, true
+}
 
 // HasRef reports whether the payload carried "reference".
 //
@@ -370,6 +416,29 @@ func (v *ValidRecordPatchRequest) HasBody() bool { return v.r.HasBody() }
 // supposed to act on it.
 func (v *ValidRecordPatchRequest) HasRef() bool { return v.r.HasRef() }
 
+// Ref reports the value the payload carried for
+// "reference", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasRef(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidRecordPatchRequest) Ref() (string, bool) {
+	if !v.r.HasRef() || v.r.Ref == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Ref, true
+}
+
 // HasStatus reports whether the payload carried "status".
 //
 // A custom implementation receives only the validated type, so without this
@@ -377,6 +446,29 @@ func (v *ValidRecordPatchRequest) HasRef() bool { return v.r.HasRef() }
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidRecordPatchRequest) HasStatus() bool { return v.r.HasStatus() }
+
+// Status reports the value the payload carried for
+// "status", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasStatus(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidRecordPatchRequest) Status() (record.Status, bool) {
+	if !v.r.HasStatus() || v.r.Status == nil {
+		var zero record.Status
+		return zero, false
+	}
+	return *v.r.Status, true
+}
 
 // HasScore reports whether the payload carried "score".
 //
@@ -386,6 +478,29 @@ func (v *ValidRecordPatchRequest) HasStatus() bool { return v.r.HasStatus() }
 // supposed to act on it.
 func (v *ValidRecordPatchRequest) HasScore() bool { return v.r.HasScore() }
 
+// Score reports the value the payload carried for
+// "score", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasScore(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidRecordPatchRequest) Score() (int, bool) {
+	if !v.r.HasScore() || v.r.Score == nil {
+		var zero int
+		return zero, false
+	}
+	return *v.r.Score, true
+}
+
 // HasNote reports whether the payload carried "note".
 //
 // A custom implementation receives only the validated type, so without this
@@ -394,6 +509,29 @@ func (v *ValidRecordPatchRequest) HasScore() bool { return v.r.HasScore() }
 // supposed to act on it.
 func (v *ValidRecordPatchRequest) HasNote() bool { return v.r.HasNote() }
 
+// Note reports the value the payload carried for
+// "note", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasNote(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidRecordPatchRequest) Note() (string, bool) {
+	if !v.r.HasNote() || v.r.Note == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Note, true
+}
+
 // HasSecret reports whether the payload carried "secret".
 //
 // A custom implementation receives only the validated type, so without this
@@ -401,6 +539,29 @@ func (v *ValidRecordPatchRequest) HasNote() bool { return v.r.HasNote() }
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidRecordPatchRequest) HasSecret() bool { return v.r.HasSecret() }
+
+// Secret reports the value the payload carried for
+// "secret", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasSecret(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidRecordPatchRequest) Secret() (string, bool) {
+	if !v.r.HasSecret() || v.r.Secret == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Secret, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

@@ -288,6 +288,29 @@ type ValidNillableWidgetPatchRequest struct{ r *NillableWidgetPatchRequest }
 // supposed to act on it.
 func (v *ValidNillableWidgetPatchRequest) HasNickname() bool { return v.r.HasNickname() }
 
+// Nickname reports the value the payload carried for
+// "nickname", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasNickname(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidNillableWidgetPatchRequest) Nickname() (string, bool) {
+	if !v.r.HasNickname() || v.r.Nickname == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Nickname, true
+}
+
 // HasHandle reports whether the payload carried "handle".
 //
 // A custom implementation receives only the validated type, so without this
@@ -296,6 +319,29 @@ func (v *ValidNillableWidgetPatchRequest) HasNickname() bool { return v.r.HasNic
 // supposed to act on it.
 func (v *ValidNillableWidgetPatchRequest) HasHandle() bool { return v.r.HasHandle() }
 
+// Handle reports the value the payload carried for
+// "handle", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasHandle(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidNillableWidgetPatchRequest) Handle() (string, bool) {
+	if !v.r.HasHandle() || v.r.Handle == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Handle, true
+}
+
 // HasQuota reports whether the payload carried "quota".
 //
 // A custom implementation receives only the validated type, so without this
@@ -303,6 +349,29 @@ func (v *ValidNillableWidgetPatchRequest) HasHandle() bool { return v.r.HasHandl
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidNillableWidgetPatchRequest) HasQuota() bool { return v.r.HasQuota() }
+
+// Quota reports the value the payload carried for
+// "quota", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasQuota(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidNillableWidgetPatchRequest) Quota() (int, bool) {
+	if !v.r.HasQuota() || v.r.Quota == nil {
+		var zero int
+		return zero, false
+	}
+	return *v.r.Quota, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

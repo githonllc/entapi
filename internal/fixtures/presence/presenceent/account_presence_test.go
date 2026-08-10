@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/githonllc/entapi/internal/fixtures/presence/presenceent/account"
 	entapi "github.com/githonllc/entapi/runtime"
 	"github.com/google/uuid"
 )
@@ -409,4 +410,135 @@ func mustValidatePatch(t *testing.T, body string) *ValidAccountPatchRequest {
 		t.Fatalf("validating %s: %v", body, err)
 	}
 	return v
+}
+
+// TestPatchValueReadersAnswerTheThirdState is #113. Has<Field>() separates
+// absent from carried; it does not separate "carried a value" from "carried an
+// explicit null", and those two are opposite requests. The comma-ok reader is
+// the second bit:
+//
+//	ok                -> the payload carried a value; Apply will Set it
+//	!ok && Has<F>()   -> the payload carried an explicit null; Apply will Clear it
+//	!ok && !Has<F>()  -> absent; Apply writes nothing
+//
+// Quota is Optional, so it is clearable and all three rows are reachable.
+func TestPatchValueReadersAnswerTheThirdState(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		body    string
+		want    int
+		wantOK  bool
+		wantHas bool
+	}{
+		{"a value reads back", `{"quota":7}`, 7, true, true},
+		{"an explicit zero is a value", `{"quota":0}`, 0, true, true},
+		{"an explicit null is present but carries no value", `{"quota":null}`, 0, false, true},
+		{"absent is neither", `{}`, 0, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := mustValidatePatch(t, tc.body)
+			got, ok := v.Quota()
+			if got != tc.want || ok != tc.wantOK {
+				t.Errorf("Quota() = (%v, %v), want (%v, %v) for %s", got, ok, tc.want, tc.wantOK, tc.body)
+			}
+			if has := v.HasQuota(); has != tc.wantHas {
+				t.Errorf("HasQuota() = %v, want %v for %s", has, tc.wantHas, tc.body)
+			}
+		})
+	}
+}
+
+// TestPatchValueReaderOnANonClearableFieldTracksPresence pins the collapsed
+// case. Validate refuses an explicit null on a field the schema does not mark
+// Optional, so the "carried a null" row is unreachable there and ok is exactly
+// Has<Field>(). Plan carries a Default() rather than Optional, so it is the
+// non-clearable enum the issue's "status" field stands for.
+func TestPatchValueReaderOnANonClearableFieldTracksPresence(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want account.Plan
+		ok   bool
+	}{
+		{`{"plan":"pro"}`, account.PlanPro, true},
+		{`{}`, account.Plan(""), false},
+	} {
+		v := mustValidatePatch(t, tc.body)
+		got, ok := v.Plan()
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("Plan() = (%v, %v), want (%v, %v) for %s", got, ok, tc.want, tc.ok, tc.body)
+		}
+		if has := v.HasPlan(); has != ok {
+			t.Errorf("HasPlan() = %v but Plan()'s ok = %v for %s; a field that cannot be cleared has no third state", has, ok, tc.body)
+		}
+	}
+
+	// The other half: a null on Plan never reaches a wrapper at all.
+	if _, err := decodePatch(t, `{"plan":null}`).Validate(); err == nil {
+		t.Error(`Validate() accepted {"plan":null}; the unreachable third state is only unreachable because of this`)
+	}
+}
+
+// TestCrossFieldRuleNeedsNoThrowawayBuilder is #113's acceptance scenario,
+// transposed onto this fixture's field names: Plan stands for "status" and
+// Quota for "suspended_until". Before the readers a customization point had to
+// allocate an update builder it never intended to execute, Apply the request to
+// it and read back Mutation() — coupling the business rule to ent's mutation
+// vocabulary. The rule below reads the wrapper and nothing else.
+func TestCrossFieldRuleNeedsNoThrowawayBuilder(t *testing.T) {
+	// "a quota is only settable while the account is on the pro plan" — the
+	// three-line rule the issue says cannot be written with presence alone.
+	rule := func(v *ValidAccountPatchRequest) error {
+		plan, _ := v.Plan()
+		if _, ok := v.Quota(); ok && plan != account.PlanPro {
+			return errors.New("quota is only settable on the pro plan")
+		}
+		return nil
+	}
+
+	for _, tc := range []struct {
+		body    string
+		wantErr bool
+	}{
+		// Switch to free and leave the quota to the service: accepted.
+		{`{"plan":"free"}`, false},
+		// Switch to free and CLEAR the quota: accepted. HasQuota() is true
+		// here, so a presence-only rule rejects this correct request.
+		{`{"plan":"free","quota":null}`, false},
+		// Switch to free while SETTING a quota: incoherent, rejected.
+		{`{"plan":"free","quota":7}`, true},
+		{`{"plan":"pro","quota":7}`, false},
+	} {
+		err := rule(mustValidatePatch(t, tc.body))
+		if (err != nil) != tc.wantErr {
+			t.Errorf("rule(%s) = %v, wantErr %v", tc.body, err, tc.wantErr)
+		}
+	}
+
+	// The two bodies a presence-only rule cannot tell apart.
+	cleared := mustValidatePatch(t, `{"plan":"free","quota":null}`)
+	assigned := mustValidatePatch(t, `{"plan":"free","quota":7}`)
+	if cleared.HasQuota() != assigned.HasQuota() {
+		t.Fatal("the two bodies differ in presence, so this test is not pinning what it claims to")
+	}
+	if _, ok := cleared.Quota(); ok {
+		t.Error("an explicit null reads as a carried value")
+	}
+	if _, ok := assigned.Quota(); !ok {
+		t.Error("a carried value reads as absent")
+	}
+}
+
+// TestAHandBuiltPatchRequestReadsAsAbsent extends the hand-built fallback to
+// the readers. has() returns false for everything on a request that never went
+// through UnmarshalJSON, so every reader answers (zero, false) — which mirrors
+// Apply writing nothing, and is the only answer that does.
+func TestAHandBuiltPatchRequestReadsAsAbsent(t *testing.T) {
+	seven := 7
+	v, err := (&AccountPatchRequest{Quota: &seven}).Validate()
+	if err != nil {
+		t.Fatalf("validating a hand-built patch request: %v", err)
+	}
+	if got, ok := v.Quota(); ok {
+		t.Errorf("Quota() = (%v, %v) on a hand-built request, want (0, false): Apply writes nothing for it", got, ok)
+	}
 }

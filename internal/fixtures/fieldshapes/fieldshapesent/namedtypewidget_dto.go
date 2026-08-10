@@ -305,6 +305,29 @@ type ValidNamedTypeWidgetPatchRequest struct{ r *NamedTypeWidgetPatchRequest }
 // supposed to act on it.
 func (v *ValidNamedTypeWidgetPatchRequest) HasLabels() bool { return v.r.HasLabels() }
 
+// Labels reports the value the payload carried for
+// "labels", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasLabels(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidNamedTypeWidgetPatchRequest) Labels() (schema.Tags, bool) {
+	if !v.r.HasLabels() || v.r.Labels == nil {
+		var zero schema.Tags
+		return zero, false
+	}
+	return *v.r.Labels, true
+}
+
 // HasAttrs reports whether the payload carried "attrs".
 //
 // A custom implementation receives only the validated type, so without this
@@ -312,6 +335,29 @@ func (v *ValidNamedTypeWidgetPatchRequest) HasLabels() bool { return v.r.HasLabe
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidNamedTypeWidgetPatchRequest) HasAttrs() bool { return v.r.HasAttrs() }
+
+// Attrs reports the value the payload carried for
+// "attrs", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasAttrs(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidNamedTypeWidgetPatchRequest) Attrs() (schema.Attrs, bool) {
+	if !v.r.HasAttrs() || v.r.Attrs == nil {
+		var zero schema.Attrs
+		return zero, false
+	}
+	return *v.r.Attrs, true
+}
 
 // HasRequiredLabels reports whether the payload carried "required_labels".
 //
@@ -321,6 +367,29 @@ func (v *ValidNamedTypeWidgetPatchRequest) HasAttrs() bool { return v.r.HasAttrs
 // supposed to act on it.
 func (v *ValidNamedTypeWidgetPatchRequest) HasRequiredLabels() bool { return v.r.HasRequiredLabels() }
 
+// RequiredLabels reports the value the payload carried for
+// "required_labels", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasRequiredLabels(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidNamedTypeWidgetPatchRequest) RequiredLabels() (schema.Tags, bool) {
+	if !v.r.HasRequiredLabels() || v.r.RequiredLabels == nil {
+		var zero schema.Tags
+		return zero, false
+	}
+	return *v.r.RequiredLabels, true
+}
+
 // HasRequiredAttrs reports whether the payload carried "required_attrs".
 //
 // A custom implementation receives only the validated type, so without this
@@ -328,6 +397,29 @@ func (v *ValidNamedTypeWidgetPatchRequest) HasRequiredLabels() bool { return v.r
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidNamedTypeWidgetPatchRequest) HasRequiredAttrs() bool { return v.r.HasRequiredAttrs() }
+
+// RequiredAttrs reports the value the payload carried for
+// "required_attrs", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasRequiredAttrs(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidNamedTypeWidgetPatchRequest) RequiredAttrs() (schema.Attrs, bool) {
+	if !v.r.HasRequiredAttrs() || v.r.RequiredAttrs == nil {
+		var zero schema.Attrs
+		return zero, false
+	}
+	return *v.r.RequiredAttrs, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

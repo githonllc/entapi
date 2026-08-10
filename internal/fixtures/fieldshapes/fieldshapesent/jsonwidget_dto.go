@@ -304,6 +304,29 @@ type ValidJSONWidgetPatchRequest struct{ r *JSONWidgetPatchRequest }
 // supposed to act on it.
 func (v *ValidJSONWidgetPatchRequest) HasTags() bool { return v.r.HasTags() }
 
+// Tags reports the value the payload carried for
+// "tags", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasTags(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidJSONWidgetPatchRequest) Tags() ([]string, bool) {
+	if !v.r.HasTags() || v.r.Tags == nil {
+		var zero []string
+		return zero, false
+	}
+	return *v.r.Tags, true
+}
+
 // HasMeta reports whether the payload carried "meta".
 //
 // A custom implementation receives only the validated type, so without this
@@ -311,6 +334,29 @@ func (v *ValidJSONWidgetPatchRequest) HasTags() bool { return v.r.HasTags() }
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidJSONWidgetPatchRequest) HasMeta() bool { return v.r.HasMeta() }
+
+// Meta reports the value the payload carried for
+// "meta", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasMeta(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidJSONWidgetPatchRequest) Meta() (map[string]string, bool) {
+	if !v.r.HasMeta() || v.r.Meta == nil {
+		var zero map[string]string
+		return zero, false
+	}
+	return *v.r.Meta, true
+}
 
 // HasRequiredTags reports whether the payload carried "required_tags".
 //
@@ -320,6 +366,29 @@ func (v *ValidJSONWidgetPatchRequest) HasMeta() bool { return v.r.HasMeta() }
 // supposed to act on it.
 func (v *ValidJSONWidgetPatchRequest) HasRequiredTags() bool { return v.r.HasRequiredTags() }
 
+// RequiredTags reports the value the payload carried for
+// "required_tags", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasRequiredTags(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidJSONWidgetPatchRequest) RequiredTags() ([]string, bool) {
+	if !v.r.HasRequiredTags() || v.r.RequiredTags == nil {
+		var zero []string
+		return zero, false
+	}
+	return *v.r.RequiredTags, true
+}
+
 // HasRequiredMeta reports whether the payload carried "required_meta".
 //
 // A custom implementation receives only the validated type, so without this
@@ -327,6 +396,29 @@ func (v *ValidJSONWidgetPatchRequest) HasRequiredTags() bool { return v.r.HasReq
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidJSONWidgetPatchRequest) HasRequiredMeta() bool { return v.r.HasRequiredMeta() }
+
+// RequiredMeta reports the value the payload carried for
+// "required_meta", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasRequiredMeta(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidJSONWidgetPatchRequest) RequiredMeta() (map[string]string, bool) {
+	if !v.r.HasRequiredMeta() || v.r.RequiredMeta == nil {
+		var zero map[string]string
+		return zero, false
+	}
+	return *v.r.RequiredMeta, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

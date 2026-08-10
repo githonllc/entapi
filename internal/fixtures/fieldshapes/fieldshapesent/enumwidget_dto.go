@@ -284,6 +284,29 @@ type ValidEnumWidgetPatchRequest struct{ r *EnumWidgetPatchRequest }
 // supposed to act on it.
 func (v *ValidEnumWidgetPatchRequest) HasStatus() bool { return v.r.HasStatus() }
 
+// Status reports the value the payload carried for
+// "status", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasStatus(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidEnumWidgetPatchRequest) Status() (enumwidget.Status, bool) {
+	if !v.r.HasStatus() || v.r.Status == nil {
+		var zero enumwidget.Status
+		return zero, false
+	}
+	return *v.r.Status, true
+}
+
 // HasTier reports whether the payload carried "tier".
 //
 // A custom implementation receives only the validated type, so without this
@@ -291,6 +314,29 @@ func (v *ValidEnumWidgetPatchRequest) HasStatus() bool { return v.r.HasStatus() 
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidEnumWidgetPatchRequest) HasTier() bool { return v.r.HasTier() }
+
+// Tier reports the value the payload carried for
+// "tier", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasTier(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidEnumWidgetPatchRequest) Tier() (enumwidget.Tier, bool) {
+	if !v.r.HasTier() || v.r.Tier == nil {
+		var zero enumwidget.Tier
+		return zero, false
+	}
+	return *v.r.Tier, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

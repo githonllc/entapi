@@ -276,6 +276,29 @@ type ValidWidgetPatchRequest struct{ r *WidgetPatchRequest }
 // supposed to act on it.
 func (v *ValidWidgetPatchRequest) HasName() bool { return v.r.HasName() }
 
+// Name reports the value the payload carried for
+// "name", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasName(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidWidgetPatchRequest) Name() (string, bool) {
+	if !v.r.HasName() || v.r.Name == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Name, true
+}
+
 // HasDescription reports whether the payload carried "description".
 //
 // A custom implementation receives only the validated type, so without this
@@ -283,6 +306,29 @@ func (v *ValidWidgetPatchRequest) HasName() bool { return v.r.HasName() }
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidWidgetPatchRequest) HasDescription() bool { return v.r.HasDescription() }
+
+// Description reports the value the payload carried for
+// "description", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasDescription(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidWidgetPatchRequest) Description() (string, bool) {
+	if !v.r.HasDescription() || v.r.Description == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Description, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

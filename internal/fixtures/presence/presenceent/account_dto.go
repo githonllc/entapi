@@ -350,6 +350,29 @@ type ValidAccountPatchRequest struct{ r *AccountPatchRequest }
 // supposed to act on it.
 func (v *ValidAccountPatchRequest) HasEmail() bool { return v.r.HasEmail() }
 
+// Email reports the value the payload carried for
+// "email", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasEmail(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidAccountPatchRequest) Email() (string, bool) {
+	if !v.r.HasEmail() || v.r.Email == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Email, true
+}
+
 // HasSeats reports whether the payload carried "seats".
 //
 // A custom implementation receives only the validated type, so without this
@@ -357,6 +380,29 @@ func (v *ValidAccountPatchRequest) HasEmail() bool { return v.r.HasEmail() }
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidAccountPatchRequest) HasSeats() bool { return v.r.HasSeats() }
+
+// Seats reports the value the payload carried for
+// "seats", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasSeats(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidAccountPatchRequest) Seats() (int, bool) {
+	if !v.r.HasSeats() || v.r.Seats == nil {
+		var zero int
+		return zero, false
+	}
+	return *v.r.Seats, true
+}
 
 // HasAcceptedTerms reports whether the payload carried "accepted_terms".
 //
@@ -366,6 +412,29 @@ func (v *ValidAccountPatchRequest) HasSeats() bool { return v.r.HasSeats() }
 // supposed to act on it.
 func (v *ValidAccountPatchRequest) HasAcceptedTerms() bool { return v.r.HasAcceptedTerms() }
 
+// AcceptedTerms reports the value the payload carried for
+// "accepted_terms", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasAcceptedTerms(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidAccountPatchRequest) AcceptedTerms() (bool, bool) {
+	if !v.r.HasAcceptedTerms() || v.r.AcceptedTerms == nil {
+		var zero bool
+		return zero, false
+	}
+	return *v.r.AcceptedTerms, true
+}
+
 // HasPlan reports whether the payload carried "plan".
 //
 // A custom implementation receives only the validated type, so without this
@@ -373,6 +442,29 @@ func (v *ValidAccountPatchRequest) HasAcceptedTerms() bool { return v.r.HasAccep
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidAccountPatchRequest) HasPlan() bool { return v.r.HasPlan() }
+
+// Plan reports the value the payload carried for
+// "plan", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasPlan(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidAccountPatchRequest) Plan() (account.Plan, bool) {
+	if !v.r.HasPlan() || v.r.Plan == nil {
+		var zero account.Plan
+		return zero, false
+	}
+	return *v.r.Plan, true
+}
 
 // HasNickname reports whether the payload carried "nickname".
 //
@@ -382,6 +474,29 @@ func (v *ValidAccountPatchRequest) HasPlan() bool { return v.r.HasPlan() }
 // supposed to act on it.
 func (v *ValidAccountPatchRequest) HasNickname() bool { return v.r.HasNickname() }
 
+// Nickname reports the value the payload carried for
+// "nickname", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasNickname(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidAccountPatchRequest) Nickname() (string, bool) {
+	if !v.r.HasNickname() || v.r.Nickname == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Nickname, true
+}
+
 // HasQuota reports whether the payload carried "quota".
 //
 // A custom implementation receives only the validated type, so without this
@@ -389,6 +504,29 @@ func (v *ValidAccountPatchRequest) HasNickname() bool { return v.r.HasNickname()
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidAccountPatchRequest) HasQuota() bool { return v.r.HasQuota() }
+
+// Quota reports the value the payload carried for
+// "quota", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasQuota(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidAccountPatchRequest) Quota() (int, bool) {
+	if !v.r.HasQuota() || v.r.Quota == nil {
+		var zero int
+		return zero, false
+	}
+	return *v.r.Quota, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

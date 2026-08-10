@@ -290,6 +290,29 @@ type ValidPostPatchRequest struct{ r *PostPatchRequest }
 // supposed to act on it.
 func (v *ValidPostPatchRequest) HasTitle() bool { return v.r.HasTitle() }
 
+// Title reports the value the payload carried for
+// "title", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasTitle(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidPostPatchRequest) Title() (string, bool) {
+	if !v.r.HasTitle() || v.r.Title == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Title, true
+}
+
 // HasAuthorID reports whether the payload carried "author_id".
 //
 // A custom implementation receives only the validated type, so without this
@@ -298,6 +321,29 @@ func (v *ValidPostPatchRequest) HasTitle() bool { return v.r.HasTitle() }
 // supposed to act on it.
 func (v *ValidPostPatchRequest) HasAuthorID() bool { return v.r.HasAuthorID() }
 
+// AuthorID reports the value the payload carried for
+// "author_id", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasAuthorID(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidPostPatchRequest) AuthorID() (uuid.UUID, bool) {
+	if !v.r.HasAuthorID() || v.r.AuthorID == nil {
+		var zero uuid.UUID
+		return zero, false
+	}
+	return *v.r.AuthorID, true
+}
+
 // HasReviewerID reports whether the payload carried "reviewer_id".
 //
 // A custom implementation receives only the validated type, so without this
@@ -305,6 +351,29 @@ func (v *ValidPostPatchRequest) HasAuthorID() bool { return v.r.HasAuthorID() }
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidPostPatchRequest) HasReviewerID() bool { return v.r.HasReviewerID() }
+
+// ReviewerID reports the value the payload carried for
+// "reviewer_id", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasReviewerID(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidPostPatchRequest) ReviewerID() (uuid.UUID, bool) {
+	if !v.r.HasReviewerID() || v.r.ReviewerID == nil {
+		var zero uuid.UUID
+		return zero, false
+	}
+	return *v.r.ReviewerID, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

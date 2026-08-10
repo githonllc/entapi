@@ -299,6 +299,29 @@ type ValidArticlePatchRequest struct{ r *ArticlePatchRequest }
 // supposed to act on it.
 func (v *ValidArticlePatchRequest) HasTitle() bool { return v.r.HasTitle() }
 
+// Title reports the value the payload carried for
+// "title", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasTitle(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidArticlePatchRequest) Title() (string, bool) {
+	if !v.r.HasTitle() || v.r.Title == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.Title, true
+}
+
 // HasRank reports whether the payload carried "rank".
 //
 // A custom implementation receives only the validated type, so without this
@@ -307,6 +330,29 @@ func (v *ValidArticlePatchRequest) HasTitle() bool { return v.r.HasTitle() }
 // supposed to act on it.
 func (v *ValidArticlePatchRequest) HasRank() bool { return v.r.HasRank() }
 
+// Rank reports the value the payload carried for
+// "rank", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasRank(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidArticlePatchRequest) Rank() (int, bool) {
+	if !v.r.HasRank() || v.r.Rank == nil {
+		var zero int
+		return zero, false
+	}
+	return *v.r.Rank, true
+}
+
 // HasInternalNote reports whether the payload carried "internal_note".
 //
 // A custom implementation receives only the validated type, so without this
@@ -314,6 +360,29 @@ func (v *ValidArticlePatchRequest) HasRank() bool { return v.r.HasRank() }
 // from "leave it alone" — is unreachable from the customization point that is
 // supposed to act on it.
 func (v *ValidArticlePatchRequest) HasInternalNote() bool { return v.r.HasInternalNote() }
+
+// InternalNote reports the value the payload carried for
+// "internal_note", and whether Apply will Set it.
+//
+// Presence is two of the three states a PATCH field has; this reads the third.
+// Paired with HasInternalNote(), which is "present" below:
+//
+//	ok                    the payload carried a value; Apply will Set it
+//	!ok, present          the payload carried an explicit null; Apply will
+//	                      Clear it. Reachable only for a clearable field —
+//	                      Validate refuses a null on anything else
+//	!ok, absent           the key was not in the payload; Apply writes nothing
+//
+// Without it a cross-field rule cannot tell "clear this" from "set this", and
+// the customization point is forced to allocate an update builder it never
+// executes, Apply the request to it and read back Mutation() (#113).
+func (v *ValidArticlePatchRequest) InternalNote() (string, bool) {
+	if !v.r.HasInternalNote() || v.r.InternalNote == nil {
+		var zero string
+		return zero, false
+	}
+	return *v.r.InternalNote, true
+}
 
 // Validate rejects an explicit null on a field that cannot be cleared.
 //

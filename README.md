@@ -1074,6 +1074,7 @@ The refusal matrix covers these contradictions:
 | Ent `Sensitive()` with a query word, or with `api.ReadOnly()` | a secret cannot become a query oracle; use `Hidden` for fully inaccessible data |
 | A required-no-default field blocked from create by `Hidden` or `ReadOnly`, without `Except(OpCreate)` | Ent cannot insert the row from that request |
 | An empty PATCH field set without `Except(OpPatch)` | the public PATCH surface is useless |
+| An edge Ent marks `Required()` that declares no `edge.Field(…)`, without `Except(OpCreate)` | Ent demands the edge on every create, but no setter for it reaches the create request, so every create fails on `missing required edge`. The remedy list offers `edge.Field(…)` only for an edge that holds the foreign key, which is the only end Ent accepts it on |
 | A field word on an edge, or `Expand` on a field | the word is attached to the wrong schema element |
 | Any EntAPI word on the primary key | ID is already Filterable and Sortable; its fixed query surface is annotation-free |
 | A query word while `OpList` is excepted | the query surface has been closed |

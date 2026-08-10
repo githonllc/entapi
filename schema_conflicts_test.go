@@ -86,8 +86,13 @@ func TestCheckGraphConflicts_MisplacedWordsAndID(t *testing.T) {
 	node := newTestType("Record", plain)
 	node.ID.Annotations = gen.Annotations{fieldAnnotationName: fieldPtr(api.Filterable())}
 	node.Edges = []*gen.Edge{{
-		Name:        "owner",
-		Type:        node,
+		Name: "owner",
+		Type: node,
+		// Optional because ent derives that for an edge declared without
+		// .Required(); leaving the zero value in would additionally trip the
+		// required-edge-without-edge.Field row and stop this test from being
+		// about the misplaced word.
+		Optional:    true,
 		Annotations: gen.Annotations{fieldAnnotationName: fieldPtr(api.Searchable())},
 	}}
 
@@ -138,6 +143,7 @@ func TestCheckGraphConflicts_ExpandTargetMustBeResource(t *testing.T) {
 	node.Edges = []*gen.Edge{{
 		Name:        "author",
 		Type:        target,
+		Optional:    true,
 		Annotations: gen.Annotations{edgeAnnotationName: edgePtr(api.Expand())},
 	}}
 	got := conflictText(t, node, target)
@@ -154,8 +160,11 @@ func TestCheckGraphConflicts_QueryWordsCannotOutliveList(t *testing.T) {
 
 func TestCheckGraphConflicts_AsymmetricSelfEdgeRemainsRefused(t *testing.T) {
 	node := newTestType("Tree", newStringField("name", nil))
-	assoc := &gen.Edge{Name: "children", Type: node, Annotations: gen.Annotations{edgeAnnotationName: edgePtr(api.Expand())}}
-	inverse := &gen.Edge{Name: "parent", Type: node, Inverse: "children", Ref: assoc}
+	// Both ends Optional, which is what ent derives for a pair declared without
+	// .Required(): the zero value would read as Required and pull in the
+	// required-edge-without-edge.Field row, which this test is not about.
+	assoc := &gen.Edge{Name: "children", Type: node, Optional: true, Annotations: gen.Annotations{edgeAnnotationName: edgePtr(api.Expand())}}
+	inverse := &gen.Edge{Name: "parent", Type: node, Optional: true, Inverse: "children", Ref: assoc}
 	node.Edges = []*gen.Edge{assoc, inverse}
 
 	got := conflictText(t, node)

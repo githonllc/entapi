@@ -384,7 +384,8 @@ slices are expected to follow:
 
 The matrix rejects contradictory deviation words, type-incompatible query
 dimensions, secrets exposed as query or read-only fields, create requests that
-cannot satisfy required-no-default Ent fields, empty public PATCH surfaces,
+cannot satisfy required-no-default Ent fields, required edges that declare no
+`edge.Field(...)` while the create family is reachable, empty public PATCH surfaces,
 misplaced words, words on IDs, query words with `OpList` excepted, `_`-prefixed
 query storage keys, expansion to non-resources, asymmetric self edges, invalid
 soft-delete declarations, and generated-name collisions. HTTP rows skip nodes

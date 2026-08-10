@@ -166,10 +166,11 @@ func (Draft) Edges() []ent.Edge {
 // Draft excepts the write families for the same reason the consumer's Session
 // does: its required "doc" edge declares no edge.Field(), so the foreign key is
 // not an ent field, so nothing puts a setter for it in a create request and the
-// generated CreateDraft could never succeed. Generation does not refuse that
-// today — schema_conflicts.go's required-no-default rule reads node.Fields and
-// never looks at edges — which is #110. Excepting the write
-// families here keeps this fixture about #100 rather than about that gap.
+// generated CreateDraft could never succeed. Since #110 generation REFUSES
+// exactly that shape (requiredEdgeWithoutFieldConflicts in schema_conflicts.go,
+// with internal/fixtures/requirededge as its own fixture), so the Except here
+// is no longer only tidiness — it is what keeps this fixture generating at all,
+// and it keeps the fixture about #100 rather than about the refused shape.
 func (Draft) Annotations() []schema.Annotation {
 	return []schema.Annotation{api.Resource().Except(api.OpCreate, api.OpPatch)}
 }

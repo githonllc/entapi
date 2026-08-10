@@ -640,7 +640,8 @@ end note
 > 与 ent schema 矛盾的注解 → 生成失败，并同时报告两个事实。能正确生成的 → 生成，不拒绝。
 
 HTTP 矩阵只检查 `api.Resource()`：`Hidden` 与任何其他字段词冲突；`Sensitive` 与查询维度或
-`ReadOnly` 冲突；required、无 default 的 create 字段被挡住；PATCH 字段集为空；字段词与 `Expand`
+`ReadOnly` 冲突；required、无 default 的 create 字段被挡住；边被 Ent 标为 `Required()` 却没有声明
+`edge.Field(…)`（create 家族仍可达时，#110）；PATCH 字段集为空；字段词与 `Expand`
 放错位置或放在 ID；查询维度与 `Except(OpList)`、`_` 前缀 storage key 或 Ent 类型能力冲突；
 `Expand` 指向非 Resource。另有图级检查：自引用边两端注解不对称（#79）、软删除声明不可用、实体名
 撞生成符号。`ReadOnly` 与三个查询维度是允许组合。

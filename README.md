@@ -262,7 +262,7 @@ Plus five files per schema, each with its own emission condition:
 | File | Emitted when | Declares |
 |---|---|---|
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
-| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Endpoints`, one `{Op}{E}Endpoint()` accessor per reachable operation, `OpenAPIEndpoint()`, `ServeHTTP`, `Mount` and the endpoint manifest |
+| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Endpoints`, one named `…Endpoint()` accessor per reachable operation (the wiring function's name plus `Endpoint`: `GetArticleEndpoint()`, `ListArticlesEndpoint()`, …), `OpenAPIEndpoint()`, `ServeHTTP`, `Mount` and the endpoint manifest |
 | `openapi.yaml` | at least one entity produced wiring | the OpenAPI 3.1 document describing every generated endpoint |
 | `entapi_openapi.go` | at least one entity produced wiring | the `//go:embed` of that document and the unexported handler serving it |
 | `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
@@ -466,9 +466,13 @@ wiring function is the operation itself, with no HTTP attached and no
 not what your own code calls, so a direct call to `ListArticles` is unaffected
 by it.
 
-The three HTTP rungs above it are one surface, not three: `Endpoints()` is a
-slice of exactly the values the accessors return, and `Mount` walks that slice.
-Mixing them cannot produce two descriptions of one endpoint.
+The three HTTP rungs above it are one surface, not three: the manifest is built
+by calling those same accessors, and `Mount` walks the slice they produce.
+Mixing them cannot produce two descriptions of one endpoint. Do not try to
+check that by value, though: `Endpoint` is not comparable — `==`, map keys and
+`slices.Contains` panic on the handler's func value, and `reflect.DeepEqual` is
+always false, because every accessor call constructs a fresh handler value. To
+skip or deduplicate rows, key on `Method` plus `Path`, or on `Op`.
 
 #### Taking one endpoint by name
 
@@ -520,7 +524,10 @@ own router.
 `OpList`, `OpCreate`, `OpGet`, `OpPatch`, `OpDelete`, or `OpNone` for an endpoint
 that belongs to no resource. They carry the identity the path used to hide, so
 splitting the surface by audience is a comparison the compiler checks rather
-than a match on path text, where a typo selects nothing and reports nothing:
+than a match on path text, where a typo selects nothing and reports nothing.
+And because `Endpoint` itself is not comparable, a field comparison like the
+`switch` below is the required spelling for picking out a row, not a stylistic
+one:
 
 ```go
 for _, endpoint := range api.Endpoints() {
@@ -1480,6 +1487,15 @@ generated handler — data you compose into a router you own — and the interna
 `ServeMux` behind `ServeHTTP`/`Mount` is an optional convenience built from that
 same manifest. Regenerate, then rename call sites: `api.Routes()` →
 `api.Endpoints()` and `[]entapi.Route` → `[]entapi.Endpoint`.
+
+**Additive, with one upgrade hazard (#119):** the generated `APIHandler` now
+carries one exported `…Endpoint()` method per reachable operation (the wiring
+function's name plus `Endpoint`: `GetArticle` → `GetArticleEndpoint`), plus
+`OpenAPIEndpoint()`. Those names land in your `ent` package's method set. If
+you hand-wrote a helper of the same name on `*APIHandler` — the pre-#119
+workaround for taking one endpoint by identity was exactly such an index —
+regeneration makes it a duplicate-method compile error; delete your copy and
+call the generated accessor.
 
 **Breaking and behaviour change (#70):** generated `RegisterSoftDelete` has
 been removed. Regenerate, then delete every `ent.RegisterSoftDelete(client)`

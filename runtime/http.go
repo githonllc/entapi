@@ -79,9 +79,12 @@ const (
 // Endpoint is NOT comparable, because Handler holds a func value at run time:
 // ep1 == ep2, a map[Endpoint]V and slices.Contains over a []Endpoint each panic
 // with "comparing uncomparable type http.HandlerFunc" — at run time, since the
-// interface field makes it compile. Deduplicating or set-testing the manifest
-// therefore needs a key built from the comparable fields, Method and Path
-// (adding Entity and Op where the same route is reached more than one way).
+// interface field makes it compile. reflect.DeepEqual does not panic but is
+// just as wrong: two Endpoints for the same operation carry independently
+// constructed handler values, so it is always false. Deduplicating or
+// set-testing the manifest therefore needs a key built from the comparable
+// fields, Method and Path (adding Entity and Op where the same route is
+// reached more than one way).
 type Endpoint struct {
 	Method  string
 	Path    string

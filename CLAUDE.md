@@ -339,7 +339,9 @@ family may disappear when `OpCreate` is explicitly excepted.
   annotated, holding the package's `ErrorMap` (#13); and
   `templates/http.tmpl` -> `entapi_http.go`, holding `APIHandler`, `API(client)`,
   `ServeHTTP`, `Mount`, the endpoint manifest and request-time function fields —
-  plus one `{Op}{Entity}Endpoint()` accessor per reachable operation and
+  plus one named `…Endpoint()` accessor per reachable operation (the wiring
+  function's name plus `Endpoint`, so list is plural: `GetArticleEndpoint()`,
+  `ListArticlesEndpoint()`) and
   `OpenAPIEndpoint()` for the manifest's Op-less entry (#119). The manifest is
   **built from those accessors**, so take-one-by-name and the batch loop share
   one construction and cannot describe different endpoints; the accessors are

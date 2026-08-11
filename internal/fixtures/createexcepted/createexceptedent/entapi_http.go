@@ -77,17 +77,16 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // ServeHTTP and Mount are the convenience built from the same manifest.
 //
 // It is the batch half of the composition surface. The per-operation accessors
-// below are the take-one-by-name half: they are the values this slice is built
-// from, and Except removes the method along with the endpoint, so naming an
-// operation that is not exposed is a compile error rather than a lookup that
-// finds nothing.
+// below are the take-one-by-name half: each returns, field for field, the entry
+// this slice carries, and its handler reads the current implementation through
+// h, so a With after the call still takes effect. Except removes the method
+// along with the endpoint, so naming an operation that is not exposed is a
+// compile error.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
 }
 
-// ListAccountsEndpoint returns the generated GET /accounts endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListAccountsEndpoint returns the generated GET /accounts endpoint.
 func (h *APIHandler) ListAccountsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -98,9 +97,7 @@ func (h *APIHandler) ListAccountsEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetAccountEndpoint returns the generated GET /accounts/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetAccountEndpoint returns the generated GET /accounts/{id} endpoint.
 func (h *APIHandler) GetAccountEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -111,9 +108,7 @@ func (h *APIHandler) GetAccountEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchAccountEndpoint returns the generated PATCH /accounts/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchAccountEndpoint returns the generated PATCH /accounts/{id} endpoint.
 func (h *APIHandler) PatchAccountEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -124,9 +119,7 @@ func (h *APIHandler) PatchAccountEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteAccountEndpoint returns the generated DELETE /accounts/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteAccountEndpoint returns the generated DELETE /accounts/{id} endpoint.
 func (h *APIHandler) DeleteAccountEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -148,7 +141,7 @@ func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
 	}
 }
 
-// ServeHTTP serves the generated route tree.
+// ServeHTTP serves every generated endpoint through the internal mux.
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }

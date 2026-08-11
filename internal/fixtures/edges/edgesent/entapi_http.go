@@ -125,17 +125,16 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // ServeHTTP and Mount are the convenience built from the same manifest.
 //
 // It is the batch half of the composition surface. The per-operation accessors
-// below are the take-one-by-name half: they are the values this slice is built
-// from, and Except removes the method along with the endpoint, so naming an
-// operation that is not exposed is a compile error rather than a lookup that
-// finds nothing.
+// below are the take-one-by-name half: each returns, field for field, the entry
+// this slice carries, and its handler reads the current implementation through
+// h, so a With after the call still takes effect. Except removes the method
+// along with the endpoint, so naming an operation that is not exposed is a
+// compile error.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
 }
 
-// ListCategoriesEndpoint returns the generated GET /categories endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListCategoriesEndpoint returns the generated GET /categories endpoint.
 func (h *APIHandler) ListCategoriesEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -146,9 +145,7 @@ func (h *APIHandler) ListCategoriesEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateCategoryEndpoint returns the generated POST /categories endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateCategoryEndpoint returns the generated POST /categories endpoint.
 func (h *APIHandler) CreateCategoryEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -159,9 +156,7 @@ func (h *APIHandler) CreateCategoryEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetCategoryEndpoint returns the generated GET /categories/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetCategoryEndpoint returns the generated GET /categories/{id} endpoint.
 func (h *APIHandler) GetCategoryEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -172,9 +167,7 @@ func (h *APIHandler) GetCategoryEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchCategoryEndpoint returns the generated PATCH /categories/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchCategoryEndpoint returns the generated PATCH /categories/{id} endpoint.
 func (h *APIHandler) PatchCategoryEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -185,9 +178,7 @@ func (h *APIHandler) PatchCategoryEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteCategoryEndpoint returns the generated DELETE /categories/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteCategoryEndpoint returns the generated DELETE /categories/{id} endpoint.
 func (h *APIHandler) DeleteCategoryEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -198,9 +189,7 @@ func (h *APIHandler) DeleteCategoryEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListPostsEndpoint returns the generated GET /posts endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListPostsEndpoint returns the generated GET /posts endpoint.
 func (h *APIHandler) ListPostsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -211,9 +200,7 @@ func (h *APIHandler) ListPostsEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreatePostEndpoint returns the generated POST /posts endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreatePostEndpoint returns the generated POST /posts endpoint.
 func (h *APIHandler) CreatePostEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -224,9 +211,7 @@ func (h *APIHandler) CreatePostEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetPostEndpoint returns the generated GET /posts/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetPostEndpoint returns the generated GET /posts/{id} endpoint.
 func (h *APIHandler) GetPostEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -237,9 +222,7 @@ func (h *APIHandler) GetPostEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchPostEndpoint returns the generated PATCH /posts/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchPostEndpoint returns the generated PATCH /posts/{id} endpoint.
 func (h *APIHandler) PatchPostEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -250,9 +233,7 @@ func (h *APIHandler) PatchPostEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeletePostEndpoint returns the generated DELETE /posts/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeletePostEndpoint returns the generated DELETE /posts/{id} endpoint.
 func (h *APIHandler) DeletePostEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -263,9 +244,7 @@ func (h *APIHandler) DeletePostEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListSecretsEndpoint returns the generated GET /secrets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListSecretsEndpoint returns the generated GET /secrets endpoint.
 func (h *APIHandler) ListSecretsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -276,9 +255,7 @@ func (h *APIHandler) ListSecretsEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateSecretEndpoint returns the generated POST /secrets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateSecretEndpoint returns the generated POST /secrets endpoint.
 func (h *APIHandler) CreateSecretEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -289,9 +266,7 @@ func (h *APIHandler) CreateSecretEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetSecretEndpoint returns the generated GET /secrets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetSecretEndpoint returns the generated GET /secrets/{id} endpoint.
 func (h *APIHandler) GetSecretEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -302,9 +277,7 @@ func (h *APIHandler) GetSecretEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchSecretEndpoint returns the generated PATCH /secrets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchSecretEndpoint returns the generated PATCH /secrets/{id} endpoint.
 func (h *APIHandler) PatchSecretEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -315,9 +288,7 @@ func (h *APIHandler) PatchSecretEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteSecretEndpoint returns the generated DELETE /secrets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteSecretEndpoint returns the generated DELETE /secrets/{id} endpoint.
 func (h *APIHandler) DeleteSecretEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -328,9 +299,7 @@ func (h *APIHandler) DeleteSecretEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListUsersEndpoint returns the generated GET /users endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListUsersEndpoint returns the generated GET /users endpoint.
 func (h *APIHandler) ListUsersEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -341,9 +310,7 @@ func (h *APIHandler) ListUsersEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateUserEndpoint returns the generated POST /users endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateUserEndpoint returns the generated POST /users endpoint.
 func (h *APIHandler) CreateUserEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -354,9 +321,7 @@ func (h *APIHandler) CreateUserEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetUserEndpoint returns the generated GET /users/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetUserEndpoint returns the generated GET /users/{id} endpoint.
 func (h *APIHandler) GetUserEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -367,9 +332,7 @@ func (h *APIHandler) GetUserEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchUserEndpoint returns the generated PATCH /users/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchUserEndpoint returns the generated PATCH /users/{id} endpoint.
 func (h *APIHandler) PatchUserEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -380,9 +343,7 @@ func (h *APIHandler) PatchUserEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteUserEndpoint returns the generated DELETE /users/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteUserEndpoint returns the generated DELETE /users/{id} endpoint.
 func (h *APIHandler) DeleteUserEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -404,7 +365,7 @@ func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
 	}
 }
 
-// ServeHTTP serves the generated route tree.
+// ServeHTTP serves every generated endpoint through the internal mux.
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }

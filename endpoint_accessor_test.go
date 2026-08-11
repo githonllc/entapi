@@ -141,17 +141,28 @@ func expectedEndpointAccessors(g *gen.Graph) []string {
 }
 
 // endpointAccessors returns every zero-argument *APIHandler method returning an
-// entapi.Endpoint, keyed by name. The signature is part of the match: a method
-// merely named …Endpoint that took an argument or returned something else would
-// not be the accessor this test is about, and silently ignoring it would let the
-// reverse direction pass on a surface nobody can use.
+// entapi.Endpoint, keyed by name.
+//
+// The match is the SIGNATURE alone — receiver, no parameters, exactly one
+// entapi.Endpoint result — and deliberately not the name. A name filter would
+// make the set agree with the template's naming convention by construction: an
+// accessor the template emitted under some other spelling would be skipped
+// rather than reported, and the reverse direction above would pass on a surface
+// that has no manifest entry. That is the same signature rule the e2e half
+// applies through reflect, so the two tests select the same set for the same
+// reason.
+//
+// A method whose name ends in …Endpoint but whose signature does not match is
+// the one shape worth reporting rather than skipping: it is either an accessor
+// that grew an argument — an endpoint accessor is a name, not a lookup — or a
+// near-miss that a reader would take for one.
 func endpointAccessors(t *testing.T, src []byte) map[string]*ast.FuncDecl {
 	t.Helper()
 
 	out := map[string]*ast.FuncDecl{}
 	for _, decl := range parseGeneratedHTTP(t, src).Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Recv == nil || len(fn.Recv.List) != 1 || !strings.HasSuffix(fn.Name.Name, "Endpoint") {
+		if !ok || fn.Recv == nil || len(fn.Recv.List) != 1 {
 			continue
 		}
 		star, ok := fn.Recv.List[0].Type.(*ast.StarExpr)
@@ -161,12 +172,14 @@ func endpointAccessors(t *testing.T, src []byte) map[string]*ast.FuncDecl {
 		if ident, ok := star.X.(*ast.Ident); !ok || ident.Name != "APIHandler" {
 			continue
 		}
-		if fn.Type.Params.NumFields() != 0 {
-			t.Errorf("%s takes parameters; an endpoint accessor is a name, not a lookup", fn.Name.Name)
-			continue
-		}
-		if fn.Type.Results.NumFields() != 1 || types.ExprString(fn.Type.Results.List[0].Type) != "entapi.Endpoint" {
-			t.Errorf("%s does not return exactly one entapi.Endpoint", fn.Name.Name)
+		takesNothing := fn.Type.Params.NumFields() == 0
+		returnsEndpoint := fn.Type.Results.NumFields() == 1 &&
+			types.ExprString(fn.Type.Results.List[0].Type) == "entapi.Endpoint"
+		if !takesNothing || !returnsEndpoint {
+			if strings.HasSuffix(fn.Name.Name, "Endpoint") {
+				t.Errorf("%s is named like an endpoint accessor but does not take nothing and return exactly one entapi.Endpoint",
+					fn.Name.Name)
+			}
 			continue
 		}
 		out[fn.Name.Name] = fn
@@ -178,6 +191,11 @@ func endpointAccessors(t *testing.T, src []byte) map[string]*ast.FuncDecl {
 // field by field, against expressions derived from resourceOps. Fields absent
 // from want must be absent from the literal, which is what pins OpenAPIEndpoint
 // as the manifest's Entity-less, Op-less entry.
+//
+// "Returns" is meant literally: the accessor must be one return of one
+// entapi.Endpoint composite literal, which is what templates/http.tmpl emits.
+// That requirement is the check, not a convenience — see the comment on it
+// below.
 func assertEndpointLiteral(t *testing.T, accessors map[string]*ast.FuncDecl, name string, want map[string]string) {
 	t.Helper()
 
@@ -185,15 +203,30 @@ func assertEndpointLiteral(t *testing.T, accessors map[string]*ast.FuncDecl, nam
 	if !ok {
 		return // already reported by the caller's coverage check
 	}
-	var lit *ast.CompositeLit
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		if cl, ok := n.(*ast.CompositeLit); ok && types.ExprString(cl.Type) == "entapi.Endpoint" {
-			lit = cl
-		}
-		return true
-	})
-	if lit == nil {
-		t.Errorf("%s does not return an entapi.Endpoint composite literal", name)
+	// The literal has to be the one the accessor RETURNS, not merely one that
+	// appears somewhere in its body: a body that built a correct literal, bound
+	// it to a name, mutated a field and returned the variable would satisfy any
+	// walk that keeps the last match while returning something else entirely.
+	// So the shape is pinned instead — the template emits exactly one return of
+	// one composite literal, and anything else is reported rather than searched.
+	if fn.Body == nil {
+		t.Errorf("%s has no body, so it returns no endpoint to check", name)
+		return
+	}
+	if len(fn.Body.List) != 1 {
+		t.Errorf("%s is no longer a single literal return; its body has %d statements, so what it returns "+
+			"is not what this test can check field by field", name, len(fn.Body.List))
+		return
+	}
+	ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) != 1 {
+		t.Errorf("%s is no longer a single literal return; its only statement must be a return of one value", name)
+		return
+	}
+	lit, ok := ret.Results[0].(*ast.CompositeLit)
+	if !ok || types.ExprString(lit.Type) != "entapi.Endpoint" {
+		t.Errorf("%s does not return an entapi.Endpoint composite literal directly; it returns %s",
+			name, types.ExprString(ret.Results[0]))
 		return
 	}
 

@@ -125,17 +125,16 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // ServeHTTP and Mount are the convenience built from the same manifest.
 //
 // It is the batch half of the composition surface. The per-operation accessors
-// below are the take-one-by-name half: they are the values this slice is built
-// from, and Except removes the method along with the endpoint, so naming an
-// operation that is not exposed is a compile error rather than a lookup that
-// finds nothing.
+// below are the take-one-by-name half: each returns, field for field, the entry
+// this slice carries, and its handler reads the current implementation through
+// h, so a With after the call still takes effect. Except removes the method
+// along with the endpoint, so naming an operation that is not exposed is a
+// compile error.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
 }
 
-// ListEnumWidgetsEndpoint returns the generated GET /enum_widgets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListEnumWidgetsEndpoint returns the generated GET /enum_widgets endpoint.
 func (h *APIHandler) ListEnumWidgetsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -146,9 +145,7 @@ func (h *APIHandler) ListEnumWidgetsEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateEnumWidgetEndpoint returns the generated POST /enum_widgets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateEnumWidgetEndpoint returns the generated POST /enum_widgets endpoint.
 func (h *APIHandler) CreateEnumWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -159,9 +156,7 @@ func (h *APIHandler) CreateEnumWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetEnumWidgetEndpoint returns the generated GET /enum_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetEnumWidgetEndpoint returns the generated GET /enum_widgets/{id} endpoint.
 func (h *APIHandler) GetEnumWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -172,9 +167,7 @@ func (h *APIHandler) GetEnumWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchEnumWidgetEndpoint returns the generated PATCH /enum_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchEnumWidgetEndpoint returns the generated PATCH /enum_widgets/{id} endpoint.
 func (h *APIHandler) PatchEnumWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -185,9 +178,7 @@ func (h *APIHandler) PatchEnumWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteEnumWidgetEndpoint returns the generated DELETE /enum_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteEnumWidgetEndpoint returns the generated DELETE /enum_widgets/{id} endpoint.
 func (h *APIHandler) DeleteEnumWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -198,9 +189,7 @@ func (h *APIHandler) DeleteEnumWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListJSONWidgetsEndpoint returns the generated GET /json_widgets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListJSONWidgetsEndpoint returns the generated GET /json_widgets endpoint.
 func (h *APIHandler) ListJSONWidgetsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -211,9 +200,7 @@ func (h *APIHandler) ListJSONWidgetsEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateJSONWidgetEndpoint returns the generated POST /json_widgets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateJSONWidgetEndpoint returns the generated POST /json_widgets endpoint.
 func (h *APIHandler) CreateJSONWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -224,9 +211,7 @@ func (h *APIHandler) CreateJSONWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetJSONWidgetEndpoint returns the generated GET /json_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetJSONWidgetEndpoint returns the generated GET /json_widgets/{id} endpoint.
 func (h *APIHandler) GetJSONWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -237,9 +222,7 @@ func (h *APIHandler) GetJSONWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchJSONWidgetEndpoint returns the generated PATCH /json_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchJSONWidgetEndpoint returns the generated PATCH /json_widgets/{id} endpoint.
 func (h *APIHandler) PatchJSONWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -250,9 +233,7 @@ func (h *APIHandler) PatchJSONWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteJSONWidgetEndpoint returns the generated DELETE /json_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteJSONWidgetEndpoint returns the generated DELETE /json_widgets/{id} endpoint.
 func (h *APIHandler) DeleteJSONWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -263,9 +244,7 @@ func (h *APIHandler) DeleteJSONWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListNamedTypeWidgetsEndpoint returns the generated GET /named_type_widgets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListNamedTypeWidgetsEndpoint returns the generated GET /named_type_widgets endpoint.
 func (h *APIHandler) ListNamedTypeWidgetsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -276,9 +255,7 @@ func (h *APIHandler) ListNamedTypeWidgetsEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateNamedTypeWidgetEndpoint returns the generated POST /named_type_widgets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateNamedTypeWidgetEndpoint returns the generated POST /named_type_widgets endpoint.
 func (h *APIHandler) CreateNamedTypeWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -289,9 +266,7 @@ func (h *APIHandler) CreateNamedTypeWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetNamedTypeWidgetEndpoint returns the generated GET /named_type_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetNamedTypeWidgetEndpoint returns the generated GET /named_type_widgets/{id} endpoint.
 func (h *APIHandler) GetNamedTypeWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -302,9 +277,7 @@ func (h *APIHandler) GetNamedTypeWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchNamedTypeWidgetEndpoint returns the generated PATCH /named_type_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchNamedTypeWidgetEndpoint returns the generated PATCH /named_type_widgets/{id} endpoint.
 func (h *APIHandler) PatchNamedTypeWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -315,9 +288,7 @@ func (h *APIHandler) PatchNamedTypeWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteNamedTypeWidgetEndpoint returns the generated DELETE /named_type_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteNamedTypeWidgetEndpoint returns the generated DELETE /named_type_widgets/{id} endpoint.
 func (h *APIHandler) DeleteNamedTypeWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -328,9 +299,7 @@ func (h *APIHandler) DeleteNamedTypeWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListNillableWidgetsEndpoint returns the generated GET /nillable_widgets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListNillableWidgetsEndpoint returns the generated GET /nillable_widgets endpoint.
 func (h *APIHandler) ListNillableWidgetsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -341,9 +310,7 @@ func (h *APIHandler) ListNillableWidgetsEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateNillableWidgetEndpoint returns the generated POST /nillable_widgets endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateNillableWidgetEndpoint returns the generated POST /nillable_widgets endpoint.
 func (h *APIHandler) CreateNillableWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -354,9 +321,7 @@ func (h *APIHandler) CreateNillableWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetNillableWidgetEndpoint returns the generated GET /nillable_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetNillableWidgetEndpoint returns the generated GET /nillable_widgets/{id} endpoint.
 func (h *APIHandler) GetNillableWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -367,9 +332,7 @@ func (h *APIHandler) GetNillableWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchNillableWidgetEndpoint returns the generated PATCH /nillable_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchNillableWidgetEndpoint returns the generated PATCH /nillable_widgets/{id} endpoint.
 func (h *APIHandler) PatchNillableWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -380,9 +343,7 @@ func (h *APIHandler) PatchNillableWidgetEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteNillableWidgetEndpoint returns the generated DELETE /nillable_widgets/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteNillableWidgetEndpoint returns the generated DELETE /nillable_widgets/{id} endpoint.
 func (h *APIHandler) DeleteNillableWidgetEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -404,7 +365,7 @@ func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
 	}
 }
 
-// ServeHTTP serves the generated route tree.
+// ServeHTTP serves every generated endpoint through the internal mux.
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }

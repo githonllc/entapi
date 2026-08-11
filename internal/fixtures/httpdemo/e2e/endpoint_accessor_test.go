@@ -85,20 +85,26 @@ func TestEndpointAccessorsAreTheManifestTakenByName(t *testing.T) {
 // handler that reads the implementation through the receiver, so it is not a
 // snapshot. An accessor that captured the function value instead would pass
 // every shape assertion above and silently serve the default forever.
+//
+// The order below is the one the contract requires and is the whole point: the
+// endpoint is TAKEN and registered on the consumer's mux first, With runs after
+// that, and only then does serving begin. With must finish before the first
+// request, because it mutates fields handlers read at request time.
 func TestEndpointTakenByNameServesLaterWithReplacement(t *testing.T) {
 	api := ent.API(newClient(t))
 	taken := api.CreateArticleEndpoint()
 
 	mux := http.NewServeMux()
 	mux.Handle(taken.Method+" "+taken.Path, taken.Handler)
-	server := newTestServer(t, mux)
-	t.Cleanup(server.Close)
 
 	called := false
 	api.With(ent.CreateArticleFn(func(context.Context, *ent.Client, *ent.ValidArticleCreateRequest) (*ent.ArticleResponse, error) {
 		called = true
 		return &ent.ArticleResponse{Title: "replacement"}, nil
 	}))
+
+	server := newTestServer(t, mux)
+	t.Cleanup(server.Close)
 
 	response, body := request(t, server.Client(), http.MethodPost, server.URL+taken.Path, "application/json",
 		strings.NewReader(`{"title":"input"}`))
@@ -142,7 +148,10 @@ func TestEndpointAccessorServesRemappedAndSelectivePaths(t *testing.T) {
 	requireStatus(t, response, body, http.StatusOK)
 
 	// Selective exposure: only the two accessors registered above are served, so
-	// the entity whose endpoints were never taken is unreachable.
+	// the entity whose endpoints were never taken is unreachable THROUGH THIS
+	// MUX. It is not removed from api — API() has already built the internal mux
+	// over the whole manifest, so api itself still serves the full tree. What is
+	// selective is the router the consumer assembles, not the *APIHandler.
 	response, body = request(t, server.Client(), http.MethodGet, server.URL+"/audit_logs", "", nil)
 	requireStatus(t, response, body, http.StatusNotFound)
 }

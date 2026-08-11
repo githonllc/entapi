@@ -20,7 +20,7 @@ var openapiSpec []byte
 // serveOpenAPI writes the embedded document.
 //
 // The media type is application/yaml (RFC 9512). Nothing here is exported: the
-// route is registered by API() in the generated route manifest, so an entity
+// endpoint is registered by API() in the generated endpoint manifest, so an entity
 // named after either symbol could not collide with it.
 func serveOpenAPI(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml")

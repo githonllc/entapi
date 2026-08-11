@@ -80,17 +80,16 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // ServeHTTP and Mount are the convenience built from the same manifest.
 //
 // It is the batch half of the composition surface. The per-operation accessors
-// below are the take-one-by-name half: they are the values this slice is built
-// from, and Except removes the method along with the endpoint, so naming an
-// operation that is not exposed is a compile error rather than a lookup that
-// finds nothing.
+// below are the take-one-by-name half: each returns, field for field, the entry
+// this slice carries, and its handler reads the current implementation through
+// h, so a With after the call still takes effect. Except removes the method
+// along with the endpoint, so naming an operation that is not exposed is a
+// compile error.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
 }
 
-// ListDocsEndpoint returns the generated GET /docs endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListDocsEndpoint returns the generated GET /docs endpoint.
 func (h *APIHandler) ListDocsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -101,9 +100,7 @@ func (h *APIHandler) ListDocsEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateDocEndpoint returns the generated POST /docs endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateDocEndpoint returns the generated POST /docs endpoint.
 func (h *APIHandler) CreateDocEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -114,9 +111,7 @@ func (h *APIHandler) CreateDocEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetDocEndpoint returns the generated GET /docs/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetDocEndpoint returns the generated GET /docs/{id} endpoint.
 func (h *APIHandler) GetDocEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -127,9 +122,7 @@ func (h *APIHandler) GetDocEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchDocEndpoint returns the generated PATCH /docs/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchDocEndpoint returns the generated PATCH /docs/{id} endpoint.
 func (h *APIHandler) PatchDocEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -140,9 +133,7 @@ func (h *APIHandler) PatchDocEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteDocEndpoint returns the generated DELETE /docs/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteDocEndpoint returns the generated DELETE /docs/{id} endpoint.
 func (h *APIHandler) DeleteDocEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -164,7 +155,7 @@ func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
 	}
 }
 
-// ServeHTTP serves the generated route tree.
+// ServeHTTP serves every generated endpoint through the internal mux.
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }

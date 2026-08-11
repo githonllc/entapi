@@ -460,9 +460,15 @@ the surface you name:
 | `Endpoints()` | every endpoint, in registration order | the policy is per batch — "wrap every write", "split by entity" |
 | `Mount(mux)`, `ServeHTTP` | the whole tree | the generated paths are the paths you want |
 
-The rungs are one surface, not four: `Endpoints()` is a slice of exactly the
-values the accessors return, and `Mount` walks that slice. Mixing them cannot
-produce two descriptions of one endpoint.
+The first rung is the ground the ladder stands on rather than a step on it: a
+wiring function is the operation itself, with no HTTP attached and no
+`entapi.Endpoint` anywhere. `With` replaces what the generated handlers call,
+not what your own code calls, so a direct call to `ListArticles` is unaffected
+by it.
+
+The three HTTP rungs above it are one surface, not three: `Endpoints()` is a
+slice of exactly the values the accessors return, and `Mount` walks that slice.
+Mixing them cannot produce two descriptions of one endpoint.
 
 #### Taking one endpoint by name
 
@@ -501,7 +507,11 @@ after you take it still takes effect.
 
 `Endpoints()` returns `[]entapi.Endpoint{Method, Path, Handler, Entity, Op}` in
 deterministic registration order. Every call returns a fresh slice, so changing
-its rows cannot change what `ServeHTTP` or a later `Mount` registers. The list
+its rows cannot change what `ServeHTTP` or a later `Mount` registers. The rows
+are not snapshots, though, for the same reason a single accessor's endpoint is
+not one: each carries the handler that reads the current implementation through
+the `*APIHandler` at request time, so a `With` call made after `Endpoints()`
+returned still takes effect. The list
 is a data export, not a mutation API: remove generated endpoints with `Except`,
 provide custom implementations with `With`, and register extra endpoints on your
 own router.

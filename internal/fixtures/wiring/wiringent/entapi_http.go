@@ -119,17 +119,16 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // ServeHTTP and Mount are the convenience built from the same manifest.
 //
 // It is the batch half of the composition surface. The per-operation accessors
-// below are the take-one-by-name half: they are the values this slice is built
-// from, and Except removes the method along with the endpoint, so naming an
-// operation that is not exposed is a compile error rather than a lookup that
-// finds nothing.
+// below are the take-one-by-name half: each returns, field for field, the entry
+// this slice carries, and its handler reads the current implementation through
+// h, so a With after the call still takes effect. Except removes the method
+// along with the endpoint, so naming an operation that is not exposed is a
+// compile error.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
 }
 
-// ListArticlesEndpoint returns the generated GET /articles endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListArticlesEndpoint returns the generated GET /articles endpoint.
 func (h *APIHandler) ListArticlesEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -140,9 +139,7 @@ func (h *APIHandler) ListArticlesEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateArticleEndpoint returns the generated POST /articles endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateArticleEndpoint returns the generated POST /articles endpoint.
 func (h *APIHandler) CreateArticleEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -153,9 +150,7 @@ func (h *APIHandler) CreateArticleEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetArticleEndpoint returns the generated GET /articles/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetArticleEndpoint returns the generated GET /articles/{id} endpoint.
 func (h *APIHandler) GetArticleEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -166,9 +161,7 @@ func (h *APIHandler) GetArticleEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchArticleEndpoint returns the generated PATCH /articles/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchArticleEndpoint returns the generated PATCH /articles/{id} endpoint.
 func (h *APIHandler) PatchArticleEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -179,9 +172,7 @@ func (h *APIHandler) PatchArticleEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListAuthorsEndpoint returns the generated GET /authors endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListAuthorsEndpoint returns the generated GET /authors endpoint.
 func (h *APIHandler) ListAuthorsEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -192,9 +183,7 @@ func (h *APIHandler) ListAuthorsEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateAuthorEndpoint returns the generated POST /authors endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateAuthorEndpoint returns the generated POST /authors endpoint.
 func (h *APIHandler) CreateAuthorEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -205,9 +194,7 @@ func (h *APIHandler) CreateAuthorEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetAuthorEndpoint returns the generated GET /authors/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetAuthorEndpoint returns the generated GET /authors/{id} endpoint.
 func (h *APIHandler) GetAuthorEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -218,9 +205,7 @@ func (h *APIHandler) GetAuthorEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchAuthorEndpoint returns the generated PATCH /authors/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchAuthorEndpoint returns the generated PATCH /authors/{id} endpoint.
 func (h *APIHandler) PatchAuthorEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -231,9 +216,7 @@ func (h *APIHandler) PatchAuthorEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteAuthorEndpoint returns the generated DELETE /authors/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteAuthorEndpoint returns the generated DELETE /authors/{id} endpoint.
 func (h *APIHandler) DeleteAuthorEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -244,9 +227,7 @@ func (h *APIHandler) DeleteAuthorEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListNotesEndpoint returns the generated GET /notes endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListNotesEndpoint returns the generated GET /notes endpoint.
 func (h *APIHandler) ListNotesEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -257,9 +238,7 @@ func (h *APIHandler) ListNotesEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreateNoteEndpoint returns the generated POST /notes endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreateNoteEndpoint returns the generated POST /notes endpoint.
 func (h *APIHandler) CreateNoteEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -270,9 +249,7 @@ func (h *APIHandler) CreateNoteEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetNoteEndpoint returns the generated GET /notes/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetNoteEndpoint returns the generated GET /notes/{id} endpoint.
 func (h *APIHandler) GetNoteEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -283,9 +260,7 @@ func (h *APIHandler) GetNoteEndpoint() entapi.Endpoint {
 	}
 }
 
-// PatchNoteEndpoint returns the generated PATCH /notes/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// PatchNoteEndpoint returns the generated PATCH /notes/{id} endpoint.
 func (h *APIHandler) PatchNoteEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "PATCH",
@@ -296,9 +271,7 @@ func (h *APIHandler) PatchNoteEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeleteNoteEndpoint returns the generated DELETE /notes/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeleteNoteEndpoint returns the generated DELETE /notes/{id} endpoint.
 func (h *APIHandler) DeleteNoteEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -309,9 +282,7 @@ func (h *APIHandler) DeleteNoteEndpoint() entapi.Endpoint {
 	}
 }
 
-// ListPatchlessesEndpoint returns the generated GET /patchlesses endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// ListPatchlessesEndpoint returns the generated GET /patchlesses endpoint.
 func (h *APIHandler) ListPatchlessesEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -322,9 +293,7 @@ func (h *APIHandler) ListPatchlessesEndpoint() entapi.Endpoint {
 	}
 }
 
-// CreatePatchlessEndpoint returns the generated POST /patchlesses endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// CreatePatchlessEndpoint returns the generated POST /patchlesses endpoint.
 func (h *APIHandler) CreatePatchlessEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "POST",
@@ -335,9 +304,7 @@ func (h *APIHandler) CreatePatchlessEndpoint() entapi.Endpoint {
 	}
 }
 
-// GetPatchlessEndpoint returns the generated GET /patchlesses/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// GetPatchlessEndpoint returns the generated GET /patchlesses/{id} endpoint.
 func (h *APIHandler) GetPatchlessEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "GET",
@@ -348,9 +315,7 @@ func (h *APIHandler) GetPatchlessEndpoint() entapi.Endpoint {
 	}
 }
 
-// DeletePatchlessEndpoint returns the generated DELETE /patchlesses/{id} endpoint,
-// the same value the manifest carries. Its handler reads the current
-// implementation through h, so a With after this call still takes effect.
+// DeletePatchlessEndpoint returns the generated DELETE /patchlesses/{id} endpoint.
 func (h *APIHandler) DeletePatchlessEndpoint() entapi.Endpoint {
 	return entapi.Endpoint{
 		Method:  "DELETE",
@@ -372,7 +337,7 @@ func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
 	}
 }
 
-// ServeHTTP serves the generated route tree.
+// ServeHTTP serves every generated endpoint through the internal mux.
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }

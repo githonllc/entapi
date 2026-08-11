@@ -392,8 +392,12 @@ func withAuth(c *gin.Context) {
 | `Endpoints()` | 全部端点，按注册顺序 | 策略是成批的——「包住所有写操作」「按实体切分」 |
 | `Mount(mux)`、`ServeHTTP` | 整棵树 | 生成的路径就是你要的路径 |
 
-这四级是同一片面，不是四份：`Endpoints()` 就是 accessor 返回值组成的 slice，`Mount` 走的
-也是这份 slice。混着用不可能给同一个端点得出两种描述。
+第一级不是梯子上的一级，而是梯子立在的那块地：wiring 函数就是操作本身，不带 HTTP，
+也不涉及任何 `entapi.Endpoint`。`With` 换掉的是生成的 handler 调用的那个实现，不是你自己
+代码调用的那个——直接调用 `ListArticles` 不受它影响。
+
+它上面那三级是同一片面，不是三份：`Endpoints()` 就是 accessor 返回值组成的 slice，
+`Mount` 走的也是这份 slice。混着用不可能给同一个端点得出两种描述。
 
 #### 按名字取单个端点
 
@@ -426,7 +430,9 @@ public.Handle("GET /v1/openapi.yaml", api.OpenAPIEndpoint().Handler)
 #### 遍历全部端点
 
 `Endpoints()` 按确定的注册顺序返回 `[]entapi.Endpoint{Method, Path, Handler, Entity, Op}`。每次
-调用都返回一份新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。这是
+调用都返回一份新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。但其中
+的行同样不是快照——理由和单个 accessor 取到的端点一样：每一行带的 handler 都在请求时透过
+`*APIHandler` 读当前实现，所以 `Endpoints()` 返回之后再调 `With` 依然生效。这是
 数据导出，不是修改 API：用 `Except` 删除生成端点，用 `With` 提供自定义实现，额外端点直接
 注册到消费者自己的路由器。
 

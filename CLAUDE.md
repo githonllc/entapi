@@ -26,7 +26,7 @@ One Go module, **three packages**, split by *when the code runs* (#15, #71).
 
 1. **`github.com/githonllc/entapi` — code-generation time.** The Ent extension and `SoftDeleteMixin`. It writes `{entity}_dto.go`, `{entity}_filter.go`, `{entity}_wiring.go` per `api.Resource()`, plus graph files, into the consumer's `ent/` package.
 2. **`github.com/githonllc/entapi/api` — schema time only.** The three mergeable annotations and their builders. It may import only `entgo.io/ent/schema` and stdlib; `TestSchemaAPIPackageIsGeneratorFree` guards the transitive closure.
-3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`/`SortSpec`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendEach`/`AppendEachSlice`, lexical URL-query helpers, error sentinels and mapper, `WriteProblem`/`FieldError`/`Route` plus `ColonPath`/`Route.Bind`, actor context, pointer helpers, and soft-delete context switches.
+3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`/`SortSpec`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendEach`/`AppendEachSlice`, lexical URL-query helpers, error sentinels and mapper, `WriteProblem`/`FieldError`/`Endpoint` plus `ColonPath`/`Endpoint.Bind`, actor context, pointer helpers, and soft-delete context switches.
 
 **The split is load-bearing, not cosmetic.** `template_index.go` declares package-level vars calling `mustLoadTemplate`, so while the two halves shared a package, a consumer's production binary that wanted `ErrValidation` embedded five templates and ran the template loader at init. Measured, and asserted by `TestRuntimePackageIsGeneratorFree`: `go list -deps ./runtime` reports **0** `entgo.io` packages out of 186 (all standard library, the `vendor/golang.org/x/…` entries being the ones the Go distribution ships inside std) and `EmbedFiles` is empty, against **15** for the generator — which is correct there, since generating genuinely needs ent. The closure was 62 packages until #73 put `WriteProblem` in the runtime and brought `net/http` with it; the invariant the test asserts is the **0**, never the total, which is why the growth is a documentation update and not a regression.
 
@@ -125,8 +125,8 @@ future count-only mode and clamping it first would break consumers later.
 `templates/openapi.tmpl` renders `openapi.yaml` and
 `templates/openapi_embed.tmpl` renders `entapi_openapi.go`, which `//go:embed`s
 it and serves it from the unexported `serveOpenAPI`. `templates/http.tmpl`
-appends `GET /openapi.yaml` to `h.routes` **last**, so it is visible to
-`Routes()` and wrappable with the same loop as any CRUD route. Four things are
+appends `GET /openapi.yaml` to `h.endpoints` **last**, so it is visible to
+`Endpoints()` and wrappable with the same loop as any CRUD endpoint. Four things are
 load-bearing:
 
 - **`renderOpenAPIFile` is the one render\*File that skips `formatFile`.** That
@@ -136,7 +136,7 @@ load-bearing:
   has no syntax gate before it reaches disk.
 - **The document is derived, and nothing in `funcs_openapi.go` may be a second
   opinion.** Paths and methods come from `resourceOps`/`routePath` — the same
-  source the route manifest uses; schemas from
+  source the endpoint manifest uses; schemas from
   `responseFields`/`responseEdges`/`createFields`/`patchFields`; filter
   parameters from `parseFields` and the per-field operator sets in
   `funcs_filter.go`. A field, an operation or an operator spelled out in the
@@ -338,7 +338,7 @@ family may disappear when `OpCreate` is explicitly excepted.
   `templates/errors.tmpl` -> `entapi_errors.go`, generated when any entity is
   annotated, holding the package's `ErrorMap` (#13); and
   `templates/http.tmpl` -> `entapi_http.go`, holding `APIHandler`, `API(client)`,
-  `ServeHTTP`, `Mount`, the route manifest and request-time function fields; and
+  `ServeHTTP`, `Mount`, the endpoint manifest and request-time function fields; and
   `templates/openapi.tmpl` -> `openapi.yaml` with
   `templates/openapi_embed.tmpl` -> `entapi_openapi.go`, gated together on the
   same `wiredAny` condition as the route tree they describe.
@@ -379,7 +379,7 @@ family may disappear when `OpCreate` is explicitly excepted.
   carries the `txDriver`). `API(client)` holds the root client, so the `db` a
   custom implementation receives on the HTTP path is NOT transaction-bound.
 - `With` mutates `APIHandler` with whole-operation custom implementations; finish wiring before serving, because later calls race with request-time field reads.
-- `Routes()` returns a fresh copy in registration order, while `Mount` and the internal mux walk the single unexported route list.
+- `Endpoints()` returns a fresh copy in registration order, while `Mount` and the internal mux walk the single unexported endpoint list.
 - Handler code should not import `ent` for conversion. That is a property of
   where the DTO package sits, not of a base type — `Base{Entity}Handler`
   required an `ent` import to embed it, so it never achieved the goal. Today the
@@ -431,7 +431,7 @@ Every row has a fixture. A fixture whose generation must fail carries
 - **Five nested modules run under `make test-modules`, and each exists because a compile proof cannot answer its question.** They are separate modules because they need a SQL driver and this library must not have one.
   - `internal/fixture` — the #22 spike. It breaking is the signal that generated output has drifted from the hand-written target.
   - `internal/fixtures/wiring/e2e` — the behavioural half of the wiring fixture. Compiling proves the wiring type-checks; only this proves it returns the right page, and it carries #13's three-way missing-row / `UNIQUE` / `FOREIGN KEY` mapping proof against real SQLite.
-  - `internal/fixtures/httpdemo/e2e` — the HTTP tracer bullet: all five endpoints, problem+json statuses, direct/Mount/StripPrefix composition, actor context, middleware short-circuiting and Excepted routes against real SQLite. It is also where #76's document is validated against the OpenAPI 3.1 meta-schema (`pb33f/libopenapi` + `libopenapi-validator`, which live here and nowhere else — the root module must stay free of a YAML parser) and where it is checked against reality three ways: schemas versus the generated structs by reflection, documented paths versus `Routes()`, and each field's documented operator prefixes versus what the live parser accepts. Any one of the three alone proves only that the file parses.
+  - `internal/fixtures/httpdemo/e2e` — the HTTP tracer bullet: all five endpoints, problem+json statuses, direct/Mount/StripPrefix composition, actor context, middleware short-circuiting and Excepted routes against real SQLite. It is also where #76's document is validated against the OpenAPI 3.1 meta-schema (`pb33f/libopenapi` + `libopenapi-validator`, which live here and nowhere else — the root module must stay free of a YAML parser) and where it is checked against reality three ways: schemas versus the generated structs by reflection, documented paths versus `Endpoints()`, and each field's documented operator prefixes versus what the live parser accepts. Any one of the three alone proves only that the file parses.
   - `internal/softdeleteproof` — the only evidence for #18's load-bearing claim: a direct `client.Doc.Query()`, with nothing generated in the call path, does not return deleted rows. A compile proof cannot tell "the predicate is generated" from "the predicate reaches the SQL".
   - `internal/uniqueproof` — #74's dialect determinations against the **real** driver error types. It exists because a hand-written stand-in would prove only that the detector matches the stand-in: it takes `jackc/pgx/v5` (a genuine `*pgconn.PgError`, so the `SQLState()` probe is exercised, `23503` included as the negative) and `go-sql-driver/mysql` (a genuine `*mysql.MySQLError`, which is the negative case for the probe — `Number` and `SQLState` are fields, not methods — and the positive case for the `Error 1062` text). Those two drivers live here and nowhere else; the root module must stay free of them.
 - `internal/fixtures/edges/edgesent/orerr_contract_test.go` is one of the few hand-written files under a generated `<dir>ent/` directory. It must be in `package edgesent` because it sets the unexported `Edges.loadedTypes`, which is the only way to construct *loaded and absent* without a database. The others include `basic/basicent/listresponse_shape_test.go`, `createexcepted/createexceptedent/create_family_test.go`, the two `httpdemo/httpdemoent/*_test.go` contract proofs, `presence/presenceent/account_presence_test.go`,

@@ -50,7 +50,7 @@ const softDeleteFileName = "entapi_softdelete.go"
 // Same prefix rule as above: entapi_ cannot collide with ent's own output.
 const errorMapFileName = "entapi_errors.go"
 
-// httpFileName holds the graph-level APIHandler and route manifest.
+// httpFileName holds the graph-level APIHandler and endpoint manifest.
 const httpFileName = "entapi_http.go"
 
 // openapiFileName is the generated OpenAPI 3.1 document — the one artifact this

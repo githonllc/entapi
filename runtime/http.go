@@ -36,11 +36,11 @@ func (e *FieldError) Unwrap() error {
 	return e.Err
 }
 
-// Op names the CRUD operation a Route implements. It is a distinct type rather
-// than a bare string so that routing a subset of the manifest — "everything on
-// AuditLog", "every write" — is a comparison the compiler checks. A misspelled
-// string literal matches nothing and reports nothing, which is exactly the
-// failure that routing by Path prefix already has.
+// Op names the CRUD operation an Endpoint implements. It is a distinct type
+// rather than a bare string so that selecting a subset of the manifest —
+// "everything on AuditLog", "every write" — is a comparison the compiler checks.
+// A misspelled string literal matches nothing and reports nothing, which is
+// exactly the failure that selecting by Path prefix already has.
 //
 // It deliberately does NOT reuse api.Op. That package imports
 // entgo.io/ent/schema, and TestRuntimePackageIsGeneratorFree pins this
@@ -49,8 +49,8 @@ func (e *FieldError) Unwrap() error {
 // are the same strings, and the generator writes them from its own api.Op.
 type Op string
 
-// The operations a generated route can carry. OpNone is the zero value, held
-// by routes that are not part of the resource surface — today only
+// The operations a generated Endpoint can carry. OpNone is the zero value, held
+// by endpoints that are not part of the resource surface — today only
 // GET /openapi.yaml.
 const (
 	OpNone   Op = ""
@@ -61,20 +61,28 @@ const (
 	OpDelete Op = "delete"
 )
 
-// Route describes one generated stdlib HTTP route.
+// Endpoint is the contract record of one generated HTTP handler: it is data a
+// consumer composes into their own router, not routing machinery. entapi
+// registers nothing anywhere; the internal ServeMux behind the generated
+// ServeHTTP and Mount is an optional convenience built from this same manifest.
+//
+// Method and Path are the handler's signature. Path is load-bearing rather than
+// descriptive: its {name} placeholders fix the path-parameter names the handler
+// body reads back through r.PathValue, which is why Bind takes those names from
+// Path instead of hardcoding any.
 //
 // Entity and Op carry the identity the path used to hide: they let a consumer
 // split the manifest by audience, wrap only writes, or drop one entity's
-// surface without matching on Path text. Both are empty for a route that
+// surface without matching on Path text. Both are empty for an endpoint that
 // belongs to no resource.
-type Route struct {
+type Endpoint struct {
 	Method  string
 	Path    string
 	Handler http.Handler
 
-	// Entity is the Ent type name this route was generated for, e.g. "Article".
+	// Entity is the Ent type name this endpoint was generated for, e.g. "Article".
 	Entity string
-	// Op is the CRUD operation this route implements.
+	// Op is the CRUD operation this endpoint implements.
 	Op Op
 }
 

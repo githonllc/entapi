@@ -62,11 +62,11 @@ func TestActorContextRoundTrip(t *testing.T) {
 	}
 }
 
-func TestRouteCarriesStdlibHandler(t *testing.T) {
+func TestEndpointCarriesStdlibHandler(t *testing.T) {
 	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
-	route := Route{Method: http.MethodGet, Path: "/articles", Handler: handler}
+	endpoint := Endpoint{Method: http.MethodGet, Path: "/articles", Handler: handler}
 
-	if route.Method != http.MethodGet || route.Path != "/articles" || route.Handler == nil {
-		t.Errorf("route = %+v", route)
+	if endpoint.Method != http.MethodGet || endpoint.Path != "/articles" || endpoint.Handler == nil {
+		t.Errorf("endpoint = %+v", endpoint)
 	}
 }

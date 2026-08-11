@@ -416,7 +416,7 @@ func (e *Extension) renderErrorMapFile(g *gen.Graph) (pendingFile, error) {
 	return pendingFile{path: outputPath, content: formatted}, nil
 }
 
-// renderHTTPFile renders and formats the package-level APIHandler and route
+// renderHTTPFile renders and formats the package-level APIHandler and endpoint
 // manifest. Output: ent/entapi_http.go
 func (e *Extension) renderHTTPFile(g *gen.Graph) (pendingFile, error) {
 	tmpl, err := template.New("http").

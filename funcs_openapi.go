@@ -148,14 +148,14 @@ func openapiRequiredCreateFields(node *gen.Type) []*gen.Field {
 // openapiPathGroup is the operations of one URL path. OpenAPI keys paths, not
 // operations, so the flat resourceOps list has to be folded onto its two
 // possible suffixes — and folding it here rather than in the template keeps the
-// document's path set literally derived from the route manifest's.
+// document's path set literally derived from the endpoint manifest's.
 type openapiPathGroup struct {
 	Suffix string
 	Ops    []resourceOperation
 }
 
 // openapiPathGroups folds resourceOps onto its distinct path suffixes, in first
-// appearance order, so the document's path order matches the route manifest's.
+// appearance order, so the document's path order matches the endpoint manifest's.
 func openapiPathGroups(node *gen.Type) []openapiPathGroup {
 	var out []openapiPathGroup
 	index := map[string]int{}

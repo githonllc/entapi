@@ -18,7 +18,7 @@ type APIOption interface{ applyOption(*APIHandler) }
 type APIHandler struct {
 	client         *Client
 	mux            *http.ServeMux
-	routes         []entapi.Route
+	endpoints      []entapi.Endpoint
 	listArticles   ListArticlesFn
 	createArticle  CreateArticleFn
 	getArticle     GetArticleFn
@@ -50,7 +50,7 @@ func API(client *Client) *APIHandler {
 		getAuditLog:    GetAuditLog,
 		patchAuditLog:  PatchAuditLog,
 	}
-	h.routes = []entapi.Route{
+	h.endpoints = []entapi.Endpoint{
 		{
 			Method:  "GET",
 			Path:    "/articles",
@@ -115,17 +115,18 @@ func API(client *Client) *APIHandler {
 			Op:      "patch",
 		},
 		// The document describing everything above. It is in the manifest, not
-		// beside it, so Routes() sees it and a consumer can wrap or drop it with
-		// the same loop they use for the CRUD routes. It is the one route the
-		// document does not describe: it is not part of the resource surface.
+		// beside it, so Endpoints() sees it and a consumer can wrap or drop it
+		// with the same loop they use for the CRUD endpoints. It is the one
+		// endpoint the document does not describe: it is not part of the
+		// resource surface.
 		{
 			Method:  "GET",
 			Path:    "/openapi.yaml",
 			Handler: http.HandlerFunc(serveOpenAPI),
 		},
 	}
-	for _, rt := range h.routes {
-		h.mux.Handle(rt.Method+" "+rt.Path, rt.Handler)
+	for _, ep := range h.endpoints {
+		h.mux.Handle(ep.Method+" "+ep.Path, ep.Handler)
 	}
 	return h
 }
@@ -141,9 +142,11 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 	return h
 }
 
-// Routes returns generated routes in deterministic registration order.
-func (h *APIHandler) Routes() []entapi.Route {
-	return append([]entapi.Route(nil), h.routes...)
+// Endpoints returns the generated endpoint manifest in deterministic
+// registration order. It is data to compose into a router of your choosing;
+// ServeHTTP and Mount are the convenience built from the same manifest.
+func (h *APIHandler) Endpoints() []entapi.Endpoint {
+	return append([]entapi.Endpoint(nil), h.endpoints...)
 }
 
 // ServeHTTP serves the generated route tree.
@@ -151,9 +154,9 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }
 
-// Mount registers every generated route on mux.
+// Mount registers every generated endpoint on mux.
 func (h *APIHandler) Mount(mux *http.ServeMux) {
-	for _, rt := range h.routes {
-		mux.Handle(rt.Method+" "+rt.Path, rt.Handler)
+	for _, ep := range h.endpoints {
+		mux.Handle(ep.Method+" "+ep.Path, ep.Handler)
 	}
 }

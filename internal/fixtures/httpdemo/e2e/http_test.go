@@ -317,14 +317,14 @@ func TestWithAcceptsStatefulMethodValue(t *testing.T) {
 	}
 }
 
-func TestRoutesShapeOrderAndCopyIsolation(t *testing.T) {
-	type routeKey struct {
+func TestEndpointsShapeOrderAndCopyIsolation(t *testing.T) {
+	type endpointKey struct {
 		method string
 		path   string
 		entity string
 		op     entapi.Op
 	}
-	want := []routeKey{
+	want := []endpointKey{
 		{http.MethodGet, "/articles", "Article", entapi.OpList},
 		{http.MethodPost, "/articles", "Article", entapi.OpCreate},
 		{http.MethodGet, "/articles/{id}", "Article", entapi.OpGet},
@@ -335,37 +335,37 @@ func TestRoutesShapeOrderAndCopyIsolation(t *testing.T) {
 		{http.MethodGet, "/audit_logs/{id}", "AuditLog", entapi.OpGet},
 		{http.MethodPatch, "/audit_logs/{id}", "AuditLog", entapi.OpPatch},
 		// The generated document, last: it is appended after every entity's
-		// routes, so its position is a fact about registration order rather
+		// endpoints, so its position is a fact about registration order rather
 		// than an accident of the schema (#76). It belongs to no resource, so
-		// Entity and Op are the zero value -- that is what makes "every route
-		// with an Op" a usable way to say "the resource surface".
+		// Entity and Op are the zero value -- that is what makes "every
+		// endpoint with an Op" a usable way to say "the resource surface".
 		{http.MethodGet, "/openapi.yaml", "", entapi.OpNone},
 	}
 	api := ent.API(newClient(t))
-	routes := api.Routes()
-	if len(routes) != len(want) {
-		t.Fatalf("route count = %d, want %d", len(routes), len(want))
+	endpoints := api.Endpoints()
+	if len(endpoints) != len(want) {
+		t.Fatalf("endpoint count = %d, want %d", len(endpoints), len(want))
 	}
 	legalityProbe := http.NewServeMux()
-	for i, route := range routes {
-		if route.Handler == nil {
-			t.Fatalf("route %d has a nil Handler", i)
+	for i, endpoint := range endpoints {
+		if endpoint.Handler == nil {
+			t.Fatalf("endpoint %d has a nil Handler", i)
 		}
-		if got := (routeKey{route.Method, route.Path, route.Entity, route.Op}); got != want[i] {
-			t.Errorf("route %d = %+v, want %+v", i, got, want[i])
+		if got := (endpointKey{endpoint.Method, endpoint.Path, endpoint.Entity, endpoint.Op}); got != want[i] {
+			t.Errorf("endpoint %d = %+v, want %+v", i, got, want[i])
 		}
-		legalityProbe.Handle(route.Method+" "+route.Path, route.Handler)
+		legalityProbe.Handle(endpoint.Method+" "+endpoint.Path, endpoint.Handler)
 	}
 
-	routes[0] = entapi.Route{
+	endpoints[0] = entapi.Endpoint{
 		Method: http.MethodPost,
 		Path:   "/poison",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusTeapot)
 		}),
 	}
-	if fresh := api.Routes()[0]; fresh.Method != http.MethodGet || fresh.Path != "/articles" {
-		t.Fatalf("mutating Routes result changed next result: %+v", fresh)
+	if fresh := api.Endpoints()[0]; fresh.Method != http.MethodGet || fresh.Path != "/articles" {
+		t.Fatalf("mutating Endpoints result changed next result: %+v", fresh)
 	}
 	mux := http.NewServeMux()
 	api.Mount(mux)
@@ -375,99 +375,99 @@ func TestRoutesShapeOrderAndCopyIsolation(t *testing.T) {
 	requireStatus(t, response, body, http.StatusOK)
 }
 
-// TestRouteIdentitySplitsTheManifestWithoutPathMatching is the reason
-// Route.Entity and Route.Op exist. Splitting the surface by audience -- mount
-// AuditLog behind an internal-only middleware, expose Article publicly, wrap
-// every write with an audit log -- used to require matching on Path text, where
-// a typo produces a selector that matches nothing and reports nothing.
+// TestEndpointIdentitySplitsTheManifestWithoutPathMatching is the reason
+// Endpoint.Entity and Endpoint.Op exist. Splitting the surface by audience --
+// mount AuditLog behind an internal-only middleware, expose Article publicly,
+// wrap every write with an audit log -- used to require matching on Path text,
+// where a typo produces a selector that matches nothing and reports nothing.
 //
 // The assertions below are deliberately written the way a consumer would write
 // the routing itself, so the test fails for the same reason a consumer's split
 // would break.
-func TestRouteIdentitySplitsTheManifestWithoutPathMatching(t *testing.T) {
-	routes := ent.API(newClient(t)).Routes()
+func TestEndpointIdentitySplitsTheManifestWithoutPathMatching(t *testing.T) {
+	endpoints := ent.API(newClient(t)).Endpoints()
 
-	var public, internal, writes, unowned []entapi.Route
-	for _, route := range routes {
-		switch route.Entity {
+	var public, internal, writes, unowned []entapi.Endpoint
+	for _, endpoint := range endpoints {
+		switch endpoint.Entity {
 		case "Article":
-			public = append(public, route)
+			public = append(public, endpoint)
 		case "AuditLog":
-			internal = append(internal, route)
+			internal = append(internal, endpoint)
 		case "":
-			unowned = append(unowned, route)
+			unowned = append(unowned, endpoint)
 		default:
-			t.Errorf("route %s %s carries unknown entity %q", route.Method, route.Path, route.Entity)
+			t.Errorf("endpoint %s %s carries unknown entity %q", endpoint.Method, endpoint.Path, endpoint.Entity)
 		}
-		switch route.Op {
+		switch endpoint.Op {
 		case entapi.OpCreate, entapi.OpPatch, entapi.OpDelete:
-			writes = append(writes, route)
+			writes = append(writes, endpoint)
 		}
 	}
 
 	// Article is a full resource; AuditLog Excepts delete (see its schema), so
 	// the split has to come out asymmetric or it is not reading real identity.
 	if len(public) != 5 {
-		t.Errorf("Article routes = %d, want 5", len(public))
+		t.Errorf("Article endpoints = %d, want 5", len(public))
 	}
 	if len(internal) != 4 {
-		t.Errorf("AuditLog routes = %d, want 4 (delete is Excepted)", len(internal))
+		t.Errorf("AuditLog endpoints = %d, want 4 (delete is Excepted)", len(internal))
 	}
 	if len(writes) != 5 {
-		t.Errorf("write routes = %d, want 5 (3 Article + 2 AuditLog)", len(writes))
+		t.Errorf("write endpoints = %d, want 5 (3 Article + 2 AuditLog)", len(writes))
 	}
-	// Exactly one route belongs to no resource, and it is the document.
+	// Exactly one endpoint belongs to no resource, and it is the document.
 	if len(unowned) != 1 || unowned[0].Path != "/openapi.yaml" {
-		t.Errorf("routes with no entity = %+v, want only GET /openapi.yaml", unowned)
+		t.Errorf("endpoints with no entity = %+v, want only GET /openapi.yaml", unowned)
 	}
-	for _, route := range unowned {
-		if route.Op != entapi.OpNone {
-			t.Errorf("%s %s has no entity but carries Op %q", route.Method, route.Path, route.Op)
+	for _, endpoint := range unowned {
+		if endpoint.Op != entapi.OpNone {
+			t.Errorf("%s %s has no entity but carries Op %q", endpoint.Method, endpoint.Path, endpoint.Op)
 		}
 	}
 
-	// Every resource route carries both halves of its identity: an Op without
+	// Every resource endpoint carries both halves of its identity: an Op without
 	// an Entity, or the reverse, would make one of the two splits above silently
 	// incomplete rather than loudly wrong.
-	for _, route := range routes {
-		if (route.Entity == "") != (route.Op == entapi.OpNone) {
+	for _, endpoint := range endpoints {
+		if (endpoint.Entity == "") != (endpoint.Op == entapi.OpNone) {
 			t.Errorf("%s %s has a half-filled identity: entity=%q op=%q",
-				route.Method, route.Path, route.Entity, route.Op)
+				endpoint.Method, endpoint.Path, endpoint.Entity, endpoint.Op)
 		}
 	}
 }
 
-func TestMountMatchesRoutes(t *testing.T) {
+func TestMountMatchesEndpoints(t *testing.T) {
 	api := ent.API(newClient(t))
 	mux := http.NewServeMux()
 	api.Mount(mux)
 	missingID := "00000000-0000-0000-0000-000000000001"
 
-	newRouteRequest := func(route entapi.Route, direct bool) *http.Request {
+	newEndpointRequest := func(endpoint entapi.Endpoint, direct bool) *http.Request {
 		t.Helper()
-		path := strings.ReplaceAll(route.Path, "{id}", missingID)
+		path := strings.ReplaceAll(endpoint.Path, "{id}", missingID)
 		var body io.Reader
-		if route.Method == http.MethodPost || route.Method == http.MethodPatch {
+		if endpoint.Method == http.MethodPost || endpoint.Method == http.MethodPatch {
 			body = strings.NewReader(`{}`)
 		}
-		request := httptest.NewRequest(route.Method, path, body)
+		request := httptest.NewRequest(endpoint.Method, path, body)
 		if body != nil {
 			request.Header.Set("Content-Type", "application/json")
 		}
-		if direct && strings.Contains(route.Path, "{id}") {
+		if direct && strings.Contains(endpoint.Path, "{id}") {
 			request.SetPathValue("id", missingID)
 		}
 		return request
 	}
 
-	for _, route := range api.Routes() {
+	for _, endpoint := range api.Endpoints() {
 		mounted := httptest.NewRecorder()
-		mux.ServeHTTP(mounted, newRouteRequest(route, false))
+		mux.ServeHTTP(mounted, newEndpointRequest(endpoint, false))
 		direct := httptest.NewRecorder()
-		route.Handler.ServeHTTP(direct, newRouteRequest(route, true))
+		endpoint.Handler.ServeHTTP(direct, newEndpointRequest(endpoint, true))
 		if mounted.Code != direct.Code {
 			t.Errorf("%s %s: mounted status = %d, direct status = %d",
-				route.Method, route.Path, mounted.Code, direct.Code)
+				endpoint.Method, endpoint.Path, mounted.Code, direct.Code)
 		}
 	}
 
@@ -475,13 +475,13 @@ func TestMountMatchesRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "func (h *APIHandler) Mount(mux *http.ServeMux) {\n\tfor _, rt := range h.routes {\n\t\tmux.Handle(rt.Method+\" \"+rt.Path, rt.Handler)\n\t}\n}"
+	want := "func (h *APIHandler) Mount(mux *http.ServeMux) {\n\tfor _, ep := range h.endpoints {\n\t\tmux.Handle(ep.Method+\" \"+ep.Path, ep.Handler)\n\t}\n}"
 	if !strings.Contains(string(source), want) {
-		t.Fatal("Mount is not a literal range walk over h.routes")
+		t.Fatal("Mount is not a literal range walk over h.endpoints")
 	}
 }
 
-func TestRoutesSupportThirdPartyRouterAdapterMechanics(t *testing.T) {
+func TestEndpointsSupportThirdPartyRouterAdapterMechanics(t *testing.T) {
 	if got := strings.ReplaceAll("/articles/{id}", "{id}", ":id"); got != "/articles/:id" {
 		t.Fatalf("translated path = %q, want /articles/:id", got)
 	}
@@ -491,15 +491,15 @@ func TestRoutesSupportThirdPartyRouterAdapterMechanics(t *testing.T) {
 		t.Fatalf("create article: %v", err)
 	}
 	api := ent.API(client)
-	var getArticle entapi.Route
-	for _, route := range api.Routes() {
-		if route.Method == http.MethodGet && route.Path == "/articles/{id}" {
-			getArticle = route
+	var getArticle entapi.Endpoint
+	for _, endpoint := range api.Endpoints() {
+		if endpoint.Method == http.MethodGet && endpoint.Path == "/articles/{id}" {
+			getArticle = endpoint
 			break
 		}
 	}
 	if getArticle.Handler == nil {
-		t.Fatal("GET /articles/{id} route not found")
+		t.Fatal("GET /articles/{id} endpoint not found")
 	}
 
 	request := httptest.NewRequest(http.MethodGet, "/articles/:id", nil)
@@ -525,7 +525,7 @@ func TestRoutesSupportThirdPartyRouterAdapterMechanics(t *testing.T) {
 	}
 }
 
-func TestRoutesSupportSelectiveMethodWrapping(t *testing.T) {
+func TestEndpointsSupportSelectiveMethodWrapping(t *testing.T) {
 	api := ent.API(newClient(t))
 	mux := http.NewServeMux()
 	requireAuth := func(next http.Handler) http.Handler {
@@ -537,12 +537,12 @@ func TestRoutesSupportSelectiveMethodWrapping(t *testing.T) {
 			next.ServeHTTP(w, r)
 		})
 	}
-	for _, route := range api.Routes() {
-		handler := route.Handler
-		if route.Method == http.MethodDelete {
+	for _, endpoint := range api.Endpoints() {
+		handler := endpoint.Handler
+		if endpoint.Method == http.MethodDelete {
 			handler = requireAuth(handler)
 		}
-		mux.Handle(route.Method+" "+route.Path, handler)
+		mux.Handle(endpoint.Method+" "+endpoint.Path, handler)
 	}
 	server := newTestServer(t, mux)
 	t.Cleanup(server.Close)
@@ -554,9 +554,9 @@ func TestRoutesSupportSelectiveMethodWrapping(t *testing.T) {
 	requireStatus(t, response, body, http.StatusUnauthorized)
 }
 
-func TestWithAfterRoutesAndMountAppliesBeforeRequest(t *testing.T) {
+func TestWithAfterEndpointsAndMountAppliesBeforeRequest(t *testing.T) {
 	api := ent.API(newClient(t))
-	before := api.Routes()
+	before := api.Endpoints()
 	mux := http.NewServeMux()
 	api.Mount(mux)
 	called := false
@@ -564,8 +564,8 @@ func TestWithAfterRoutesAndMountAppliesBeforeRequest(t *testing.T) {
 		called = true
 		return &ent.ArticleResponse{Title: "after mount"}, nil
 	}))
-	if after := api.Routes(); len(after) != len(before) {
-		t.Fatalf("route count changed from %d to %d", len(before), len(after))
+	if after := api.Endpoints(); len(after) != len(before) {
+		t.Fatalf("endpoint count changed from %d to %d", len(before), len(after))
 	}
 	server := newTestServer(t, mux)
 	t.Cleanup(server.Close)
@@ -574,7 +574,7 @@ func TestWithAfterRoutesAndMountAppliesBeforeRequest(t *testing.T) {
 		strings.NewReader(`{"title":"input"}`))
 	requireStatus(t, response, body, http.StatusCreated)
 	if !called {
-		t.Fatal("replacement installed after Routes and Mount did not run")
+		t.Fatal("replacement installed after Endpoints and Mount did not run")
 	}
 }
 

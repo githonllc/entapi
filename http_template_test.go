@@ -28,7 +28,7 @@ func TestHandlerTemplateReadsMiddleFunctionThroughReceiver(t *testing.T) {
 	}
 }
 
-func TestHTTPTemplateBuildsRouteManifestAndLiteralMountLoop(t *testing.T) {
+func TestHTTPTemplateBuildsEndpointManifestAndLiteralMountLoop(t *testing.T) {
 	root := repoRoot(t)
 	g := loadFixtureGraph(t, fixtureSchemaDir(root, "reservednames"), fixtureEntPkgPath("reservednames"))
 	ext := NewExtensionWithOptions()
@@ -46,10 +46,10 @@ func TestHTTPTemplateBuildsRouteManifestAndLiteralMountLoop(t *testing.T) {
 		"func (h *APIHandler) With(opts ...APIOption) *APIHandler",
 		`panic(fmt.Sprintf("entapi: APIOption at index %d is nil", i))`,
 		"opt.applyOption(h)",
-		"func (h *APIHandler) Routes() []entapi.Route",
-		"return append([]entapi.Route(nil), h.routes...)",
+		"func (h *APIHandler) Endpoints() []entapi.Endpoint",
+		"return append([]entapi.Endpoint(nil), h.endpoints...)",
 		"func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)",
-		"for _, rt := range h.routes {\n\t\tmux.Handle(rt.Method+\" \"+rt.Path, rt.Handler)\n\t}",
+		"for _, ep := range h.endpoints {\n\t\tmux.Handle(ep.Method+\" \"+ep.Path, ep.Handler)\n\t}",
 	)
 }
 

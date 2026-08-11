@@ -73,7 +73,7 @@ var accountCreateRequestTags = []string{"password_hash", "name", "login_window"}
 // AccountCreateRequest, in declaration order. Generated handlers compare raw
 // request keys against this data to reject unknown keys.
 //
-// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// Like Endpoints(), it returns a fresh copy on every call: slices are mutable, so
 // exporting the variable would let any consumer mutate validation data that
 // every generated handler in the process reads. The unexported variable remains
 // the source of truth; this accessor is for consumers that decline the generated
@@ -223,7 +223,7 @@ var accountPatchRequestTags = []string{"password_hash", "name", "login_window"}
 // AccountPatchRequest, in declaration order. Generated handlers compare raw
 // request keys against this data to reject unknown keys.
 //
-// Like Routes(), it returns a fresh copy on every call: slices are mutable, so
+// Like Endpoints(), it returns a fresh copy on every call: slices are mutable, so
 // exporting the variable would let any consumer mutate validation data that
 // every generated handler in the process reads. The unexported variable remains
 // the source of truth; this accessor is for consumers that decline the generated

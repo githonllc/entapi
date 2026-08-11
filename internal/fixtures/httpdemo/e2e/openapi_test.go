@@ -27,7 +27,7 @@ import (
 //
 // The last one is three separate assertions, and the document is only
 // trustworthy with all three: the schemas match the generated structs by
-// reflection, the paths match the live route manifest, and the operator
+// reflection, the paths match the live endpoint manifest, and the operator
 // prefixes match what the live parser accepts. Any one of them alone proves
 // only that the file parses.
 
@@ -36,10 +36,10 @@ import (
 // comparison below.
 const documentPath = "../httpdemoent/openapi.yaml"
 
-// openapiRoute is the one route the document deliberately does not describe.
-// It is not part of the resource surface, and describing it would make the
-// document a description of itself.
-const openapiRoute = "/openapi.yaml"
+// openapiEndpoint is the one endpoint the document deliberately does not
+// describe. It is not part of the resource surface, and describing it would
+// make the document a description of itself.
+const openapiEndpoint = "/openapi.yaml"
 
 func onDisk(t *testing.T) []byte {
 	t.Helper()
@@ -72,7 +72,7 @@ func TestOpenAPIServedBytesAreTheFileOnDisk(t *testing.T) {
 	server := newTestServer(t, ent.API(newClient(t)))
 	t.Cleanup(server.Close)
 
-	response, body := request(t, server.Client(), http.MethodGet, server.URL+openapiRoute, "", nil)
+	response, body := request(t, server.Client(), http.MethodGet, server.URL+openapiEndpoint, "", nil)
 	requireStatus(t, response, body, http.StatusOK)
 	if got := response.Header.Get("Content-Type"); got != "application/yaml" {
 		t.Errorf("Content-Type = %q, want application/yaml (RFC 9512)", got)
@@ -155,11 +155,11 @@ func TestEveryGeneratedDocumentValidatesAs31(t *testing.T) {
 	}
 }
 
-// TestOpenAPIPathsMatchTheLiveRouteTree is the first of the three "says what it
-// does" assertions. It compares sets rather than probing, because a probe can
-// only find a documented path that 404s — it cannot find a live route the
-// document forgot.
-func TestOpenAPIPathsMatchTheLiveRouteTree(t *testing.T) {
+// TestOpenAPIPathsMatchTheLiveEndpointManifest is the first of the three "says
+// what it does" assertions. It compares sets rather than probing, because a
+// probe can only find a documented path that 404s — it cannot find a live
+// endpoint the document forgot.
+func TestOpenAPIPathsMatchTheLiveEndpointManifest(t *testing.T) {
 	_, model := loadDocument(t)
 
 	documented := map[string]bool{}
@@ -168,28 +168,28 @@ func TestOpenAPIPathsMatchTheLiveRouteTree(t *testing.T) {
 			documented[strings.ToUpper(op.Key())+" "+pair.Key()] = true
 		}
 	}
-	// The document does not describe itself (see openapiRoute), so it is the
+	// The document does not describe itself (see openapiEndpoint), so it is the
 	// one exemption — spelled out here rather than left as a set difference
 	// nobody reads.
-	documented[http.MethodGet+" "+openapiRoute] = true
+	documented[http.MethodGet+" "+openapiEndpoint] = true
 
 	live := map[string]bool{}
-	for _, route := range ent.API(newClient(t)).Routes() {
-		live[route.Method+" "+route.Path] = true
+	for _, endpoint := range ent.API(newClient(t)).Endpoints() {
+		live[endpoint.Method+" "+endpoint.Path] = true
 	}
 
 	for _, key := range sortedKeys(documented) {
 		if !live[key] {
-			t.Errorf("the document describes %s, which the route manifest does not serve", key)
+			t.Errorf("the document describes %s, which the endpoint manifest does not serve", key)
 		}
 	}
 	for _, key := range sortedKeys(live) {
 		if !documented[key] {
-			t.Errorf("the route manifest serves %s, which the document does not describe", key)
+			t.Errorf("the endpoint manifest serves %s, which the document does not describe", key)
 		}
 	}
 
-	// The set comparison above cannot see a route whose handler is not actually
+	// The set comparison above cannot see an endpoint whose handler is not actually
 	// reachable through the mux, so probe every documented path once and reject
 	// the stdlib router's own text/plain residue.
 	server := newTestServer(t, ent.API(newClient(t)))

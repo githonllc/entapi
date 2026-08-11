@@ -232,7 +232,7 @@ func (Post) Edges() []ent.Edge {
 | 文件 | 生成条件 | 声明 |
 |---|---|---|
 | `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
-| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Endpoints`、`ServeHTTP`、`Mount` 与端点 manifest |
+| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Endpoints`、每个可达操作一个 `{Op}{E}Endpoint()` accessor、`OpenAPIEndpoint()`、`ServeHTTP`、`Mount` 与端点 manifest |
 | `openapi.yaml` | 至少一个实体产出了接线 | 描述全部生成端点的 OpenAPI 3.1 文档 |
 | `entapi_openapi.go` | 至少一个实体产出了接线 | 该文档的 `//go:embed` 与未导出的服务函数 |
 | `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | 未导出的查询 traverser 与删除 hook |
@@ -382,6 +382,48 @@ func withAuth(c *gin.Context) {
 依赖留在本模块之外。
 
 ### 注册导出的端点
+
+组合方式是一架梯子，站哪一级取决于你要点名多大一片面：
+
+| 级 | 拿到的东西 | 什么时候用 |
+|---|---|---|
+| `Get{E}`、`List{Es}`、`Create{E}`…… | 只有操作，不带 HTTP | handler 由你自己写 |
+| `Get{E}Endpoint()`、`List{Es}Endpoint()`、`OpenAPIEndpoint()` | 按名字拿到的单个 `entapi.Endpoint` | 往自己的路由器上注册少数几个端点，路径也可以另选 |
+| `Endpoints()` | 全部端点，按注册顺序 | 策略是成批的——「包住所有写操作」「按实体切分」 |
+| `Mount(mux)`、`ServeHTTP` | 整棵树 | 生成的路径就是你要的路径 |
+
+这四级是同一片面，不是四份：`Endpoints()` 就是 accessor 返回值组成的 slice，`Mount` 走的
+也是这份 slice。混着用不可能给同一个端点得出两种描述。
+
+#### 按名字取单个端点
+
+每个可达操作都会生成一个 accessor，名字跟着它服务的 wiring 函数走——
+`GetArticleEndpoint`、`ListArticlesEndpoint`、`CreateArticleEndpoint`、
+`PatchArticleEndpoint`、`DeleteArticleEndpoint`——生成的文档则是 `OpenAPIEndpoint`：
+
+```go
+api := ent.API(client)
+public := http.NewServeMux()
+
+list := api.ListArticlesEndpoint()
+public.Handle(list.Method+" /v1/articles", list.Handler)
+
+// 换一条路径：Bind 喂给端点的是它自己的 placeholder 名，所以你注册的路径里一个都不必带。
+featured := api.GetArticleEndpoint()
+public.Handle(featured.Method+" /v1/featured", featured.Bind(func(string) string { return featuredID }))
+
+public.Handle("GET /v1/openapi.yaml", api.OpenAPIEndpoint().Handler)
+```
+
+这一级的价值就在这个名字上。「端点存不存在」变成编译期事实：`Except(api.OpDelete)` 会连同
+路由一起删掉 `DeleteAuditLogEndpoint`，于是点名它的注册语句直接编译不过，而不是启动时才对着
+一个不存在的端点炸掉——而且从注册那一行可以直接跳到生成的 handler。这里刻意没有
+`EndpointFor(entity, op)` 这类查表函数：查表会把上面两个退化原样留着。
+
+这样取到的端点不是快照。它的 handler 在请求时透过 `*APIHandler` 读当前实现，所以取完之后
+再调 `With` 依然生效。
+
+#### 遍历全部端点
 
 `Endpoints()` 按确定的注册顺序返回 `[]entapi.Endpoint{Method, Path, Handler, Entity, Op}`。每次
 调用都返回一份新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。这是

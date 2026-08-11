@@ -50,80 +50,25 @@ func API(client *Client) *APIHandler {
 		getAuditLog:    GetAuditLog,
 		patchAuditLog:  PatchAuditLog,
 	}
+	// The manifest is assembled from the per-operation accessors below, so the
+	// two can never describe different endpoints: there is one construction and
+	// no second table.
 	h.endpoints = []entapi.Endpoint{
-		{
-			Method:  "GET",
-			Path:    "/articles",
-			Handler: http.HandlerFunc(h.handleListArticles),
-			Entity:  "Article",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/articles",
-			Handler: http.HandlerFunc(h.handleCreateArticle),
-			Entity:  "Article",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/articles/{id}",
-			Handler: http.HandlerFunc(h.handleGetArticle),
-			Entity:  "Article",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/articles/{id}",
-			Handler: http.HandlerFunc(h.handlePatchArticle),
-			Entity:  "Article",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/articles/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteArticle),
-			Entity:  "Article",
-			Op:      "delete",
-		},
-		{
-			Method:  "GET",
-			Path:    "/audit_logs",
-			Handler: http.HandlerFunc(h.handleListAuditLogs),
-			Entity:  "AuditLog",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/audit_logs",
-			Handler: http.HandlerFunc(h.handleCreateAuditLog),
-			Entity:  "AuditLog",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/audit_logs/{id}",
-			Handler: http.HandlerFunc(h.handleGetAuditLog),
-			Entity:  "AuditLog",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/audit_logs/{id}",
-			Handler: http.HandlerFunc(h.handlePatchAuditLog),
-			Entity:  "AuditLog",
-			Op:      "patch",
-		},
+		h.ListArticlesEndpoint(),
+		h.CreateArticleEndpoint(),
+		h.GetArticleEndpoint(),
+		h.PatchArticleEndpoint(),
+		h.DeleteArticleEndpoint(),
+		h.ListAuditLogsEndpoint(),
+		h.CreateAuditLogEndpoint(),
+		h.GetAuditLogEndpoint(),
+		h.PatchAuditLogEndpoint(),
 		// The document describing everything above. It is in the manifest, not
 		// beside it, so Endpoints() sees it and a consumer can wrap or drop it
 		// with the same loop they use for the CRUD endpoints. It is the one
 		// endpoint the document does not describe: it is not part of the
 		// resource surface.
-		{
-			Method:  "GET",
-			Path:    "/openapi.yaml",
-			Handler: http.HandlerFunc(serveOpenAPI),
-		},
+		h.OpenAPIEndpoint(),
 	}
 	for _, ep := range h.endpoints {
 		h.mux.Handle(ep.Method+" "+ep.Path, ep.Handler)
@@ -145,8 +90,142 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // Endpoints returns the generated endpoint manifest in deterministic
 // registration order. It is data to compose into a router of your choosing;
 // ServeHTTP and Mount are the convenience built from the same manifest.
+//
+// It is the batch half of the composition surface. The per-operation accessors
+// below are the take-one-by-name half: they are the values this slice is built
+// from, and Except removes the method along with the endpoint, so naming an
+// operation that is not exposed is a compile error rather than a lookup that
+// finds nothing.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
+}
+
+// ListArticlesEndpoint returns the generated GET /articles endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListArticlesEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/articles",
+		Handler: http.HandlerFunc(h.handleListArticles),
+		Entity:  "Article",
+		Op:      "list",
+	}
+}
+
+// CreateArticleEndpoint returns the generated POST /articles endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateArticleEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/articles",
+		Handler: http.HandlerFunc(h.handleCreateArticle),
+		Entity:  "Article",
+		Op:      "create",
+	}
+}
+
+// GetArticleEndpoint returns the generated GET /articles/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetArticleEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/articles/{id}",
+		Handler: http.HandlerFunc(h.handleGetArticle),
+		Entity:  "Article",
+		Op:      "get",
+	}
+}
+
+// PatchArticleEndpoint returns the generated PATCH /articles/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchArticleEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/articles/{id}",
+		Handler: http.HandlerFunc(h.handlePatchArticle),
+		Entity:  "Article",
+		Op:      "patch",
+	}
+}
+
+// DeleteArticleEndpoint returns the generated DELETE /articles/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) DeleteArticleEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/articles/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteArticle),
+		Entity:  "Article",
+		Op:      "delete",
+	}
+}
+
+// ListAuditLogsEndpoint returns the generated GET /audit_logs endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListAuditLogsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/audit_logs",
+		Handler: http.HandlerFunc(h.handleListAuditLogs),
+		Entity:  "AuditLog",
+		Op:      "list",
+	}
+}
+
+// CreateAuditLogEndpoint returns the generated POST /audit_logs endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateAuditLogEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/audit_logs",
+		Handler: http.HandlerFunc(h.handleCreateAuditLog),
+		Entity:  "AuditLog",
+		Op:      "create",
+	}
+}
+
+// GetAuditLogEndpoint returns the generated GET /audit_logs/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetAuditLogEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/audit_logs/{id}",
+		Handler: http.HandlerFunc(h.handleGetAuditLog),
+		Entity:  "AuditLog",
+		Op:      "get",
+	}
+}
+
+// PatchAuditLogEndpoint returns the generated PATCH /audit_logs/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchAuditLogEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/audit_logs/{id}",
+		Handler: http.HandlerFunc(h.handlePatchAuditLog),
+		Entity:  "AuditLog",
+		Op:      "patch",
+	}
+}
+
+// OpenAPIEndpoint returns the generated GET /openapi.yaml endpoint serving the
+// generated document. It is the manifest's one entry with no Entity and no Op:
+// it describes the resource surface rather than belonging to it.
+func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/openapi.yaml",
+		Handler: http.HandlerFunc(serveOpenAPI),
+	}
 }
 
 // ServeHTTP serves the generated route tree.

@@ -262,7 +262,7 @@ Plus five files per schema, each with its own emission condition:
 | File | Emitted when | Declares |
 |---|---|---|
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
-| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Endpoints`, `ServeHTTP`, `Mount` and the endpoint manifest |
+| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Endpoints`, one `{Op}{E}Endpoint()` accessor per reachable operation, `OpenAPIEndpoint()`, `ServeHTTP`, `Mount` and the endpoint manifest |
 | `openapi.yaml` | at least one entity produced wiring | the OpenAPI 3.1 document describing every generated endpoint |
 | `entapi_openapi.go` | at least one entity produced wiring | the `//go:embed` of that document and the unexported handler serving it |
 | `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
@@ -449,6 +449,55 @@ by the OpenAPI 3.1 validator in `internal/fixtures/httpdemo/e2e`, which is a
 nested module precisely so that validator dependency stays out of this one.
 
 ### Registering exported endpoints
+
+Composition is a ladder, and which rung you stand on is decided by how much of
+the surface you name:
+
+| Rung | Hands you | Reach for it when |
+|---|---|---|
+| `Get{E}`, `List{Es}`, `Create{E}`, … | the operation, with no HTTP attached | the handler is yours to write |
+| `Get{E}Endpoint()`, `List{Es}Endpoint()`, `OpenAPIEndpoint()` | one `entapi.Endpoint`, by name | you register a few endpoints on a router you own, possibly at other paths |
+| `Endpoints()` | every endpoint, in registration order | the policy is per batch — "wrap every write", "split by entity" |
+| `Mount(mux)`, `ServeHTTP` | the whole tree | the generated paths are the paths you want |
+
+The rungs are one surface, not four: `Endpoints()` is a slice of exactly the
+values the accessors return, and `Mount` walks that slice. Mixing them cannot
+produce two descriptions of one endpoint.
+
+#### Taking one endpoint by name
+
+Every reachable operation gets an accessor named after the wiring function it
+serves — `GetArticleEndpoint`, `ListArticlesEndpoint`, `CreateArticleEndpoint`,
+`PatchArticleEndpoint`, `DeleteArticleEndpoint` — plus `OpenAPIEndpoint` for the
+generated document:
+
+```go
+api := ent.API(client)
+public := http.NewServeMux()
+
+list := api.ListArticlesEndpoint()
+public.Handle(list.Method+" /v1/articles", list.Handler)
+
+// A remapped path: Bind feeds the endpoint its own placeholder names, so the
+// path you register carries none of them.
+featured := api.GetArticleEndpoint()
+public.Handle(featured.Method+" /v1/featured", featured.Bind(func(string) string { return featuredID }))
+
+public.Handle("GET /v1/openapi.yaml", api.OpenAPIEndpoint().Handler)
+```
+
+The name is what the rung is for. Existence becomes a compile-time fact:
+`Except(api.OpDelete)` removes `DeleteAuditLogEndpoint` along with the route, so
+a registration naming it stops compiling instead of starting up against an
+endpoint that is not there — and jump-to-definition reaches the generated
+handler from the registration line. There is deliberately no
+`EndpointFor(entity, op)` lookup: a lookup keeps both of those regressions.
+
+An endpoint taken this way is not a snapshot. Its handler reads the current
+implementation through the `*APIHandler` at request time, so a `With` call made
+after you take it still takes effect.
+
+#### Looping over all of them
 
 `Endpoints()` returns `[]entapi.Endpoint{Method, Path, Handler, Entity, Op}` in
 deterministic registration order. Every call returns a fresh slice, so changing

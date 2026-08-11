@@ -52,87 +52,26 @@ func API(client *Client) *APIHandler {
 		patchSession:  PatchSession,
 		deleteSession: DeleteSession,
 	}
+	// The manifest is assembled from the per-operation accessors below, so the
+	// two can never describe different endpoints: there is one construction and
+	// no second table.
 	h.endpoints = []entapi.Endpoint{
-		{
-			Method:  "GET",
-			Path:    "/accounts",
-			Handler: http.HandlerFunc(h.handleListAccounts),
-			Entity:  "Account",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/accounts",
-			Handler: http.HandlerFunc(h.handleCreateAccount),
-			Entity:  "Account",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/accounts/{id}",
-			Handler: http.HandlerFunc(h.handleGetAccount),
-			Entity:  "Account",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/accounts/{id}",
-			Handler: http.HandlerFunc(h.handlePatchAccount),
-			Entity:  "Account",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/accounts/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteAccount),
-			Entity:  "Account",
-			Op:      "delete",
-		},
-		{
-			Method:  "GET",
-			Path:    "/sessions",
-			Handler: http.HandlerFunc(h.handleListSessions),
-			Entity:  "Session",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/sessions",
-			Handler: http.HandlerFunc(h.handleCreateSession),
-			Entity:  "Session",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/sessions/{id}",
-			Handler: http.HandlerFunc(h.handleGetSession),
-			Entity:  "Session",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/sessions/{id}",
-			Handler: http.HandlerFunc(h.handlePatchSession),
-			Entity:  "Session",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/sessions/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteSession),
-			Entity:  "Session",
-			Op:      "delete",
-		},
+		h.ListAccountsEndpoint(),
+		h.CreateAccountEndpoint(),
+		h.GetAccountEndpoint(),
+		h.PatchAccountEndpoint(),
+		h.DeleteAccountEndpoint(),
+		h.ListSessionsEndpoint(),
+		h.CreateSessionEndpoint(),
+		h.GetSessionEndpoint(),
+		h.PatchSessionEndpoint(),
+		h.DeleteSessionEndpoint(),
 		// The document describing everything above. It is in the manifest, not
 		// beside it, so Endpoints() sees it and a consumer can wrap or drop it
 		// with the same loop they use for the CRUD endpoints. It is the one
 		// endpoint the document does not describe: it is not part of the
 		// resource surface.
-		{
-			Method:  "GET",
-			Path:    "/openapi.yaml",
-			Handler: http.HandlerFunc(serveOpenAPI),
-		},
+		h.OpenAPIEndpoint(),
 	}
 	for _, ep := range h.endpoints {
 		h.mux.Handle(ep.Method+" "+ep.Path, ep.Handler)
@@ -154,8 +93,155 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // Endpoints returns the generated endpoint manifest in deterministic
 // registration order. It is data to compose into a router of your choosing;
 // ServeHTTP and Mount are the convenience built from the same manifest.
+//
+// It is the batch half of the composition surface. The per-operation accessors
+// below are the take-one-by-name half: they are the values this slice is built
+// from, and Except removes the method along with the endpoint, so naming an
+// operation that is not exposed is a compile error rather than a lookup that
+// finds nothing.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
+}
+
+// ListAccountsEndpoint returns the generated GET /accounts endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListAccountsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/accounts",
+		Handler: http.HandlerFunc(h.handleListAccounts),
+		Entity:  "Account",
+		Op:      "list",
+	}
+}
+
+// CreateAccountEndpoint returns the generated POST /accounts endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateAccountEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/accounts",
+		Handler: http.HandlerFunc(h.handleCreateAccount),
+		Entity:  "Account",
+		Op:      "create",
+	}
+}
+
+// GetAccountEndpoint returns the generated GET /accounts/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetAccountEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/accounts/{id}",
+		Handler: http.HandlerFunc(h.handleGetAccount),
+		Entity:  "Account",
+		Op:      "get",
+	}
+}
+
+// PatchAccountEndpoint returns the generated PATCH /accounts/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchAccountEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/accounts/{id}",
+		Handler: http.HandlerFunc(h.handlePatchAccount),
+		Entity:  "Account",
+		Op:      "patch",
+	}
+}
+
+// DeleteAccountEndpoint returns the generated DELETE /accounts/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) DeleteAccountEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/accounts/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteAccount),
+		Entity:  "Account",
+		Op:      "delete",
+	}
+}
+
+// ListSessionsEndpoint returns the generated GET /sessions endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListSessionsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/sessions",
+		Handler: http.HandlerFunc(h.handleListSessions),
+		Entity:  "Session",
+		Op:      "list",
+	}
+}
+
+// CreateSessionEndpoint returns the generated POST /sessions endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateSessionEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/sessions",
+		Handler: http.HandlerFunc(h.handleCreateSession),
+		Entity:  "Session",
+		Op:      "create",
+	}
+}
+
+// GetSessionEndpoint returns the generated GET /sessions/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetSessionEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/sessions/{id}",
+		Handler: http.HandlerFunc(h.handleGetSession),
+		Entity:  "Session",
+		Op:      "get",
+	}
+}
+
+// PatchSessionEndpoint returns the generated PATCH /sessions/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchSessionEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/sessions/{id}",
+		Handler: http.HandlerFunc(h.handlePatchSession),
+		Entity:  "Session",
+		Op:      "patch",
+	}
+}
+
+// DeleteSessionEndpoint returns the generated DELETE /sessions/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) DeleteSessionEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/sessions/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteSession),
+		Entity:  "Session",
+		Op:      "delete",
+	}
+}
+
+// OpenAPIEndpoint returns the generated GET /openapi.yaml endpoint serving the
+// generated document. It is the manifest's one entry with no Entity and no Op:
+// it describes the resource surface rather than belonging to it.
+func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/openapi.yaml",
+		Handler: http.HandlerFunc(serveOpenAPI),
+	}
 }
 
 // ServeHTTP serves the generated route tree.

@@ -42,52 +42,21 @@ func API(client *Client) *APIHandler {
 		patchWidget:  PatchWidget,
 		deleteWidget: DeleteWidget,
 	}
+	// The manifest is assembled from the per-operation accessors below, so the
+	// two can never describe different endpoints: there is one construction and
+	// no second table.
 	h.endpoints = []entapi.Endpoint{
-		{
-			Method:  "GET",
-			Path:    "/widgets",
-			Handler: http.HandlerFunc(h.handleListWidgets),
-			Entity:  "Widget",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/widgets",
-			Handler: http.HandlerFunc(h.handleCreateWidget),
-			Entity:  "Widget",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/widgets/{id}",
-			Handler: http.HandlerFunc(h.handleGetWidget),
-			Entity:  "Widget",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/widgets/{id}",
-			Handler: http.HandlerFunc(h.handlePatchWidget),
-			Entity:  "Widget",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/widgets/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteWidget),
-			Entity:  "Widget",
-			Op:      "delete",
-		},
+		h.ListWidgetsEndpoint(),
+		h.CreateWidgetEndpoint(),
+		h.GetWidgetEndpoint(),
+		h.PatchWidgetEndpoint(),
+		h.DeleteWidgetEndpoint(),
 		// The document describing everything above. It is in the manifest, not
 		// beside it, so Endpoints() sees it and a consumer can wrap or drop it
 		// with the same loop they use for the CRUD endpoints. It is the one
 		// endpoint the document does not describe: it is not part of the
 		// resource surface.
-		{
-			Method:  "GET",
-			Path:    "/openapi.yaml",
-			Handler: http.HandlerFunc(serveOpenAPI),
-		},
+		h.OpenAPIEndpoint(),
 	}
 	for _, ep := range h.endpoints {
 		h.mux.Handle(ep.Method+" "+ep.Path, ep.Handler)
@@ -109,8 +78,90 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // Endpoints returns the generated endpoint manifest in deterministic
 // registration order. It is data to compose into a router of your choosing;
 // ServeHTTP and Mount are the convenience built from the same manifest.
+//
+// It is the batch half of the composition surface. The per-operation accessors
+// below are the take-one-by-name half: they are the values this slice is built
+// from, and Except removes the method along with the endpoint, so naming an
+// operation that is not exposed is a compile error rather than a lookup that
+// finds nothing.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
+}
+
+// ListWidgetsEndpoint returns the generated GET /widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListWidgetsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/widgets",
+		Handler: http.HandlerFunc(h.handleListWidgets),
+		Entity:  "Widget",
+		Op:      "list",
+	}
+}
+
+// CreateWidgetEndpoint returns the generated POST /widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/widgets",
+		Handler: http.HandlerFunc(h.handleCreateWidget),
+		Entity:  "Widget",
+		Op:      "create",
+	}
+}
+
+// GetWidgetEndpoint returns the generated GET /widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/widgets/{id}",
+		Handler: http.HandlerFunc(h.handleGetWidget),
+		Entity:  "Widget",
+		Op:      "get",
+	}
+}
+
+// PatchWidgetEndpoint returns the generated PATCH /widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/widgets/{id}",
+		Handler: http.HandlerFunc(h.handlePatchWidget),
+		Entity:  "Widget",
+		Op:      "patch",
+	}
+}
+
+// DeleteWidgetEndpoint returns the generated DELETE /widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) DeleteWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/widgets/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteWidget),
+		Entity:  "Widget",
+		Op:      "delete",
+	}
+}
+
+// OpenAPIEndpoint returns the generated GET /openapi.yaml endpoint serving the
+// generated document. It is the manifest's one entry with no Entity and no Op:
+// it describes the resource surface rather than belonging to it.
+func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/openapi.yaml",
+		Handler: http.HandlerFunc(serveOpenAPI),
+	}
 }
 
 // ServeHTTP serves the generated route tree.

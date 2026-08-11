@@ -72,157 +72,36 @@ func API(client *Client) *APIHandler {
 		patchNillableWidget:   PatchNillableWidget,
 		deleteNillableWidget:  DeleteNillableWidget,
 	}
+	// The manifest is assembled from the per-operation accessors below, so the
+	// two can never describe different endpoints: there is one construction and
+	// no second table.
 	h.endpoints = []entapi.Endpoint{
-		{
-			Method:  "GET",
-			Path:    "/enum_widgets",
-			Handler: http.HandlerFunc(h.handleListEnumWidgets),
-			Entity:  "EnumWidget",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/enum_widgets",
-			Handler: http.HandlerFunc(h.handleCreateEnumWidget),
-			Entity:  "EnumWidget",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/enum_widgets/{id}",
-			Handler: http.HandlerFunc(h.handleGetEnumWidget),
-			Entity:  "EnumWidget",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/enum_widgets/{id}",
-			Handler: http.HandlerFunc(h.handlePatchEnumWidget),
-			Entity:  "EnumWidget",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/enum_widgets/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteEnumWidget),
-			Entity:  "EnumWidget",
-			Op:      "delete",
-		},
-		{
-			Method:  "GET",
-			Path:    "/json_widgets",
-			Handler: http.HandlerFunc(h.handleListJSONWidgets),
-			Entity:  "JSONWidget",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/json_widgets",
-			Handler: http.HandlerFunc(h.handleCreateJSONWidget),
-			Entity:  "JSONWidget",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/json_widgets/{id}",
-			Handler: http.HandlerFunc(h.handleGetJSONWidget),
-			Entity:  "JSONWidget",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/json_widgets/{id}",
-			Handler: http.HandlerFunc(h.handlePatchJSONWidget),
-			Entity:  "JSONWidget",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/json_widgets/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteJSONWidget),
-			Entity:  "JSONWidget",
-			Op:      "delete",
-		},
-		{
-			Method:  "GET",
-			Path:    "/named_type_widgets",
-			Handler: http.HandlerFunc(h.handleListNamedTypeWidgets),
-			Entity:  "NamedTypeWidget",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/named_type_widgets",
-			Handler: http.HandlerFunc(h.handleCreateNamedTypeWidget),
-			Entity:  "NamedTypeWidget",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/named_type_widgets/{id}",
-			Handler: http.HandlerFunc(h.handleGetNamedTypeWidget),
-			Entity:  "NamedTypeWidget",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/named_type_widgets/{id}",
-			Handler: http.HandlerFunc(h.handlePatchNamedTypeWidget),
-			Entity:  "NamedTypeWidget",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/named_type_widgets/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteNamedTypeWidget),
-			Entity:  "NamedTypeWidget",
-			Op:      "delete",
-		},
-		{
-			Method:  "GET",
-			Path:    "/nillable_widgets",
-			Handler: http.HandlerFunc(h.handleListNillableWidgets),
-			Entity:  "NillableWidget",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/nillable_widgets",
-			Handler: http.HandlerFunc(h.handleCreateNillableWidget),
-			Entity:  "NillableWidget",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/nillable_widgets/{id}",
-			Handler: http.HandlerFunc(h.handleGetNillableWidget),
-			Entity:  "NillableWidget",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/nillable_widgets/{id}",
-			Handler: http.HandlerFunc(h.handlePatchNillableWidget),
-			Entity:  "NillableWidget",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/nillable_widgets/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteNillableWidget),
-			Entity:  "NillableWidget",
-			Op:      "delete",
-		},
+		h.ListEnumWidgetsEndpoint(),
+		h.CreateEnumWidgetEndpoint(),
+		h.GetEnumWidgetEndpoint(),
+		h.PatchEnumWidgetEndpoint(),
+		h.DeleteEnumWidgetEndpoint(),
+		h.ListJSONWidgetsEndpoint(),
+		h.CreateJSONWidgetEndpoint(),
+		h.GetJSONWidgetEndpoint(),
+		h.PatchJSONWidgetEndpoint(),
+		h.DeleteJSONWidgetEndpoint(),
+		h.ListNamedTypeWidgetsEndpoint(),
+		h.CreateNamedTypeWidgetEndpoint(),
+		h.GetNamedTypeWidgetEndpoint(),
+		h.PatchNamedTypeWidgetEndpoint(),
+		h.DeleteNamedTypeWidgetEndpoint(),
+		h.ListNillableWidgetsEndpoint(),
+		h.CreateNillableWidgetEndpoint(),
+		h.GetNillableWidgetEndpoint(),
+		h.PatchNillableWidgetEndpoint(),
+		h.DeleteNillableWidgetEndpoint(),
 		// The document describing everything above. It is in the manifest, not
 		// beside it, so Endpoints() sees it and a consumer can wrap or drop it
 		// with the same loop they use for the CRUD endpoints. It is the one
 		// endpoint the document does not describe: it is not part of the
 		// resource surface.
-		{
-			Method:  "GET",
-			Path:    "/openapi.yaml",
-			Handler: http.HandlerFunc(serveOpenAPI),
-		},
+		h.OpenAPIEndpoint(),
 	}
 	for _, ep := range h.endpoints {
 		h.mux.Handle(ep.Method+" "+ep.Path, ep.Handler)
@@ -244,8 +123,285 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // Endpoints returns the generated endpoint manifest in deterministic
 // registration order. It is data to compose into a router of your choosing;
 // ServeHTTP and Mount are the convenience built from the same manifest.
+//
+// It is the batch half of the composition surface. The per-operation accessors
+// below are the take-one-by-name half: they are the values this slice is built
+// from, and Except removes the method along with the endpoint, so naming an
+// operation that is not exposed is a compile error rather than a lookup that
+// finds nothing.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
+}
+
+// ListEnumWidgetsEndpoint returns the generated GET /enum_widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListEnumWidgetsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/enum_widgets",
+		Handler: http.HandlerFunc(h.handleListEnumWidgets),
+		Entity:  "EnumWidget",
+		Op:      "list",
+	}
+}
+
+// CreateEnumWidgetEndpoint returns the generated POST /enum_widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateEnumWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/enum_widgets",
+		Handler: http.HandlerFunc(h.handleCreateEnumWidget),
+		Entity:  "EnumWidget",
+		Op:      "create",
+	}
+}
+
+// GetEnumWidgetEndpoint returns the generated GET /enum_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetEnumWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/enum_widgets/{id}",
+		Handler: http.HandlerFunc(h.handleGetEnumWidget),
+		Entity:  "EnumWidget",
+		Op:      "get",
+	}
+}
+
+// PatchEnumWidgetEndpoint returns the generated PATCH /enum_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchEnumWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/enum_widgets/{id}",
+		Handler: http.HandlerFunc(h.handlePatchEnumWidget),
+		Entity:  "EnumWidget",
+		Op:      "patch",
+	}
+}
+
+// DeleteEnumWidgetEndpoint returns the generated DELETE /enum_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) DeleteEnumWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/enum_widgets/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteEnumWidget),
+		Entity:  "EnumWidget",
+		Op:      "delete",
+	}
+}
+
+// ListJSONWidgetsEndpoint returns the generated GET /json_widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListJSONWidgetsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/json_widgets",
+		Handler: http.HandlerFunc(h.handleListJSONWidgets),
+		Entity:  "JSONWidget",
+		Op:      "list",
+	}
+}
+
+// CreateJSONWidgetEndpoint returns the generated POST /json_widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateJSONWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/json_widgets",
+		Handler: http.HandlerFunc(h.handleCreateJSONWidget),
+		Entity:  "JSONWidget",
+		Op:      "create",
+	}
+}
+
+// GetJSONWidgetEndpoint returns the generated GET /json_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetJSONWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/json_widgets/{id}",
+		Handler: http.HandlerFunc(h.handleGetJSONWidget),
+		Entity:  "JSONWidget",
+		Op:      "get",
+	}
+}
+
+// PatchJSONWidgetEndpoint returns the generated PATCH /json_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchJSONWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/json_widgets/{id}",
+		Handler: http.HandlerFunc(h.handlePatchJSONWidget),
+		Entity:  "JSONWidget",
+		Op:      "patch",
+	}
+}
+
+// DeleteJSONWidgetEndpoint returns the generated DELETE /json_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) DeleteJSONWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/json_widgets/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteJSONWidget),
+		Entity:  "JSONWidget",
+		Op:      "delete",
+	}
+}
+
+// ListNamedTypeWidgetsEndpoint returns the generated GET /named_type_widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListNamedTypeWidgetsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/named_type_widgets",
+		Handler: http.HandlerFunc(h.handleListNamedTypeWidgets),
+		Entity:  "NamedTypeWidget",
+		Op:      "list",
+	}
+}
+
+// CreateNamedTypeWidgetEndpoint returns the generated POST /named_type_widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateNamedTypeWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/named_type_widgets",
+		Handler: http.HandlerFunc(h.handleCreateNamedTypeWidget),
+		Entity:  "NamedTypeWidget",
+		Op:      "create",
+	}
+}
+
+// GetNamedTypeWidgetEndpoint returns the generated GET /named_type_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetNamedTypeWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/named_type_widgets/{id}",
+		Handler: http.HandlerFunc(h.handleGetNamedTypeWidget),
+		Entity:  "NamedTypeWidget",
+		Op:      "get",
+	}
+}
+
+// PatchNamedTypeWidgetEndpoint returns the generated PATCH /named_type_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchNamedTypeWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/named_type_widgets/{id}",
+		Handler: http.HandlerFunc(h.handlePatchNamedTypeWidget),
+		Entity:  "NamedTypeWidget",
+		Op:      "patch",
+	}
+}
+
+// DeleteNamedTypeWidgetEndpoint returns the generated DELETE /named_type_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) DeleteNamedTypeWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/named_type_widgets/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteNamedTypeWidget),
+		Entity:  "NamedTypeWidget",
+		Op:      "delete",
+	}
+}
+
+// ListNillableWidgetsEndpoint returns the generated GET /nillable_widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) ListNillableWidgetsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/nillable_widgets",
+		Handler: http.HandlerFunc(h.handleListNillableWidgets),
+		Entity:  "NillableWidget",
+		Op:      "list",
+	}
+}
+
+// CreateNillableWidgetEndpoint returns the generated POST /nillable_widgets endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) CreateNillableWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/nillable_widgets",
+		Handler: http.HandlerFunc(h.handleCreateNillableWidget),
+		Entity:  "NillableWidget",
+		Op:      "create",
+	}
+}
+
+// GetNillableWidgetEndpoint returns the generated GET /nillable_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) GetNillableWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/nillable_widgets/{id}",
+		Handler: http.HandlerFunc(h.handleGetNillableWidget),
+		Entity:  "NillableWidget",
+		Op:      "get",
+	}
+}
+
+// PatchNillableWidgetEndpoint returns the generated PATCH /nillable_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) PatchNillableWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/nillable_widgets/{id}",
+		Handler: http.HandlerFunc(h.handlePatchNillableWidget),
+		Entity:  "NillableWidget",
+		Op:      "patch",
+	}
+}
+
+// DeleteNillableWidgetEndpoint returns the generated DELETE /nillable_widgets/{id} endpoint,
+// the same value the manifest carries. Its handler reads the current
+// implementation through h, so a With after this call still takes effect.
+func (h *APIHandler) DeleteNillableWidgetEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/nillable_widgets/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteNillableWidget),
+		Entity:  "NillableWidget",
+		Op:      "delete",
+	}
+}
+
+// OpenAPIEndpoint returns the generated GET /openapi.yaml endpoint serving the
+// generated document. It is the manifest's one entry with no Entity and no Op:
+// it describes the resource surface rather than belonging to it.
+func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/openapi.yaml",
+		Handler: http.HandlerFunc(serveOpenAPI),
+	}
 }
 
 // ServeHTTP serves the generated route tree.

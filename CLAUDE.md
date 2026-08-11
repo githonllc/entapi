@@ -338,7 +338,16 @@ family may disappear when `OpCreate` is explicitly excepted.
   `templates/errors.tmpl` -> `entapi_errors.go`, generated when any entity is
   annotated, holding the package's `ErrorMap` (#13); and
   `templates/http.tmpl` -> `entapi_http.go`, holding `APIHandler`, `API(client)`,
-  `ServeHTTP`, `Mount`, the endpoint manifest and request-time function fields; and
+  `ServeHTTP`, `Mount`, the endpoint manifest and request-time function fields —
+  plus one named `…Endpoint()` accessor per reachable operation (the wiring
+  function's name plus `Endpoint`, so list is plural: `GetArticleEndpoint()`,
+  `ListArticlesEndpoint()`) and
+  `OpenAPIEndpoint()` for the manifest's Op-less entry (#119). The manifest is
+  **built from those accessors**, so take-one-by-name and the batch loop share
+  one construction and cannot describe different endpoints; the accessors are
+  methods on `APIHandler`, so they add no new collision shape — `Except` removes
+  the method with the endpoint, which is what makes naming a removed operation a
+  compile error; and
   `templates/openapi.tmpl` -> `openapi.yaml` with
   `templates/openapi_embed.tmpl` -> `entapi_openapi.go`, gated together on the
   same `wiredAny` condition as the route tree they describe.

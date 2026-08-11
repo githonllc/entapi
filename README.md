@@ -262,7 +262,7 @@ Plus five files per schema, each with its own emission condition:
 | File | Emitted when | Declares |
 |---|---|---|
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
-| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Endpoints`, `ServeHTTP`, `Mount` and the endpoint manifest |
+| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Endpoints`, one named `…Endpoint()` accessor per reachable operation (the wiring function's name plus `Endpoint`: `GetArticleEndpoint()`, `ListArticlesEndpoint()`, …), `OpenAPIEndpoint()`, `ServeHTTP`, `Mount` and the endpoint manifest |
 | `openapi.yaml` | at least one entity produced wiring | the OpenAPI 3.1 document describing every generated endpoint |
 | `entapi_openapi.go` | at least one entity produced wiring | the `//go:embed` of that document and the unexported handler serving it |
 | `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
@@ -450,9 +450,72 @@ nested module precisely so that validator dependency stays out of this one.
 
 ### Registering exported endpoints
 
+Composition is a ladder, and which rung you stand on is decided by how much of
+the surface you name:
+
+| Rung | Hands you | Reach for it when |
+|---|---|---|
+| `Get{E}`, `List{Es}`, `Create{E}`, … | the operation, with no HTTP attached | the handler is yours to write |
+| `Get{E}Endpoint()`, `List{Es}Endpoint()`, `OpenAPIEndpoint()` | one `entapi.Endpoint`, by name | you register a few endpoints on a router you own, possibly at other paths |
+| `Endpoints()` | every endpoint, in registration order | the policy is per batch — "wrap every write", "split by entity" |
+| `Mount(mux)`, `ServeHTTP` | the whole tree | the generated paths are the paths you want |
+
+The first rung is the ground the ladder stands on rather than a step on it: a
+wiring function is the operation itself, with no HTTP attached and no
+`entapi.Endpoint` anywhere. `With` replaces what the generated handlers call,
+not what your own code calls, so a direct call to `ListArticles` is unaffected
+by it.
+
+The three HTTP rungs above it are one surface, not three: the manifest is built
+by calling those same accessors, and `Mount` walks the slice they produce.
+Mixing them cannot produce two descriptions of one endpoint. Do not try to
+check that by value, though: `Endpoint` is not comparable — `==`, map keys and
+`slices.Contains` panic on the handler's func value, and `reflect.DeepEqual` is
+always false, because every accessor call constructs a fresh handler value. To
+skip or deduplicate rows, key on `Method` plus `Path`, or on `Op`.
+
+#### Taking one endpoint by name
+
+Every reachable operation gets an accessor named after the wiring function it
+serves — `GetArticleEndpoint`, `ListArticlesEndpoint`, `CreateArticleEndpoint`,
+`PatchArticleEndpoint`, `DeleteArticleEndpoint` — plus `OpenAPIEndpoint` for the
+generated document:
+
+```go
+api := ent.API(client)
+public := http.NewServeMux()
+
+list := api.ListArticlesEndpoint()
+public.Handle(list.Method+" /v1/articles", list.Handler)
+
+// A remapped path: Bind feeds the endpoint its own placeholder names, so the
+// path you register carries none of them.
+featured := api.GetArticleEndpoint()
+public.Handle(featured.Method+" /v1/featured", featured.Bind(func(string) string { return featuredID }))
+
+public.Handle("GET /v1/openapi.yaml", api.OpenAPIEndpoint().Handler)
+```
+
+The name is what the rung is for. Existence becomes a compile-time fact:
+`Except(api.OpDelete)` removes `DeleteAuditLogEndpoint` along with the route, so
+a registration naming it stops compiling instead of starting up against an
+endpoint that is not there — and jump-to-definition reaches the generated
+handler from the registration line. There is deliberately no
+`EndpointFor(entity, op)` lookup: a lookup keeps both of those regressions.
+
+An endpoint taken this way is not a snapshot. Its handler reads the current
+implementation through the `*APIHandler` at request time, so a `With` call made
+after you take it still takes effect.
+
+#### Looping over all of them
+
 `Endpoints()` returns `[]entapi.Endpoint{Method, Path, Handler, Entity, Op}` in
 deterministic registration order. Every call returns a fresh slice, so changing
-its rows cannot change what `ServeHTTP` or a later `Mount` registers. The list
+its rows cannot change what `ServeHTTP` or a later `Mount` registers. The rows
+are not snapshots, though, for the same reason a single accessor's endpoint is
+not one: each carries the handler that reads the current implementation through
+the `*APIHandler` at request time, so a `With` call made after `Endpoints()`
+returned still takes effect. The list
 is a data export, not a mutation API: remove generated endpoints with `Except`,
 provide custom implementations with `With`, and register extra endpoints on your
 own router.
@@ -461,7 +524,10 @@ own router.
 `OpList`, `OpCreate`, `OpGet`, `OpPatch`, `OpDelete`, or `OpNone` for an endpoint
 that belongs to no resource. They carry the identity the path used to hide, so
 splitting the surface by audience is a comparison the compiler checks rather
-than a match on path text, where a typo selects nothing and reports nothing:
+than a match on path text, where a typo selects nothing and reports nothing.
+And because `Endpoint` itself is not comparable, a field comparison like the
+`switch` below is the required spelling for picking out a row, not a stylistic
+one:
 
 ```go
 for _, endpoint := range api.Endpoints() {
@@ -1421,6 +1487,15 @@ generated handler — data you compose into a router you own — and the interna
 `ServeMux` behind `ServeHTTP`/`Mount` is an optional convenience built from that
 same manifest. Regenerate, then rename call sites: `api.Routes()` →
 `api.Endpoints()` and `[]entapi.Route` → `[]entapi.Endpoint`.
+
+**Additive, with one upgrade hazard (#119):** the generated `APIHandler` now
+carries one exported `…Endpoint()` method per reachable operation (the wiring
+function's name plus `Endpoint`: `GetArticle` → `GetArticleEndpoint`), plus
+`OpenAPIEndpoint()`. Those names land in your `ent` package's method set. If
+you hand-wrote a helper of the same name on `*APIHandler` — the pre-#119
+workaround for taking one endpoint by identity was exactly such an index —
+regeneration makes it a duplicate-method compile error; delete your copy and
+call the generated accessor.
 
 **Breaking and behaviour change (#70):** generated `RegisterSoftDelete` has
 been removed. Regenerate, then delete every `ent.RegisterSoftDelete(client)`

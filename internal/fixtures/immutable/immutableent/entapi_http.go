@@ -42,52 +42,21 @@ func API(client *Client) *APIHandler {
 		patchDoc:  PatchDoc,
 		deleteDoc: DeleteDoc,
 	}
+	// The manifest is assembled from the per-operation accessors below, so the
+	// two can never describe different endpoints: there is one construction and
+	// no second table.
 	h.endpoints = []entapi.Endpoint{
-		{
-			Method:  "GET",
-			Path:    "/docs",
-			Handler: http.HandlerFunc(h.handleListDocs),
-			Entity:  "Doc",
-			Op:      "list",
-		},
-		{
-			Method:  "POST",
-			Path:    "/docs",
-			Handler: http.HandlerFunc(h.handleCreateDoc),
-			Entity:  "Doc",
-			Op:      "create",
-		},
-		{
-			Method:  "GET",
-			Path:    "/docs/{id}",
-			Handler: http.HandlerFunc(h.handleGetDoc),
-			Entity:  "Doc",
-			Op:      "get",
-		},
-		{
-			Method:  "PATCH",
-			Path:    "/docs/{id}",
-			Handler: http.HandlerFunc(h.handlePatchDoc),
-			Entity:  "Doc",
-			Op:      "patch",
-		},
-		{
-			Method:  "DELETE",
-			Path:    "/docs/{id}",
-			Handler: http.HandlerFunc(h.handleDeleteDoc),
-			Entity:  "Doc",
-			Op:      "delete",
-		},
+		h.ListDocsEndpoint(),
+		h.CreateDocEndpoint(),
+		h.GetDocEndpoint(),
+		h.PatchDocEndpoint(),
+		h.DeleteDocEndpoint(),
 		// The document describing everything above. It is in the manifest, not
 		// beside it, so Endpoints() sees it and a consumer can wrap or drop it
 		// with the same loop they use for the CRUD endpoints. It is the one
 		// endpoint the document does not describe: it is not part of the
 		// resource surface.
-		{
-			Method:  "GET",
-			Path:    "/openapi.yaml",
-			Handler: http.HandlerFunc(serveOpenAPI),
-		},
+		h.OpenAPIEndpoint(),
 	}
 	for _, ep := range h.endpoints {
 		h.mux.Handle(ep.Method+" "+ep.Path, ep.Handler)
@@ -109,11 +78,85 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // Endpoints returns the generated endpoint manifest in deterministic
 // registration order. It is data to compose into a router of your choosing;
 // ServeHTTP and Mount are the convenience built from the same manifest.
+//
+// It is the batch half of the composition surface. The per-operation accessors
+// below are the take-one-by-name half: this slice is built by calling them, so
+// the two cannot describe different endpoints, and every handler reads the
+// current implementation through h, so a With after the call still takes
+// effect. Endpoint values are not comparable; to skip or deduplicate rows, key
+// on Method plus Path, or on Op. Except removes the method along with the
+// endpoint, so naming an operation that is not exposed is a compile error.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
 }
 
-// ServeHTTP serves the generated route tree.
+// ListDocsEndpoint returns the generated GET /docs endpoint.
+func (h *APIHandler) ListDocsEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/docs",
+		Handler: http.HandlerFunc(h.handleListDocs),
+		Entity:  "Doc",
+		Op:      "list",
+	}
+}
+
+// CreateDocEndpoint returns the generated POST /docs endpoint.
+func (h *APIHandler) CreateDocEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "POST",
+		Path:    "/docs",
+		Handler: http.HandlerFunc(h.handleCreateDoc),
+		Entity:  "Doc",
+		Op:      "create",
+	}
+}
+
+// GetDocEndpoint returns the generated GET /docs/{id} endpoint.
+func (h *APIHandler) GetDocEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/docs/{id}",
+		Handler: http.HandlerFunc(h.handleGetDoc),
+		Entity:  "Doc",
+		Op:      "get",
+	}
+}
+
+// PatchDocEndpoint returns the generated PATCH /docs/{id} endpoint.
+func (h *APIHandler) PatchDocEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "PATCH",
+		Path:    "/docs/{id}",
+		Handler: http.HandlerFunc(h.handlePatchDoc),
+		Entity:  "Doc",
+		Op:      "patch",
+	}
+}
+
+// DeleteDocEndpoint returns the generated DELETE /docs/{id} endpoint.
+func (h *APIHandler) DeleteDocEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "DELETE",
+		Path:    "/docs/{id}",
+		Handler: http.HandlerFunc(h.handleDeleteDoc),
+		Entity:  "Doc",
+		Op:      "delete",
+	}
+}
+
+// OpenAPIEndpoint returns the generated GET /openapi.yaml endpoint serving the
+// generated document. It is the manifest's one entry with no Entity and no Op:
+// it describes the resource surface rather than belonging to it.
+func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/openapi.yaml",
+		Handler: http.HandlerFunc(serveOpenAPI),
+	}
+}
+
+// ServeHTTP serves every generated endpoint through the internal mux.
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }

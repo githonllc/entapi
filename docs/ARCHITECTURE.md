@@ -86,7 +86,10 @@ end note
 定制点或注解式 interceptor chain。生成的 handler 固定为「绑定 → 调一个函数 → 写出」；中间函数
 保存在 `APIHandler` 的未导出字段里并在请求到达时读取。生成的 wiring 仍全是自由函数
 （`templates/wiring.tmpl` — 文件头设计说明），所以默认实现与定制实现具有同一份编译期签名；`With`
-只在开始服务前给这些字段赋值，`Endpoints()` 则把同一份端点清单按值复制给消费者。
+只在开始服务前给这些字段赋值，`Endpoints()` 则把同一份端点清单按值复制给消费者。清单本身由每个
+可达操作的具名 accessor（wiring 函数名加 `Endpoint` 后缀：`GetArticleEndpoint()`、
+`ListArticlesEndpoint()`……外加文档的 `OpenAPIEndpoint()`）拼出来，所以「按名字取
+一个」与「遍历全部」共用同一份构造，不存在第二张表（#119）。
 
 **三条承重不变式**：
 

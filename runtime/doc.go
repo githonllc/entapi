@@ -65,6 +65,10 @@
 // [AppendEach] and [AppendEachSlice] when filter slots became slices. See the
 // README migration notes for the old-to-new wire spelling table.
 //
+// Route is now [Endpoint] and Route.Bind is now [Endpoint.Bind]; generated
+// APIHandler.Routes() is now APIHandler.Endpoints(). Only the names changed —
+// see the README for the migration note.
+//
 // # Binding, classifying and writing
 //
 // [BindJSON], [Status] and [WriteJSON] are the three steps every generated HTTP

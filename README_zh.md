@@ -232,7 +232,7 @@ func (Post) Edges() []ent.Edge {
 | 文件 | 生成条件 | 声明 |
 |---|---|---|
 | `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
-| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Endpoints`、`ServeHTTP`、`Mount` 与端点 manifest |
+| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Endpoints`、每个可达操作一个具名 `…Endpoint()` accessor（wiring 函数名加 `Endpoint` 后缀：`GetArticleEndpoint()`、`ListArticlesEndpoint()`……）、`OpenAPIEndpoint()`、`ServeHTTP`、`Mount` 与端点 manifest |
 | `openapi.yaml` | 至少一个实体产出了接线 | 描述全部生成端点的 OpenAPI 3.1 文档 |
 | `entapi_openapi.go` | 至少一个实体产出了接线 | 该文档的 `//go:embed` 与未导出的服务函数 |
 | `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | 未导出的查询 traverser 与删除 hook |
@@ -383,15 +383,67 @@ func withAuth(c *gin.Context) {
 
 ### 注册导出的端点
 
+组合方式是一架梯子，站哪一级取决于你要点名多大一片面：
+
+| 级 | 拿到的东西 | 什么时候用 |
+|---|---|---|
+| `Get{E}`、`List{Es}`、`Create{E}`…… | 只有操作，不带 HTTP | handler 由你自己写 |
+| `Get{E}Endpoint()`、`List{Es}Endpoint()`、`OpenAPIEndpoint()` | 按名字拿到的单个 `entapi.Endpoint` | 往自己的路由器上注册少数几个端点，路径也可以另选 |
+| `Endpoints()` | 全部端点，按注册顺序 | 策略是成批的——「包住所有写操作」「按实体切分」 |
+| `Mount(mux)`、`ServeHTTP` | 整棵树 | 生成的路径就是你要的路径 |
+
+第一级不是梯子上的一级，而是梯子立在的那块地：wiring 函数就是操作本身，不带 HTTP，
+也不涉及任何 `entapi.Endpoint`。`With` 换掉的是生成的 handler 调用的那个实现，不是你自己
+代码调用的那个——直接调用 `ListArticles` 不受它影响。
+
+它上面那三级是同一片面，不是三份：manifest 就是靠调用这些 accessor 拼出来的，
+`Mount` 走的也是这份 slice。混着用不可能给同一个端点得出两种描述。但别试图用值比较去
+验证这一点：`Endpoint` 不可比较——`==`、map 键和 `slices.Contains` 会在 handler 的
+func 值上 panic，而 `reflect.DeepEqual` 恒为 false，因为每次调 accessor 都会构造一个
+新的 handler 值。要跳过或去重某些行，用 `Method` 加 `Path`，或者用 `Op` 做键。
+
+#### 按名字取单个端点
+
+每个可达操作都会生成一个 accessor，名字跟着它服务的 wiring 函数走——
+`GetArticleEndpoint`、`ListArticlesEndpoint`、`CreateArticleEndpoint`、
+`PatchArticleEndpoint`、`DeleteArticleEndpoint`——生成的文档则是 `OpenAPIEndpoint`：
+
+```go
+api := ent.API(client)
+public := http.NewServeMux()
+
+list := api.ListArticlesEndpoint()
+public.Handle(list.Method+" /v1/articles", list.Handler)
+
+// 换一条路径：Bind 喂给端点的是它自己的 placeholder 名，所以你注册的路径里一个都不必带。
+featured := api.GetArticleEndpoint()
+public.Handle(featured.Method+" /v1/featured", featured.Bind(func(string) string { return featuredID }))
+
+public.Handle("GET /v1/openapi.yaml", api.OpenAPIEndpoint().Handler)
+```
+
+这一级的价值就在这个名字上。「端点存不存在」变成编译期事实：`Except(api.OpDelete)` 会连同
+路由一起删掉 `DeleteAuditLogEndpoint`，于是点名它的注册语句直接编译不过，而不是启动时才对着
+一个不存在的端点炸掉——而且从注册那一行可以直接跳到生成的 handler。这里刻意没有
+`EndpointFor(entity, op)` 这类查表函数：查表会把上面两个退化原样留着。
+
+这样取到的端点不是快照。它的 handler 在请求时透过 `*APIHandler` 读当前实现，所以取完之后
+再调 `With` 依然生效。
+
+#### 遍历全部端点
+
 `Endpoints()` 按确定的注册顺序返回 `[]entapi.Endpoint{Method, Path, Handler, Entity, Op}`。每次
-调用都返回一份新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。这是
+调用都返回一份新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。但其中
+的行同样不是快照——理由和单个 accessor 取到的端点一样：每一行带的 handler 都在请求时透过
+`*APIHandler` 读当前实现，所以 `Endpoints()` 返回之后再调 `With` 依然生效。这是
 数据导出，不是修改 API：用 `Except` 删除生成端点，用 `With` 提供自定义实现，额外端点直接
 注册到消费者自己的路由器。
 
 `Entity` 是 Ent 的类型名（`"Article"`），`Op` 是 `entapi.Op` —— `OpList`、`OpCreate`、
 `OpGet`、`OpPatch`、`OpDelete`，不属于任何资源的端点则是 `OpNone`。它们带上了过去被路径
 藏起来的身份，于是「按受众切分这棵树」变成一次编译器能检查的比较，而不是对路径文本做匹配
-——后者拼错了就什么都选不中，且什么都不报：
+——后者拼错了就什么都选不中，且什么都不报。而且因为 `Endpoint` 本身不可比较，下面这个
+`switch` 按字段比较的写法是挑出某一行的**必须**写法，不是风格选择：
 
 ```go
 for _, endpoint := range api.Endpoints() {
@@ -1190,6 +1242,12 @@ entapi 在做路由，它并没有：一个 `Endpoint` 是某个生成 handler �
 你自己的 router 的数据——而 `ServeHTTP`/`Mount` 背后那个内部 `ServeMux`，只是用同一份
 manifest 搭出来的可选便利层。重新生成后重命名调用点：`api.Routes()` → `api.Endpoints()`，
 `[]entapi.Route` → `[]entapi.Endpoint`。
+
+**新增，带一个升级隐患（#119）：** 生成的 `APIHandler` 现在为每个可达操作携带一个导出的
+`…Endpoint()` 方法（wiring 函数名加 `Endpoint` 后缀：`GetArticle` → `GetArticleEndpoint`），
+外加 `OpenAPIEndpoint()`。这些名字进入你 `ent` 包的方法集。如果你此前在 `*APIHandler` 上
+手写过同名辅助方法——#119 之前"按身份取单个端点"的标准变通正是这样一个索引——重新生成后
+它会变成方法重复定义的编译错误；删掉你那份，改调生成的 accessor。
 
 **破坏性与行为变更（#70）：** 生成的 `RegisterSoftDelete` 已删除。重新生成后，删掉所有
 `ent.RegisterSoftDelete(client)` 调用；在 schema 中嵌入 `SoftDeleteMixin` 现在会自动配置

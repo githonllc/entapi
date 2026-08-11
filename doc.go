@@ -77,7 +77,8 @@
 // WithRequired has no successor because HTTP requiredness no longer overrides
 // the database schema.
 //
-// Generated Update{Entity} was renamed to Patch{Entity}. The generated base
+// Generated Update{Entity} was renamed to Patch{Entity}, and generated Routes()
+// to Endpoints() when entapi.Route became entapi.Endpoint. The generated base
 // service, base handler and RegisterSoftDelete entry point were removed in
 // earlier migrations. See README.md for the complete generated surface and
 // refusal matrix.

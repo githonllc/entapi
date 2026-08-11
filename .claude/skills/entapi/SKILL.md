@@ -220,6 +220,38 @@ func (h *Handler) Update(c *gin.Context) {
 is recorded by the generated `UnmarshalJSON`, so a patch assembled in Go carries
 no presence at all and every nil pointer reads as "absent".
 
+## Composing generated endpoints
+
+The generated HTTP surface is a ladder; pick the rung by how much of it you name.
+
+| Rung | Hands you | Use when |
+|---|---|---|
+| `GetCourier`, `ListCouriers`, … | the operation, no HTTP | the handler is yours (the pattern above) |
+| `api.GetCourierEndpoint()`, `api.ListCouriersEndpoint()`, `api.OpenAPIEndpoint()` | one `entapi.Endpoint`, by name | a few endpoints on your own router, possibly at other paths |
+| `api.Endpoints()` | all of them, in registration order | batch policy: wrap every write, split by entity |
+| `api.Mount(mux)` / `api` as `http.Handler` | the whole tree | the generated paths are the paths you want |
+
+```go
+api := ent.API(client)
+
+list := api.ListCouriersEndpoint()
+r.Handle(list.Method+" /v1/couriers", list.Handler)
+
+// Bind supplies the endpoint's own placeholder names, so a remapped path
+// carries none of them.
+me := api.GetCourierEndpoint()
+r.Handle(me.Method+" /v1/me", me.Bind(func(string) string { return actorID }))
+```
+
+`Endpoints()` is a slice of exactly the values those accessors return, so the
+rungs cannot disagree. Two properties are the reason to prefer an accessor when
+you are naming one endpoint: `Except(api.OpDelete)` removes
+`DeleteCourierEndpoint` along with the route, so naming a removed operation is a
+compile error rather than a startup panic; and the registration line has a
+jump-to-definition target. There is no `EndpointFor(entity, op)` lookup, on
+purpose. An endpoint taken this way is not a snapshot — its handler reads the
+current implementation through the `*APIHandler`, so a later `With` still wins.
+
 ## Entity Complexity Spectrum
 
 ```
@@ -282,7 +314,7 @@ ext := entapi.NewExtensionWithOptions(
 5. **Handle the error from `NewXResponse`** — a not-loaded edge is an error, not a nil field. The removed `XEntToResponse` swallowed it and returned nil
 6. **DTOs are in `ent/` package** — import `ent` not `ent/domain`
 7. **Old `{entity}_base_service.go` / `{entity}_base_handler.go` are deleted by the next generation run** — do not re-add them by hand
-8. **`ent/openapi.yaml` is generated and committed** — it is served at `GET /openapi.yaml` from an embedded copy, so edit the schema and regenerate rather than editing the document. Deleting its first `#` marker line only removes it from cleanup's deletion candidates (it survives once it stops being generated); it does **not** stop the next generation from overwriting it. For a `servers` entry or a path prefix, keep your own document under your own name and serve it from a router you build from `Endpoints()`, skipping the generated `GET /openapi.yaml` row
+8. **`ent/openapi.yaml` is generated and committed** — it is served at `GET /openapi.yaml` from an embedded copy, so edit the schema and regenerate rather than editing the document. Deleting its first `#` marker line only removes it from cleanup's deletion candidates (it survives once it stops being generated); it does **not** stop the next generation from overwriting it. For a `servers` entry or a path prefix, keep your own document under your own name and serve it from a router you build from `Endpoints()`, skipping the generated `GET /openapi.yaml` row — or simply never register `api.OpenAPIEndpoint()` on the router you build from the accessors
 
 ## Source Files
 

@@ -44,17 +44,13 @@ func API(client *Client) *APIHandler {
 {{- end }}
 {{- end }}
 	}
+	// The manifest is assembled from the per-operation accessors below, so the
+	// two can never describe different endpoints: there is one construction and
+	// no second table.
 	h.endpoints = []entapi.Endpoint{
 {{- range $node := $.Nodes }}
-{{- $path := routePath $node }}
 {{- range $op := resourceOps $node }}
-		{
-			Method:  "{{ $op.Method }}",
-			Path:    "{{ $path }}{{ $op.PathSuffix }}",
-			Handler: http.HandlerFunc(h.{{ $op.Handler }}),
-			Entity:  "{{ $node.Name }}",
-			Op:      "{{ $op.Name }}",
-		},
+		h.{{ $op.Function }}Endpoint(),
 {{- end }}
 {{- end }}
 		// The document describing everything above. It is in the manifest, not
@@ -62,11 +58,7 @@ func API(client *Client) *APIHandler {
 		// with the same loop they use for the CRUD endpoints. It is the one
 		// endpoint the document does not describe: it is not part of the
 		// resource surface.
-		{
-			Method:  "GET",
-			Path:    "/openapi.yaml",
-			Handler: http.HandlerFunc(serveOpenAPI),
-		},
+		h.OpenAPIEndpoint(),
 	}
 	for _, ep := range h.endpoints {
 		h.mux.Handle(ep.Method+" "+ep.Path, ep.Handler)
@@ -88,11 +80,44 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // Endpoints returns the generated endpoint manifest in deterministic
 // registration order. It is data to compose into a router of your choosing;
 // ServeHTTP and Mount are the convenience built from the same manifest.
+//
+// It is the batch half of the composition surface. The per-operation accessors
+// below are the take-one-by-name half: this slice is built by calling them, so
+// the two cannot describe different endpoints, and every handler reads the
+// current implementation through h, so a With after the call still takes
+// effect. Endpoint values are not comparable; to skip or deduplicate rows, key
+// on Method plus Path, or on Op. Except removes the method along with the
+// endpoint, so naming an operation that is not exposed is a compile error.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
 }
+{{ range $node := $.Nodes }}
+{{- $path := routePath $node }}
+{{- range $op := resourceOps $node }}
+// {{ $op.Function }}Endpoint returns the generated {{ $op.Method }} {{ $path }}{{ $op.PathSuffix }} endpoint.
+func (h *APIHandler) {{ $op.Function }}Endpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "{{ $op.Method }}",
+		Path:    "{{ $path }}{{ $op.PathSuffix }}",
+		Handler: http.HandlerFunc(h.{{ $op.Handler }}),
+		Entity:  "{{ $node.Name }}",
+		Op:      "{{ $op.Name }}",
+	}
+}
+{{ end }}
+{{- end }}
+// OpenAPIEndpoint returns the generated GET /openapi.yaml endpoint serving the
+// generated document. It is the manifest's one entry with no Entity and no Op:
+// it describes the resource surface rather than belonging to it.
+func (h *APIHandler) OpenAPIEndpoint() entapi.Endpoint {
+	return entapi.Endpoint{
+		Method:  "GET",
+		Path:    "/openapi.yaml",
+		Handler: http.HandlerFunc(serveOpenAPI),
+	}
+}
 
-// ServeHTTP serves the generated route tree.
+// ServeHTTP serves every generated endpoint through the internal mux.
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }

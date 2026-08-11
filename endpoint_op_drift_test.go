@@ -65,8 +65,9 @@ func TestEndpointManifestRendersOpFromResourceOps(t *testing.T) {
 		t.Fatalf("read templates/http.tmpl: %v", err)
 	}
 
-	// Both fields must come from the range variables the manifest already
-	// iterates -- $node for the entity, $op for the operation.
+	// Both fields must come from the range variables the accessor block
+	// iterates -- $node for the entity, $op for the operation. The manifest is
+	// assembled from those accessors, so pinning the accessors pins it too.
 	wantEntity := regexp.MustCompile(`Entity:\s*"\{\{\s*\$node\.Name\s*\}\}"`)
 	if !wantEntity.Match(content) {
 		t.Error("http.tmpl no longer renders Endpoint.Entity from $node.Name; it must not carry its own entity table")

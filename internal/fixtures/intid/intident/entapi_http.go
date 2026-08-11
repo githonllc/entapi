@@ -80,11 +80,12 @@ func (h *APIHandler) With(opts ...APIOption) *APIHandler {
 // ServeHTTP and Mount are the convenience built from the same manifest.
 //
 // It is the batch half of the composition surface. The per-operation accessors
-// below are the take-one-by-name half: each returns, field for field, the entry
-// this slice carries, and its handler reads the current implementation through
-// h, so a With after the call still takes effect. Except removes the method
-// along with the endpoint, so naming an operation that is not exposed is a
-// compile error.
+// below are the take-one-by-name half: this slice is built by calling them, so
+// the two cannot describe different endpoints, and every handler reads the
+// current implementation through h, so a With after the call still takes
+// effect. Endpoint values are not comparable; to skip or deduplicate rows, key
+// on Method plus Path, or on Op. Except removes the method along with the
+// endpoint, so naming an operation that is not exposed is a compile error.
 func (h *APIHandler) Endpoints() []entapi.Endpoint {
 	return append([]entapi.Endpoint(nil), h.endpoints...)
 }

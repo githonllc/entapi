@@ -232,7 +232,7 @@ func (Post) Edges() []ent.Edge {
 | 文件 | 生成条件 | 声明 |
 |---|---|---|
 | `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
-| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Endpoints`、每个可达操作一个 `{Op}{E}Endpoint()` accessor、`OpenAPIEndpoint()`、`ServeHTTP`、`Mount` 与端点 manifest |
+| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Endpoints`、每个可达操作一个具名 `…Endpoint()` accessor（wiring 函数名加 `Endpoint` 后缀：`GetArticleEndpoint()`、`ListArticlesEndpoint()`……）、`OpenAPIEndpoint()`、`ServeHTTP`、`Mount` 与端点 manifest |
 | `openapi.yaml` | 至少一个实体产出了接线 | 描述全部生成端点的 OpenAPI 3.1 文档 |
 | `entapi_openapi.go` | 至少一个实体产出了接线 | 该文档的 `//go:embed` 与未导出的服务函数 |
 | `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | 未导出的查询 traverser 与删除 hook |
@@ -396,8 +396,11 @@ func withAuth(c *gin.Context) {
 也不涉及任何 `entapi.Endpoint`。`With` 换掉的是生成的 handler 调用的那个实现，不是你自己
 代码调用的那个——直接调用 `ListArticles` 不受它影响。
 
-它上面那三级是同一片面，不是三份：`Endpoints()` 就是 accessor 返回值组成的 slice，
-`Mount` 走的也是这份 slice。混着用不可能给同一个端点得出两种描述。
+它上面那三级是同一片面，不是三份：manifest 就是靠调用这些 accessor 拼出来的，
+`Mount` 走的也是这份 slice。混着用不可能给同一个端点得出两种描述。但别试图用值比较去
+验证这一点：`Endpoint` 不可比较——`==`、map 键和 `slices.Contains` 会在 handler 的
+func 值上 panic，而 `reflect.DeepEqual` 恒为 false，因为每次调 accessor 都会构造一个
+新的 handler 值。要跳过或去重某些行，用 `Method` 加 `Path`，或者用 `Op` 做键。
 
 #### 按名字取单个端点
 
@@ -439,7 +442,8 @@ public.Handle("GET /v1/openapi.yaml", api.OpenAPIEndpoint().Handler)
 `Entity` 是 Ent 的类型名（`"Article"`），`Op` 是 `entapi.Op` —— `OpList`、`OpCreate`、
 `OpGet`、`OpPatch`、`OpDelete`，不属于任何资源的端点则是 `OpNone`。它们带上了过去被路径
 藏起来的身份，于是「按受众切分这棵树」变成一次编译器能检查的比较，而不是对路径文本做匹配
-——后者拼错了就什么都选不中，且什么都不报：
+——后者拼错了就什么都选不中，且什么都不报。而且因为 `Endpoint` 本身不可比较，下面这个
+`switch` 按字段比较的写法是挑出某一行的**必须**写法，不是风格选择：
 
 ```go
 for _, endpoint := range api.Endpoints() {
@@ -1238,6 +1242,12 @@ entapi 在做路由，它并没有：一个 `Endpoint` 是某个生成 handler �
 你自己的 router 的数据——而 `ServeHTTP`/`Mount` 背后那个内部 `ServeMux`，只是用同一份
 manifest 搭出来的可选便利层。重新生成后重命名调用点：`api.Routes()` → `api.Endpoints()`，
 `[]entapi.Route` → `[]entapi.Endpoint`。
+
+**新增，带一个升级隐患（#119）：** 生成的 `APIHandler` 现在为每个可达操作携带一个导出的
+`…Endpoint()` 方法（wiring 函数名加 `Endpoint` 后缀：`GetArticle` → `GetArticleEndpoint`），
+外加 `OpenAPIEndpoint()`。这些名字进入你 `ent` 包的方法集。如果你此前在 `*APIHandler` 上
+手写过同名辅助方法——#119 之前"按身份取单个端点"的标准变通正是这样一个索引——重新生成后
+它会变成方法重复定义的编译错误；删掉你那份，改调生成的 accessor。
 
 **破坏性与行为变更（#70）：** 生成的 `RegisterSoftDelete` 已删除。重新生成后，删掉所有
 `ent.RegisterSoftDelete(client)` 调用；在 schema 中嵌入 `SoftDeleteMixin` 现在会自动配置

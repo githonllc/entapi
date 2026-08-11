@@ -30,22 +30,22 @@ func TestColonPath(t *testing.T) {
 	}
 }
 
-type routeTestHandler struct {
+type endpointTestHandler struct {
 	serve func(http.ResponseWriter, *http.Request)
 }
 
-func (h *routeTestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *endpointTestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.serve != nil {
 		h.serve(w, r)
 	}
 }
 
-func TestRouteBindWithoutPlaceholderReturnsHandlerUnchanged(t *testing.T) {
-	handler := &routeTestHandler{}
-	route := Route{Path: "/users", Handler: handler}
+func TestEndpointBindWithoutPlaceholderReturnsHandlerUnchanged(t *testing.T) {
+	handler := &endpointTestHandler{}
+	endpoint := Endpoint{Path: "/users", Handler: handler}
 
-	got := route.Bind(func(string) string {
-		t.Fatal("get called for a route without placeholders")
+	got := endpoint.Bind(func(string) string {
+		t.Fatal("get called for an endpoint without placeholders")
 		return ""
 	})
 
@@ -54,32 +54,32 @@ func TestRouteBindWithoutPlaceholderReturnsHandlerUnchanged(t *testing.T) {
 	}
 }
 
-func TestRouteBindSetsPathValue(t *testing.T) {
+func TestEndpointBindSetsPathValue(t *testing.T) {
 	observed := ""
-	handler := &routeTestHandler{serve: func(_ http.ResponseWriter, r *http.Request) {
+	handler := &endpointTestHandler{serve: func(_ http.ResponseWriter, r *http.Request) {
 		observed = r.PathValue("id")
 	}}
-	route := Route{Path: "/users/{id}", Handler: handler}
+	endpoint := Endpoint{Path: "/users/{id}", Handler: handler}
 	get := func(key string) string {
 		return map[string]string{"id": "42"}[key]
 	}
 
-	route.Bind(get).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/users/42", nil))
+	endpoint.Bind(get).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/users/42", nil))
 
 	if observed != "42" {
 		t.Errorf("PathValue(%q) = %q, want %q", "id", observed, "42")
 	}
 }
 
-func TestRouteBindPassesPlaceholderNameToGet(t *testing.T) {
+func TestEndpointBindPassesPlaceholderNameToGet(t *testing.T) {
 	var gotKey string
 	calls := 0
-	route := Route{
+	endpoint := Endpoint{
 		Path:    "/users/{id}",
-		Handler: &routeTestHandler{},
+		Handler: &endpointTestHandler{},
 	}
 
-	route.Bind(func(key string) string {
+	endpoint.Bind(func(key string) string {
 		calls++
 		gotKey = key
 		return "42"
@@ -90,17 +90,17 @@ func TestRouteBindPassesPlaceholderNameToGet(t *testing.T) {
 	}
 }
 
-func TestRouteBindSetsMultiplePathValues(t *testing.T) {
+func TestEndpointBindSetsMultiplePathValues(t *testing.T) {
 	values := map[string]string{}
 	var gotKeys []string
-	handler := &routeTestHandler{serve: func(_ http.ResponseWriter, r *http.Request) {
+	handler := &endpointTestHandler{serve: func(_ http.ResponseWriter, r *http.Request) {
 		values["x"] = r.PathValue("x")
 		values["y"] = r.PathValue("y")
 	}}
-	route := Route{Path: "/a/{x}/b/{y}", Handler: handler}
+	endpoint := Endpoint{Path: "/a/{x}/b/{y}", Handler: handler}
 	wantValues := map[string]string{"x": "first", "y": "second"}
 
-	route.Bind(func(key string) string {
+	endpoint.Bind(func(key string) string {
 		gotKeys = append(gotKeys, key)
 		return wantValues[key]
 	}).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/a/first/b/second", nil))
@@ -113,17 +113,17 @@ func TestRouteBindSetsMultiplePathValues(t *testing.T) {
 	}
 }
 
-func TestRouteBindSetsEmptyPathValueAndDelegates(t *testing.T) {
+func TestEndpointBindSetsEmptyPathValueAndDelegates(t *testing.T) {
 	innerRan := false
 	observed := "not empty"
 	getCalled := false
-	handler := &routeTestHandler{serve: func(_ http.ResponseWriter, r *http.Request) {
+	handler := &endpointTestHandler{serve: func(_ http.ResponseWriter, r *http.Request) {
 		innerRan = true
 		observed = r.PathValue("id")
 	}}
-	route := Route{Path: "/users/{id}", Handler: handler}
+	endpoint := Endpoint{Path: "/users/{id}", Handler: handler}
 
-	route.Bind(func(string) string {
+	endpoint.Bind(func(string) string {
 		getCalled = true
 		return ""
 	}).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/users/", nil))

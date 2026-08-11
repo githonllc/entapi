@@ -21,7 +21,7 @@ var handlerTemplate = mustLoadTemplate("handler")
 // rather than merely intended to be.
 var errorMapTemplate = mustLoadTemplate("errors")
 
-// httpTemplate is the graph-level APIHandler and route manifest template.
+// httpTemplate is the graph-level APIHandler and endpoint manifest template.
 var httpTemplate = mustLoadTemplate("http")
 
 // openapiTemplate is the graph-level OpenAPI 3.1 document. It is the only

@@ -10,7 +10,7 @@
 **一句话**：一个 [Ent](https://entgo.io) 扩展——`api.Resource()` 选择需要 HTTP 表面的实体，字段形状
 默认由 Ent 的 `Optional`、`Default`、`Nillable`、`Immutable`、`Sensitive` 和类型派生，只有五个字段词与
 `api.Expand()` 表达偏离。生成器把请求类型、响应类型、查询面（filter/search/sort）、每个操作一个的
-wiring 函数、三段式 HTTP handler、`With` 定制点、`Routes()` 路由清单，以及描述这一切的 OpenAPI 3.1
+wiring 函数、三段式 HTTP handler、`With` 定制点、`Endpoints()` 端点清单，以及描述这一切的 OpenAPI 3.1
 文档生成进消费者自己的 `ent/` 包，运行期只依赖标准库。
 
 | 维度 | 事实 | 证据 |
@@ -50,7 +50,7 @@ package "本仓库 (github.com/githonllc/entapi)" #EEF6FF {
 package "消费者项目" #FFF7E6 {
   component "ent/schema/*.go\n(手写, 带注解)" as SCHEMA
   component "entc.go\nentc.Generate(...)" as ENTC
-  component "ent/ (生成包)\nDTO / filter / wiring / handler / APIHandler / With / Routes" as ENTPKG
+  component "ent/ (生成包)\nDTO / filter / wiring / handler / APIHandler / With / Endpoints" as ENTPKG
   artifact "ent/openapi.yaml\n+ entapi_openapi.go (go:embed)" as SPEC
   component "consumer mux / third-party router / middleware\n(http.Handler 洋葱组合)" as MUX
 }
@@ -70,7 +70,7 @@ TMPL --> FUNCS
 EXT --> ENTPKG : 写 per-type 与 graph-level 产物
 EXT --> SPEC : 同一轮生成，与路由树同一个 wiredAny 闸门
 EXT --> CLEAN
-MUX --> ENTPKG : ServeHTTP / Mount / Routes
+MUX --> ENTPKG : ServeHTTP / Mount / Endpoints
 ENTPKG --> SPEC : GET /openapi.yaml\n(serveOpenAPI，清单里的最后一条路由)
 ENTPKG ..> RT : 生成代码 import (显式别名 entapi)
 ENTPKG --> DB
@@ -86,7 +86,7 @@ end note
 定制点或注解式 interceptor chain。生成的 handler 固定为「绑定 → 调一个函数 → 写出」；中间函数
 保存在 `APIHandler` 的未导出字段里并在请求到达时读取。生成的 wiring 仍全是自由函数
 （`templates/wiring.tmpl` — 文件头设计说明），所以默认实现与定制实现具有同一份编译期签名；`With`
-只在开始服务前给这些字段赋值，`Routes()` 则把同一份路由清单按值复制给消费者。
+只在开始服务前给这些字段赋值，`Endpoints()` 则把同一份端点清单按值复制给消费者。
 
 **三条承重不变式**：
 
@@ -108,7 +108,7 @@ end note
 | 生成器 | `./*.go` | ent 扩展本体：读取注解、冲突检查、渲染、落盘、回收 | `NewExtension` / `NewExtensionWithOptions` / `SoftDeleteMixin` | `api`、`entc/gen`、`x/tools/imports`、`embed` |
 | 模板 | `templates/*.tmpl` | 生成物的形状（10 个） | 经 `//go:embed` 由 `template_loader.go` — `templateFS` 读入 | — |
 | 模板函数 | `funcs_*.go`、`annotations_edge.go` | 模板能问的所有问题 | `templateFuncs()`（`funcs.go`）**唯一注册处** | `entc/gen` |
-| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `WithValidation` / `WithUniqueViolation` / `HasUniqueViolation` / `UniqueViolation` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `WriteProblem` / `FieldError` / `Route`（仅路由元数据）/ `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
+| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `WithValidation` / `WithUniqueViolation` / `HasUniqueViolation` / `UniqueViolation` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `WriteProblem` / `FieldError` / `Endpoint`（仅端点元数据）/ `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
 | codegen fixtures | `internal/fixtures/<dir>/<dir>ent/` | 生成 + 编译的证明 | — | 本模块 |
 | spike 规格 | `internal/fixture/`（**单数**） | #22 手写目标，是生成物的规格 | 独立 go.mod | ent + SQLite |
 | 行为证明 | `internal/fixtures/wiring/e2e`、`internal/fixtures/httpdemo/e2e`、`internal/softdeleteproof`、`internal/uniqueproof` | wiring、HTTP、OpenAPI 文档校验、软删除与真实 driver uniqueness channel 的行为证明 | 独立 go.mod | ent + SQL driver（`httpdemo/e2e` 另含 `pb33f/libopenapi{,-validator}`，全仓仅此一处） |
@@ -461,13 +461,13 @@ EM --> H : 结果 / ErrNotFound / 原样透传
 @enduml
 ```
 
-`templates/http.tmpl` — `API` 为每张路由构造一个持有 `*http.ServeMux` 与 `[]entapi.Route` 的
+`templates/http.tmpl` — `API` 构造一个持有 `*http.ServeMux` 与 `[]entapi.Endpoint` 的
 `*APIHandler`：`GET /xs`、`POST /xs`、`GET/PATCH/DELETE /xs/{id}`，清单**最后**追加一条
-`GET /openapi.yaml`（`templates/http.tmpl` — `API`）。放进清单而不是放在清单旁边，是为了让 `Routes()`
-看得见它、让消费者能用包裹 CRUD 路由的同一个循环包裹或丢弃它。`ServeHTTP` 直接委托内部 mux，
-`Mount` 遍历同一份未导出清单注册到消费者 mux；`Routes()` 按注册顺序返回一份新 slice，第三方路由器
-可据此注册并用 `Request.SetPathValue` 注入路径参数。返回值是数据副本，不是增删或改写生成路由的 API。
-前缀由外层 `http.StripPrefix` 处理。`Except` 同时关闭 endpoint、route、`{Op}{Entity}Fn` 及其
+`GET /openapi.yaml`（`templates/http.tmpl` — `API`）。放进清单而不是放在清单旁边，是为了让 `Endpoints()`
+看得见它、让消费者能用包裹 CRUD 端点的同一个循环包裹或丢弃它。`ServeHTTP` 直接委托内部 mux，
+`Mount` 遍历同一份未导出清单注册到消费者 mux；`Endpoints()` 按注册顺序返回一份新 slice，第三方路由器
+可据此注册并用 `Request.SetPathValue` 注入路径参数。返回值是数据副本，不是增删或改写生成端点的 API。
+前缀由外层 `http.StripPrefix` 处理。`Except` 同时关闭 handler、它那一行端点、`{Op}{Entity}Fn` 及其
 `applyOption`，但不关闭 wiring 或 request DTO。
 
 `APIOption` 只含未导出的 `applyOption(*APIHandler)`；每个未 Except 的 Fn 类型在同一模板条件下实现它。
@@ -478,13 +478,13 @@ EM --> H : 结果 / ErrNotFound / 原样透传
 这没有重建 `SetSelf` 的自引用分派：`With` 只是字段赋值，而该字段是 handler 到中间步骤的唯一请求时
 路径，消费者不需要安装 self；被 `Except` 删除的定制点连 Fn 类型都不存在。它也没有重建
 `Base{Entity}Handler` 的嵌入与局部遮蔽：自定义实现替换整个同类型操作，签名漂移直接编译失败。
-`Routes()` 只是数据导出，框架调用图没有新增分派。
+`Endpoints()` 只是数据导出，框架调用图没有新增分派。
 
 每个 `templates/handler.tmpl` 生成函数固定三步。绑定步骤为 POST/PATCH 施加不可配置的 1 MiB body 上限、
 解析 `application/json` media type、按生成的 request tag 数据拒绝未知/Immutable key，再调用 `Validate`；
 中间步骤在**请求时**读取 `h.<operation>`，默认字段值是同签名 wiring 函数；写出步骤返回裸 DTO/Page，
 错误经 `runtime/http.go` — `WriteProblem` 写为 `application/problem+json`。横切逻辑只在外层
-`http.Handler` 洋葱组合；也可读取 `Routes()` 的 `Method` 只包裹选中的 handler。router-level 404/405
+`http.Handler` 洋葱组合；也可读取 `Endpoints()` 的 `Method` 只包裹选中的 handler。router-level 404/405
 保留 stdlib plain text。
 
 **为什么排序白名单是安全边界而不是人体工学**——直接引生成物的注释：
@@ -623,7 +623,7 @@ end note
 
 | 断言 | 方法 |
 |---|---|
-| `TestOpenAPIPathsMatchTheLiveRouteTree` | 与 `ent.API(client).Routes()` **比集合**（探测只能发现文档里 404 的路径，发现不了文档漏掉的活路由），再逐条打一遍拒绝 stdlib 的 text/plain 残余 |
+| `TestOpenAPIPathsMatchTheLiveEndpointManifest` | 与 `ent.API(client).Endpoints()` **比集合**（探测只能发现文档里 404 的路径，发现不了文档漏掉的活路由），再逐条打一遍拒绝 stdlib 的 text/plain 残余 |
 | `TestOpenAPISchemasMatchTheGeneratedStructs` | 反射生成的 struct，比对 `components/schemas` |
 | `TestOpenAPIFilterOperatorsMatchTheLiveParser` | 每个字段文档化的算子前缀 vs. 活的 `Parse{Entity}Query` 真正接受的 |
 | `TestOpenAPIServedBytesAreTheFileOnDisk` | HTTP 响应体逐字节等于磁盘上的 `openapi.yaml` |

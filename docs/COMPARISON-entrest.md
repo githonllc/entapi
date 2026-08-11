@@ -21,7 +21,7 @@
 
 ## 3. HTTP 层与路由器耦合
 
-- **entapi**：Go 1.22+ stdlib `ServeMux`，`ent.API(client)` 返回 `http.Handler`，另有 `Routes()` 数据清单（§2.5）。零第三方 router 依赖。
+- **entapi**：Go 1.22+ stdlib `ServeMux`，`ent.API(client)` 返回 `http.Handler`，另有 `Endpoints()` 数据清单（§2.5）。零第三方 router 依赖。
 - **entrest**：`Handler` 三值 `none/stdlib/chi`（chi ≥ v5.0.12）；`HandlerNone` 可只要 spec。
 - **判定**：接近平手，entrest 略优（双后端 + 可关 handler）。
 

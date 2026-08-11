@@ -30,7 +30,7 @@ http.ListenAndServe(":8080", ent.API(client))
 Between those two declarations the generator wrote `ArticleCreateRequest` with
 three-state presence, `ParseArticleQuery` with a typed `ArticleFilter`, a
 multi-key sort allow-list, `ArticleResponse` with its eager-load plan, and error
-classification, five three-step handlers, and the route manifest behind
+classification, five three-step handlers, and the endpoint manifest behind
 `ent.API(client)`.
 
 > ### Status: v0, never released
@@ -90,7 +90,7 @@ packages are named `entapi`; the schema package is named `api`.
 |---|---|---|
 | `github.com/githonllc/entapi` | your `entc.go`; schemas that embed soft delete | `Extension`, `SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | your **schema** files | `Resource`, `Hidden`, `ReadOnly`, `Searchable`, `Filterable`, `Sortable`, `Expand` |
-| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `BindJSON`, `Status`, `WriteJSON`, `WriteProblem`, `FieldError`, `Route`/`Op`, `WithActor`/`ActorFrom`, error sentinels and mapper, filter/pointer/soft-delete helpers |
+| `github.com/githonllc/entapi/runtime` | **generated code** and your handler / service code | `ListRequest`, `SortSpec`, `Page[R]`, `ListPage`, `GetOne`, `SaveOne`, `BindJSON`, `Status`, `WriteJSON`, `WriteProblem`, `FieldError`, `Endpoint`/`Op`, `WithActor`/`ActorFrom`, error sentinels and mapper, filter/pointer/soft-delete helpers |
 
 The split is load-bearing, not cosmetic. The root package embeds eight templates
 with `//go:embed` and reads all eight out of the embedded filesystem **at package
@@ -262,7 +262,7 @@ Plus five files per schema, each with its own emission condition:
 | File | Emitted when | Declares |
 |---|---|---|
 | `entapi_errors.go` | at least one entity produced wiring | `ErrorMap` |
-| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Routes`, `ServeHTTP`, `Mount` and the route manifest |
+| `entapi_http.go` | at least one entity carries `api.Resource()` | `APIOption`, `APIHandler`, `API(client)`, `With`, `Endpoints`, `ServeHTTP`, `Mount` and the endpoint manifest |
 | `openapi.yaml` | at least one entity produced wiring | the OpenAPI 3.1 document describing every generated endpoint |
 | `entapi_openapi.go` | at least one entity produced wiring | the `//go:embed` of that document and the unexported handler serving it |
 | `entapi_softdelete.go` | at least one entity embeds `SoftDeleteMixin` | the unexported query traverser and delete hook |
@@ -293,7 +293,7 @@ entity name can collide with one — see
 ## Generated HTTP
 
 `ent.API(client)` returns `*ent.APIHandler`, which is also an `http.Handler`.
-Use it directly, mount its routes into a consumer mux, or compose it with
+Use it directly, mount its endpoints into a consumer mux, or compose it with
 ordinary stdlib middleware:
 
 ```go
@@ -402,7 +402,7 @@ else. `entapi_openapi.go` embeds the same bytes and serves them at
 drift apart.
 
 It is a **derived** document, not a second description: paths and methods come
-from the same `resourceOps` the route manifest is built from, so an `Except`ed
+from the same `resourceOps` the endpoint manifest is built from, so an `Except`ed
 operation is absent from both at once; response schemas come from the same
 selector the DTOs do, so an Ent `Sensitive()` field cannot reappear in one; and
 each filter parameter's operator prefixes come from the field's own generated
@@ -420,9 +420,9 @@ Three decisions are worth knowing before you read it:
   integer. The description carries what OpenAPI cannot express — the
   operator prefixes the field accepts, and that repeating a parameter ANDs the
   resulting predicates.
-- **`GET /openapi.yaml` is in `Routes()` but is not described by the
+- **`GET /openapi.yaml` is in `Endpoints()` but is not described by the
   document.** It is in the manifest so you can wrap or drop it with the same
-  loop you use for the CRUD routes; it is not in the document because it is not
+  loop you use for the CRUD endpoints; it is not in the document because it is not
   part of the resource surface.
 
 The first line is the ownership marker in comment form, and cleanup deletes a
@@ -433,8 +433,8 @@ overwriting it, because the writer renames the freshly rendered bytes into place
 without ever reading what is there. If you need a `servers` entry, a prefix, or
 anything else this generator refuses to guess, do not edit the generated
 document: keep your own copy under your own name, build your router from
-`Routes()` while skipping or replacing the `GET /openapi.yaml` row, and serve
-yours there. (`Routes()` returns a copy, so `ServeHTTP` and `Mount` still serve
+`Endpoints()` while skipping or replacing the `GET /openapi.yaml` row, and serve
+yours there. (`Endpoints()` returns a copy, so `ServeHTTP` and `Mount` still serve
 the generated one; the skip has to happen in a router you register yourself.)
 
 **Upgrade hazard:** `ent/openapi.yaml` is an entirely ordinary file name, so a
@@ -448,9 +448,9 @@ a template bug lands and is caught afterwards — by the fixture assertions and
 by the OpenAPI 3.1 validator in `internal/fixtures/httpdemo/e2e`, which is a
 nested module precisely so that validator dependency stays out of this one.
 
-### Registering exported routes
+### Registering exported endpoints
 
-`Routes()` returns `[]entapi.Route{Method, Path, Handler, Entity, Op}` in
+`Endpoints()` returns `[]entapi.Endpoint{Method, Path, Handler, Entity, Op}` in
 deterministic registration order. Every call returns a fresh slice, so changing
 its rows cannot change what `ServeHTTP` or a later `Mount` registers. The list
 is a data export, not a mutation API: remove generated endpoints with `Except`,
@@ -458,20 +458,20 @@ provide custom implementations with `With`, and register extra endpoints on your
 own router.
 
 `Entity` is the Ent type name (`"Article"`) and `Op` is an `entapi.Op` —
-`OpList`, `OpCreate`, `OpGet`, `OpPatch`, `OpDelete`, or `OpNone` for a route
+`OpList`, `OpCreate`, `OpGet`, `OpPatch`, `OpDelete`, or `OpNone` for an endpoint
 that belongs to no resource. They carry the identity the path used to hide, so
 splitting the surface by audience is a comparison the compiler checks rather
 than a match on path text, where a typo selects nothing and reports nothing:
 
 ```go
-for _, route := range api.Routes() {
+for _, endpoint := range api.Endpoints() {
     switch {
-    case route.Entity == "AuditLog":            // internal surface, whole entity
-        internal.Handle(route.Method+" "+route.Path, route.Handler)
-    case route.Op == entapi.OpNone:             // the document; not a resource
-        public.Handle(route.Method+" "+route.Path, route.Handler)
+    case endpoint.Entity == "AuditLog":            // internal surface, whole entity
+        internal.Handle(endpoint.Method+" "+endpoint.Path, endpoint.Handler)
+    case endpoint.Op == entapi.OpNone:             // the document; not a resource
+        public.Handle(endpoint.Method+" "+endpoint.Path, endpoint.Handler)
     default:
-        public.Handle(route.Method+" "+route.Path, requireScope(route)(route.Handler))
+        public.Handle(endpoint.Method+" "+endpoint.Path, requireScope(endpoint)(endpoint.Handler))
     }
 }
 ```
@@ -484,32 +484,32 @@ A complete Gin adapter is consumer code; the framework takes no Gin dependency:
 
 ```go
 func mountGin(r *gin.Engine, api *ent.APIHandler) {
-    for _, route := range api.Routes() {
-        r.Handle(route.Method, entapi.ColonPath(route.Path), func(c *gin.Context) {
-            route.Bind(c.Param).ServeHTTP(c.Writer, c.Request)
+    for _, endpoint := range api.Endpoints() {
+        r.Handle(endpoint.Method, entapi.ColonPath(endpoint.Path), func(c *gin.Context) {
+            endpoint.Bind(c.Param).ServeHTTP(c.Writer, c.Request)
         })
     }
 }
 ```
 
 `ColonPath` rewrites whole `{name}` segments to `:name` and leaves every other
-segment alone. `Route.Bind` takes a `func(string) string` that exactly matches
+segment alone. `Endpoint.Bind` takes a `func(string) string` that exactly matches
 `gin.Context.Param` and `echo.Context.Param`. chi and fiber each need a one-line
 closure: `chi.URLParam` takes the request too, and `fiber.Ctx.Params` carries a
 `defaultValue ...string` variadic, which makes it `func(string, ...string) string`
 and therefore not assignable. Echo uses the same two calls,
-`entapi.ColonPath(route.Path)` and `route.Bind(c.Param)`, with its response
+`entapi.ColonPath(endpoint.Path)` and `endpoint.Bind(c.Param)`, with its response
 writer and request.
 
-The placeholder names come from `Route.Path`, so nothing hard-codes `"id"`:
+The placeholder names come from `Endpoint.Path`, so nothing hard-codes `"id"`:
 if the generator ever emits a second placeholder, an adapter written this way
-picks it up without an edit. `Bind` returns `r.Handler` itself when the route has
-no placeholder, so wrapping every route costs nothing for those that do not
+picks it up without an edit. `Bind` returns `e.Handler` itself when the endpoint has
+no placeholder, so wrapping every endpoint costs nothing for those that do not
 need it.
 
-A mount-time constant closure pins a route to a fixed id:
-`route.Bind(func(string) string { return actorID })` can serve `/v1/me` from the
-same generated `GET /users/{id}` route without a second hand-written wrapper.
+A mount-time constant closure pins an endpoint to a fixed id:
+`endpoint.Bind(func(string) string { return actorID })` can serve `/v1/me` from the
+same generated `GET /users/{id}` endpoint without a second hand-written wrapper.
 
 One router difference is deliberately not bridged. Go 1.22 `ServeMux` treats
 `%2F` as part of one encoded segment and gives the handler a decoded `/` in
@@ -518,17 +518,17 @@ One router difference is deliberately not bridged. Go 1.22 `ServeMux` treats
 an identifier, choose and test the consumer router's policy explicitly.
 
 The metadata also supports selective outer middleware without adding a hook
-inside generated handlers. `Op` says what the route does, so "every write" does
+inside generated handlers. `Op` says what the endpoint does, so "every write" does
 not have to be spelled as a list of methods:
 
 ```go
-for _, route := range api.Routes() {
-    handler := route.Handler
-    switch route.Op {
+for _, endpoint := range api.Endpoints() {
+    handler := endpoint.Handler
+    switch endpoint.Op {
     case entapi.OpCreate, entapi.OpPatch, entapi.OpDelete:
         handler = requireAuth(handler)
     }
-    mux.Handle(route.Method+" "+route.Path, handler)
+    mux.Handle(endpoint.Method+" "+endpoint.Path, handler)
 }
 ```
 
@@ -1167,7 +1167,7 @@ pair already failed to compile. Both messages point at `.StorageKey(…)`, becau
 the JSON tag is spelled from it — the wire key does not have to move when the Go
 name does.
 
-`Except(api.OpPatch)` does not exempt either one. It removes routes and wiring,
+`Except(api.OpPatch)` does not exempt either one. It removes endpoints and wiring,
 never a request DTO, so the patch request, its wrapper, `Apply` and the readers
 are all still generated.
 
@@ -1358,9 +1358,9 @@ Ordered by how quietly they hurt you.
   ownership of the target directory file by file, via the marker, rather than by
   owning a directory outright.
 - **Annotations only control HTTP-layer generation.** They never restrict what
-  your service layer can do with an ent entity — `Except` closes an endpoint, a
-  route and a `{Op}{Entity}Fn` type, and leaves the wiring function and the
-  request DTO in place. The one exception is a create family that provably
+  your service layer can do with an ent entity — `Except` closes a handler, its
+  endpoint row and a `{Op}{Entity}Fn` type, and leaves the wiring function and
+  the request DTO in place. The one exception is a create family that provably
   cannot work (see "The annotation model"). Anything that must be enforced has to
   be enforced where the query is built.
 - **The generator package loads all ten templates at package init.** Confine it
@@ -1393,7 +1393,7 @@ shipped:
 
 | Design item | Actual state |
 |---|---|
-| §2.1 / §2.5 `ent.API(client)` returns `*API`; `func (a *API) Routes()` | The type is **`*APIHandler`** (`templates/http.tmpl` — `API`). `API` is the constructor's name, so the handler could not also be called that |
+| §2.1 / §2.5 `ent.API(client)` returns `*API`; `func (a *API) Routes()` | The type is **`*APIHandler`** (`templates/http.tmpl` — `API`). `API` is the constructor's name, so the handler could not also be called that. The method is **`Endpoints()`** since #118 — the manifest is a record of handler contracts, not routing |
 | §4.3 soft delete registers from a generated `init()`, falling back to an explicit `RegisterSoftDelete(client)` | Neither exists. #78 installs the hook and interceptor from a `config/init/fields/*` **partial that Ent executes inside `newConfig`** (`templates/softdelete_config_init.tmpl`), so `NewClient`, `Open`, `enttest.Open` and every later config copy carry them with no registration call and no initialization-order dependency. `RegisterSoftDelete` was removed rather than kept as a fallback |
 | §2.3 the generated handler enables `DisallowUnknownFields`, and the rejected field name is scraped out of `encoding/json`'s error text | The handler decodes the body into a `map[string]json.RawMessage` first and compares its keys against generated `{entity}{Op}RequestTags` data (`templates/handler.tmpl`), reporting the offending key through `entapi.FieldError`. A consumer that writes its own bind step gets the same data from the exported `{Entity}{Op}RequestTags()` accessor, which returns a copy. The design called the error-text scrape a known residue; this removes it — the field name is now generated data, not a parsed string. `DisallowUnknownFields` stays the consumer handler's decision for à la carte DTO decoding |
 
@@ -1406,10 +1406,21 @@ else. The document's line now compiles.
 
 Everything else in that document — the five deviation words, `Except`'s three
 layers plus the create-family exception, the op-in-value wire format, the `_`
-namespace, 413/415 request hardening, RFC 9457 errors, `Routes()`, and the
-OpenAPI decisions — describes what shipped.
+namespace, 413/415 request hardening, RFC 9457 errors, the exported manifest,
+and the OpenAPI decisions — describes what shipped.
 
 ## Migration notes
+
+**Breaking (#118):** `entapi.Route` is now `entapi.Endpoint`, and the generated
+`APIHandler.Routes()` is now `APIHandler.Endpoints()`. Nothing else changed —
+the fields (`Method`, `Path`, `Handler`, `Entity`, `Op`), the registration
+order, the fresh-copy guarantee and `Bind` all behave exactly as before, and
+`Op`, its constants and `ColonPath` keep their names. The old name claimed
+entapi does routing; it does not. An `Endpoint` is the contract record of one
+generated handler — data you compose into a router you own — and the internal
+`ServeMux` behind `ServeHTTP`/`Mount` is an optional convenience built from that
+same manifest. Regenerate, then rename call sites: `api.Routes()` →
+`api.Endpoints()` and `[]entapi.Route` → `[]entapi.Endpoint`.
 
 **Breaking and behaviour change (#70):** generated `RegisterSoftDelete` has
 been removed. Regenerate, then delete every `ent.RegisterSoftDelete(client)`
@@ -1446,6 +1457,7 @@ exists to remove is worse than the break.
 
 | Removed | Use instead |
 |---|---|
+| `entapi.Route`, `Route.Bind`, generated `Routes()` | `entapi.Endpoint`, `Endpoint.Bind`, generated `Endpoints()` — same fields, same order, same behaviour (#118) |
 | generated `Update{Entity}` | generated `Patch{Entity}`; regenerate and rename call sites |
 | generated `RegisterSoftDelete` | nothing at client construction — embed `SoftDeleteMixin` in the schema and regenerate |
 | `Base{Entity}Service`, `Base{Entity}Handler`, `SetSelf`, generated hooks | the generated free functions (`Get{E}`, `List{Es}`, …); write your own function if you need different behaviour |

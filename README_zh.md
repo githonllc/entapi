@@ -27,7 +27,7 @@ http.ListenAndServe(":8080", ent.API(client))
 
 这两个声明之间，生成器写出了带三态存在性的 `ArticleCreateRequest`、把 query 解析为强类型
 `ArticleFilter` 的 `ParseArticleQuery`、多键排序白名单、带预加载计划的 `ArticleResponse`，
-以及错误分类、五个三步 handler 和 `ent.API(client)` 背后的路由 manifest。
+以及错误分类、五个三步 handler 和 `ent.API(client)` 背后的端点 manifest。
 
 > ### 状态：v0，从未发布过版本
 >
@@ -81,7 +81,7 @@ go get github.com/githonllc/entapi
 |---|---|---|
 | `github.com/githonllc/entapi` | 你的 `entc.go`；嵌软删除的 schema | `Extension`、`SoftDeleteMixin` |
 | `github.com/githonllc/entapi/api` | 你的 **schema** 文件 | `Resource`、`Hidden`、`ReadOnly`、`Searchable`、`Filterable`、`Sortable`、`Expand` |
-| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`BindJSON`、`Status`、`WriteJSON`、`WriteProblem`、`FieldError`、`Route`/`Op`、`WithActor`/`ActorFrom`、错误 sentinel 与 mapper、filter/pointer/软删除 helper |
+| `github.com/githonllc/entapi/runtime` | **生成的代码**与你的 handler / service 代码 | `ListRequest`、`SortSpec`、`Page[R]`、`ListPage`、`GetOne`、`SaveOne`、`BindJSON`、`Status`、`WriteJSON`、`WriteProblem`、`FieldError`、`Endpoint`/`Op`、`WithActor`/`ActorFrom`、错误 sentinel 与 mapper、filter/pointer/软删除 helper |
 
 这个切分是承重的，不是整洁癖：根包用 `//go:embed` 内嵌八个模板，并在**包初始化时**把八份
 全部从内嵌文件系统里读出来，读不到就 panic。只要 import 根包，这件事就会发生，无论你是否
@@ -232,7 +232,7 @@ func (Post) Edges() []ent.Edge {
 | 文件 | 生成条件 | 声明 |
 |---|---|---|
 | `entapi_errors.go` | 至少一个实体产出了接线 | `ErrorMap` |
-| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Routes`、`ServeHTTP`、`Mount` 与路由 manifest |
+| `entapi_http.go` | 至少一个实体带 `api.Resource()` | `APIOption`、`APIHandler`、`API(client)`、`With`、`Endpoints`、`ServeHTTP`、`Mount` 与端点 manifest |
 | `openapi.yaml` | 至少一个实体产出了接线 | 描述全部生成端点的 OpenAPI 3.1 文档 |
 | `entapi_openapi.go` | 至少一个实体产出了接线 | 该文档的 `//go:embed` 与未导出的服务函数 |
 | `entapi_softdelete.go` | 至少一个实体嵌入 `SoftDeleteMixin` | 未导出的查询 traverser 与删除 hook |
@@ -350,7 +350,7 @@ func withAuth(c *gin.Context) {
 一样被评审。`entapi_openapi.go` 内嵌同一份字节并在 `GET /openapi.yaml` 上提供，磁盘上的与
 线上服务的因此不可能漂开。
 
-它是**推导物**，不是第二份描述：path 与 method 来自路由 manifest 用的同一个 `resourceOps`，
+它是**推导物**，不是第二份描述：path 与 method 来自端点 manifest 用的同一个 `resourceOps`，
 所以被 `Except` 掉的操作在两边同时消失；响应 schema 来自 DTO 用的同一个选择器，所以 Ent 的
 `Sensitive()` 字段无法在其中一边复活；每个过滤参数的算子前缀来自该字段自己生成的允许集。
 
@@ -362,15 +362,15 @@ func withAuth(c *gin.Context) {
 - **过滤参数是 `type: string`**，带 `pattern` 与 description。这是算子进值的线格式的代价：
   `gt:5` 不是整数。description 承载 OpenAPI 表达不了的东西——该字段接受的算子前缀，以及
   「重复同一个参数会把谓词 AND 起来」。
-- **`GET /openapi.yaml` 在 `Routes()` 里，但文档不描述它自己。** 在 manifest 里，是为了让
-  你能用包裹 CRUD 路由的同一个循环包裹或丢弃它；不在文档里，是因为它不属于资源面。
+- **`GET /openapi.yaml` 在 `Endpoints()` 里，但文档不描述它自己。** 在 manifest 里，是为了让
+  你能用包裹 CRUD 端点的同一个循环包裹或丢弃它；不在文档里，是因为它不属于资源面。
 
 首行是注释形式的归属 marker，cleanup 依据它删除陈旧文档，和其他生成文件一视同仁。删掉那一行，
 文件就退出了 cleanup 的删除候选，因此在这份文档不再被生成之后仍会留存——但它**并不**阻止下一次
 生成把它覆盖掉：写入方把新渲染的字节 rename 就位，全程不读磁盘上原有的内容。如果你需要
 `servers`、需要前缀、或者需要任何本生成器拒绝猜测的东西，不要去改这份生成的文档：用你自己的
-文件名另存一份，从 `Routes()` 出发自己注册路由、跳过或替换 `GET /openapi.yaml` 那一行，把你那
-份挂在那里。（`Routes()` 返回的是副本，`ServeHTTP` 与 `Mount` 仍然提供生成的那一份；跳过必须
+文件名另存一份，从 `Endpoints()` 出发自己注册路由、跳过或替换 `GET /openapi.yaml` 那一行，把你那
+份挂在那里。（`Endpoints()` 返回的是副本，`ServeHTTP` 与 `Mount` 仍然提供生成的那一份；跳过必须
 发生在你自己注册的 router 里。）
 
 **升级风险：** `ent/openapi.yaml` 是一个再普通不过的文件名，所以升级前就在该路径手写了文档的
@@ -381,27 +381,27 @@ func withAuth(c *gin.Context) {
 `internal/fixtures/httpdemo/e2e` 里的 OpenAPI 3.1 验证器。那是个嵌套模块，正是为了让验证器
 依赖留在本模块之外。
 
-### 注册导出的路由
+### 注册导出的端点
 
-`Routes()` 按确定的注册顺序返回 `[]entapi.Route{Method, Path, Handler, Entity, Op}`。每次
+`Endpoints()` 按确定的注册顺序返回 `[]entapi.Endpoint{Method, Path, Handler, Entity, Op}`。每次
 调用都返回一份新 slice，修改其中的行不会改变 `ServeHTTP` 或后续 `Mount` 的注册来源。这是
 数据导出，不是修改 API：用 `Except` 删除生成端点，用 `With` 提供自定义实现，额外端点直接
 注册到消费者自己的路由器。
 
 `Entity` 是 Ent 的类型名（`"Article"`），`Op` 是 `entapi.Op` —— `OpList`、`OpCreate`、
-`OpGet`、`OpPatch`、`OpDelete`，不属于任何资源的路由则是 `OpNone`。它们带上了过去被路径
+`OpGet`、`OpPatch`、`OpDelete`，不属于任何资源的端点则是 `OpNone`。它们带上了过去被路径
 藏起来的身份，于是「按受众切分这棵树」变成一次编译器能检查的比较，而不是对路径文本做匹配
 ——后者拼错了就什么都选不中，且什么都不报：
 
 ```go
-for _, route := range api.Routes() {
+for _, endpoint := range api.Endpoints() {
     switch {
-    case route.Entity == "AuditLog":            // 整个实体划进内网面
-        internal.Handle(route.Method+" "+route.Path, route.Handler)
-    case route.Op == entapi.OpNone:             // 文档本身，不属于任何资源
-        public.Handle(route.Method+" "+route.Path, route.Handler)
+    case endpoint.Entity == "AuditLog":            // 整个实体划进内网面
+        internal.Handle(endpoint.Method+" "+endpoint.Path, endpoint.Handler)
+    case endpoint.Op == entapi.OpNone:             // 文档本身，不属于任何资源
+        public.Handle(endpoint.Method+" "+endpoint.Path, endpoint.Handler)
     default:
-        public.Handle(route.Method+" "+route.Path, requireScope(route)(route.Handler))
+        public.Handle(endpoint.Method+" "+endpoint.Path, requireScope(endpoint)(endpoint.Handler))
     }
 }
 ```
@@ -413,45 +413,45 @@ for _, route := range api.Routes() {
 
 ```go
 func mountGin(r *gin.Engine, api *ent.APIHandler) {
-    for _, route := range api.Routes() {
-        r.Handle(route.Method, entapi.ColonPath(route.Path), func(c *gin.Context) {
-            route.Bind(c.Param).ServeHTTP(c.Writer, c.Request)
+    for _, endpoint := range api.Endpoints() {
+        r.Handle(endpoint.Method, entapi.ColonPath(endpoint.Path), func(c *gin.Context) {
+            endpoint.Bind(c.Param).ServeHTTP(c.Writer, c.Request)
         })
     }
 }
 ```
 
 `ColonPath` 只把完整的 `{name}` segment 改写成 `:name`，其他 segment 原样保留。
-`Route.Bind` 接受一个 `func(string) string`，与 `gin.Context.Param`、
+`Endpoint.Bind` 接受一个 `func(string) string`，与 `gin.Context.Param`、
 `echo.Context.Param` 的签名完全一致。chi 与 fiber 各需一行 closure：`chi.URLParam`
 还要接收 request，而 `fiber.Ctx.Params` 带有 `defaultValue ...string` 变参，签名实为
-`func(string, ...string) string`，无法直接赋值。因此 Echo 使用 `entapi.ColonPath(route.Path)` 与
-`route.Bind(c.Param)` 这两个调用，再传入它的 response writer 与 request 即可。
+`func(string, ...string) string`，无法直接赋值。因此 Echo 使用 `entapi.ColonPath(endpoint.Path)` 与
+`endpoint.Bind(c.Param)` 这两个调用，再传入它的 response writer 与 request 即可。
 
-placeholder 名称取自 `Route.Path`，因此没有任何地方硬编码 `"id"`：如果生成器以后发射
-第二个 placeholder，这样写的 adapter 无需修改就会自动接上。路由没有 placeholder 时，
-`Bind` 返回 `r.Handler` 本身，所以每条路由都调用它不会给不需要绑定的路由增加成本。
+placeholder 名称取自 `Endpoint.Path`，因此没有任何地方硬编码 `"id"`：如果生成器以后发射
+第二个 placeholder，这样写的 adapter 无需修改就会自动接上。端点没有 placeholder 时，
+`Bind` 返回 `e.Handler` 本身，所以每个端点都调用它不会给不需要绑定的端点增加成本。
 
-挂载时传入常量 closure 可以把路由钉到固定 id：
-`route.Bind(func(string) string { return actorID })` 能用同一条生成的
-`GET /users/{id}` 路由提供 `/v1/me`，无需再手写第二层 wrapper。
+挂载时传入常量 closure 可以把端点钉到固定 id：
+`endpoint.Bind(func(string) string { return actorID })` 能用同一条生成的
+`GET /users/{id}` 端点提供 `/v1/me`，无需再手写第二层 wrapper。
 
 有一个路由差异不会被这层 adapter 掩盖。Go 1.22 `ServeMux` 把 `%2F` 视为同一个编码 segment
 的一部分，并在 `PathValue` 中给 handler 解码后的 `/`；Gin 默认按已经解码的 `URL.Path` 匹配，
 所以 `/articles/a%2Fb` 不匹配 `/articles/:id`。若标识符需要编码斜杠，应显式选择并测试消费者
 路由器的策略。
 
-这份元数据也能选择性包裹外层 middleware，不必在生成 handler 内增加 hook。`Op` 说明这条路由
+这份元数据也能选择性包裹外层 middleware，不必在生成 handler 内增加 hook。`Op` 说明这个端点
 在做什么，于是「所有写操作」不必再拼成一串 method：
 
 ```go
-for _, route := range api.Routes() {
-    handler := route.Handler
-    switch route.Op {
+for _, endpoint := range api.Endpoints() {
+    handler := endpoint.Handler
+    switch endpoint.Op {
     case entapi.OpCreate, entapi.OpPatch, entapi.OpDelete:
         handler = requireAuth(handler)
     }
-    mux.Handle(route.Method+" "+route.Path, handler)
+    mux.Handle(endpoint.Method+" "+endpoint.Path, handler)
 }
 ```
 
@@ -990,7 +990,7 @@ client.Draft.Query().Where(draft.HasDocWith(doc.DeletedAtIsNil())).All(ctx)
 同名的结构体字段，所以这一对早就编译不过。两条消息都指向 `.StorageKey(…)`，因为 JSON tag
 是从它拼出来的——Go 名要改，wire key 不必跟着改。
 
-`Except(api.OpPatch)` 不能豁免其中任何一条。它移除的是路由与 wiring，从不移除请求 DTO，
+`Except(api.OpPatch)` 不能豁免其中任何一条。它移除的是端点与 wiring，从不移除请求 DTO，
 所以 patch 请求、它的包装器、`Apply` 和读取器照样会生成。
 
 HTTP 检查全部跳过没有 `api.Resource()` 的实体——与生成循环条件一致；软删除与保留名仍是
@@ -1139,7 +1139,7 @@ nil 的类型，ent 不生成 nillable setter，所以 `SetNillableTags` 对一�
 - **产物与 ent 的输出同处一个包。** 生成器不建独立的 `dto` 子包，也没有配置项可以换目录；
   它对目标目录的所有权靠 marker 逐文件判定，而不是靠独占一个目录。
 - **注解只控制 HTTP 层的生成。** 它们绝不限制你的 service 层能拿一个 ent 实体做什么——
-  `Except` 关掉的是端点、路由与 `{Op}{Entity}Fn` 类型，wiring 函数与请求 DTO 留在原地。
+  `Except` 关掉的是 handler、它那一行端点与 `{Op}{Entity}Fn` 类型，wiring 函数与请求 DTO 留在原地。
   唯一例外是可证明无法工作的 create 一族（见「注解模型」）。任何需要强制的东西，必须在
   构造查询的地方强制。
 - **生成器包在包初始化时加载全部十个模板。** 这被限制在 `entc.go` 与 schema 文件里；
@@ -1167,7 +1167,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 
 | 设计条目 | 现状 |
 |---|---|
-| §2.1 / §2.5 `ent.API(client)` 返回 `*API`；`func (a *API) Routes()` | 类型是 **`*APIHandler`**（`templates/http.tmpl` — `API`）。`API` 是构造函数的名字，同一个包里 handler 不可能也叫这个 |
+| §2.1 / §2.5 `ent.API(client)` 返回 `*API`；`func (a *API) Routes()` | 类型是 **`*APIHandler`**（`templates/http.tmpl` — `API`）。`API` 是构造函数的名字，同一个包里 handler 不可能也叫这个。方法自 #118 起叫 **`Endpoints()`** —— 这份 manifest 记的是 handler 契约，不是路由 |
 | §4.3 软删除由生成的 `init()` 注册，失败回落显式 `RegisterSoftDelete(client)` | 两者都不存在。#78 改用 Ent 在 `newConfig` 内部执行的 `config/init/fields/*` **partial**（`templates/softdelete_config_init.tmpl`）直接填 hook 与 interceptor，于是 `NewClient`、`Open`、`enttest.Open` 以及之后每一份 config 拷贝都自带它们，既无注册调用也无初始化顺序依赖。`RegisterSoftDelete` 是被**删除**，不是留作回落 |
 | §2.3 生成的 handler 开 `DisallowUnknownFields`，被拒字段名从 `encoding/json` 的错误文本里抠 | handler 先把 body 解进 `map[string]json.RawMessage`，再拿 key 与生成的 `{entity}{Op}RequestTags` 数据比对（`templates/handler.tmpl`），经 `entapi.FieldError` 报出那个 key。自行编写 bind 步骤的消费者可从导出的 `{Entity}{Op}RequestTags()` 访问器取得同一份数据，该访问器返回副本。设计文档把「抠错误文本」列为已知残余，这个实现把它消掉了——字段名现在是生成的数据，不是解析出来的字符串。`DisallowUnknownFields` 仍然是消费者自己单独解 DTO 时的决定 |
 
@@ -1177,10 +1177,19 @@ T3 已经全部落地。三处偏离，都是有意的：
 那份文档里的这一行现在能编译了。
 
 那份文档里的其余内容——五个偏离词、`Except` 的三层语义与 create 一族例外、op-in-value 线
-格式、`_` 命名空间、413/415 请求硬化、RFC 9457 错误、`Routes()`，以及 OpenAPI 那几条
+格式、`_` 命名空间、413/415 请求硬化、RFC 9457 错误、导出的 manifest，以及 OpenAPI 那几条
 裁决——描述的就是已经发布的东西。
 
 ## 迁移注记
+
+**破坏性变更（#118）：** `entapi.Route` 改名为 `entapi.Endpoint`，生成的
+`APIHandler.Routes()` 改名为 `APIHandler.Endpoints()`。其余一切不变——字段
+（`Method`、`Path`、`Handler`、`Entity`、`Op`）、注册顺序、每次调用返回新副本的保证，
+以及 `Bind` 的行为都和以前一致，`Op`、它的常量与 `ColonPath` 也都保留原名。旧名字宣称
+entapi 在做路由，它并没有：一个 `Endpoint` 是某个生成 handler 的契约记录——你把它组合进
+你自己的 router 的数据——而 `ServeHTTP`/`Mount` 背后那个内部 `ServeMux`，只是用同一份
+manifest 搭出来的可选便利层。重新生成后重命名调用点：`api.Routes()` → `api.Endpoints()`，
+`[]entapi.Route` → `[]entapi.Endpoint`。
 
 **破坏性与行为变更（#70）：** 生成的 `RegisterSoftDelete` 已删除。重新生成后，删掉所有
 `ent.RegisterSoftDelete(client)` 调用；在 schema 中嵌入 `SoftDeleteMixin` 现在会自动配置
@@ -1210,6 +1219,7 @@ T3 已经全部落地。三处偏离，都是有意的：
 
 | 已删除 | 改用 |
 |---|---|
+| `entapi.Route`、`Route.Bind`、生成的 `Routes()` | `entapi.Endpoint`、`Endpoint.Bind`、生成的 `Endpoints()`——字段、顺序、行为完全一致（#118） |
 | 生成的 `Update{Entity}` | 生成的 `Patch{Entity}`；重新生成并重命名调用点 |
 | 生成的 `RegisterSoftDelete` | client 构造处无需任何调用——在 schema 中嵌入 `SoftDeleteMixin` 并重新生成 |
 | `Base{Entity}Service`、`Base{Entity}Handler`、`SetSelf`、生成的 hook | 生成的自由函数（`Get{E}`、`List{Es}`、…）；需要不同行为就写你自己的函数 |

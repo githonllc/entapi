@@ -417,7 +417,7 @@ func AuthorOrder(r entapi.ListRequest) ([]author.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []author.OrderOption{author.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]author.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]author.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -429,14 +429,14 @@ func AuthorOrder(r entapi.ListRequest) ([]author.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, author.ByID(lastDir))
+		orderBy = append(orderBy, author.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

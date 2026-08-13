@@ -83,6 +83,7 @@ type fixtureCase struct {
 // longer select which artifacts are emitted.
 var fixtures = []fixtureCase{
 	{dir: "basic"},
+	{dir: "collide"},
 	{dir: "fieldshapes"},
 	{dir: "sensitive"},
 	{dir: "immutable"},

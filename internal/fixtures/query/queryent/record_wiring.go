@@ -77,11 +77,11 @@ func GetRecord(ctx context.Context, db *Client, id uuid.UUID) (*RecordResponse, 
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListRecords(ctx context.Context, db *Client, f *RecordFilter, r entapi.ListRequest) (*entapi.Page[RecordResponse], error) {
-	order, err := RecordOrder(r)
+	orderBy, err := RecordOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, RecordQueryWithResponseEdges(db.Record.Query()), f.Predicates(), order, r, NewRecordResponse)
+	p, err := entapi.ListPage(ctx, RecordQueryWithResponseEdges(db.Record.Query()), f.Predicates(), orderBy, r, NewRecordResponse)
 	return p, ErrorMap.MapError(err)
 }
 

@@ -91,11 +91,11 @@ func GetCategory(ctx context.Context, db *Client, id uuid.UUID) (*CategoryRespon
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListCategories(ctx context.Context, db *Client, f *CategoryFilter, r entapi.ListRequest) (*entapi.Page[CategoryResponse], error) {
-	order, err := CategoryOrder(r)
+	orderBy, err := CategoryOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, CategoryQueryWithResponseEdges(db.Category.Query()), f.Predicates(), order, r, NewCategoryResponse)
+	p, err := entapi.ListPage(ctx, CategoryQueryWithResponseEdges(db.Category.Query()), f.Predicates(), orderBy, r, NewCategoryResponse)
 	return p, ErrorMap.MapError(err)
 }
 

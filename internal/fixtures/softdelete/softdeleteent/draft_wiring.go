@@ -91,11 +91,11 @@ func GetDraft(ctx context.Context, db *Client, id uuid.UUID) (*DraftResponse, er
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListDrafts(ctx context.Context, db *Client, f *DraftFilter, r entapi.ListRequest) (*entapi.Page[DraftResponse], error) {
-	order, err := DraftOrder(r)
+	orderBy, err := DraftOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, DraftQueryWithResponseEdges(db.Draft.Query()), f.Predicates(), order, r, NewDraftResponse)
+	p, err := entapi.ListPage(ctx, DraftQueryWithResponseEdges(db.Draft.Query()), f.Predicates(), orderBy, r, NewDraftResponse)
 	return p, ErrorMap.MapError(err)
 }
 

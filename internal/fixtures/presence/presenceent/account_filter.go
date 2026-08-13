@@ -248,7 +248,7 @@ func AccountOrder(r entapi.ListRequest) ([]account.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []account.OrderOption{account.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]account.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]account.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -260,14 +260,14 @@ func AccountOrder(r entapi.ListRequest) ([]account.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, account.ByID(lastDir))
+		orderBy = append(orderBy, account.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

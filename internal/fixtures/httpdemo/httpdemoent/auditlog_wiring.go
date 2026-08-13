@@ -77,11 +77,11 @@ func GetAuditLog(ctx context.Context, db *Client, id uuid.UUID) (*AuditLogRespon
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListAuditLogs(ctx context.Context, db *Client, f *AuditLogFilter, r entapi.ListRequest) (*entapi.Page[AuditLogResponse], error) {
-	order, err := AuditLogOrder(r)
+	orderBy, err := AuditLogOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, AuditLogQueryWithResponseEdges(db.AuditLog.Query()), f.Predicates(), order, r, NewAuditLogResponse)
+	p, err := entapi.ListPage(ctx, AuditLogQueryWithResponseEdges(db.AuditLog.Query()), f.Predicates(), orderBy, r, NewAuditLogResponse)
 	return p, ErrorMap.MapError(err)
 }
 

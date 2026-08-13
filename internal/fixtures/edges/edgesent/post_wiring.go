@@ -91,11 +91,11 @@ func GetPost(ctx context.Context, db *Client, id uuid.UUID) (*PostResponse, erro
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListPosts(ctx context.Context, db *Client, f *PostFilter, r entapi.ListRequest) (*entapi.Page[PostResponse], error) {
-	order, err := PostOrder(r)
+	orderBy, err := PostOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, PostQueryWithResponseEdges(db.Post.Query()), f.Predicates(), order, r, NewPostResponse)
+	p, err := entapi.ListPage(ctx, PostQueryWithResponseEdges(db.Post.Query()), f.Predicates(), orderBy, r, NewPostResponse)
 	return p, ErrorMap.MapError(err)
 }
 

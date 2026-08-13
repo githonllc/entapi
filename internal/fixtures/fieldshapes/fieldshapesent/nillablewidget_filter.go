@@ -240,7 +240,7 @@ func NillableWidgetOrder(r entapi.ListRequest) ([]nillablewidget.OrderOption, er
 	if len(r.Sort) == 0 {
 		return []nillablewidget.OrderOption{nillablewidget.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]nillablewidget.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]nillablewidget.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -252,14 +252,14 @@ func NillableWidgetOrder(r entapi.ListRequest) ([]nillablewidget.OrderOption, er
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, nillablewidget.ByID(lastDir))
+		orderBy = append(orderBy, nillablewidget.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

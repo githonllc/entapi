@@ -77,11 +77,11 @@ func GetJSONWidget(ctx context.Context, db *Client, id uuid.UUID) (*JSONWidgetRe
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListJSONWidgets(ctx context.Context, db *Client, f *JSONWidgetFilter, r entapi.ListRequest) (*entapi.Page[JSONWidgetResponse], error) {
-	order, err := JSONWidgetOrder(r)
+	orderBy, err := JSONWidgetOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, JSONWidgetQueryWithResponseEdges(db.JSONWidget.Query()), f.Predicates(), order, r, NewJSONWidgetResponse)
+	p, err := entapi.ListPage(ctx, JSONWidgetQueryWithResponseEdges(db.JSONWidget.Query()), f.Predicates(), orderBy, r, NewJSONWidgetResponse)
 	return p, ErrorMap.MapError(err)
 }
 

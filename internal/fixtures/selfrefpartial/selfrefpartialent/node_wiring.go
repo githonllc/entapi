@@ -91,11 +91,11 @@ func GetNode(ctx context.Context, db *Client, id uuid.UUID) (*NodeResponse, erro
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListNodes(ctx context.Context, db *Client, f *NodeFilter, r entapi.ListRequest) (*entapi.Page[NodeResponse], error) {
-	order, err := NodeOrder(r)
+	orderBy, err := NodeOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, NodeQueryWithResponseEdges(db.Node.Query()), f.Predicates(), order, r, NewNodeResponse)
+	p, err := entapi.ListPage(ctx, NodeQueryWithResponseEdges(db.Node.Query()), f.Predicates(), orderBy, r, NewNodeResponse)
 	return p, ErrorMap.MapError(err)
 }
 

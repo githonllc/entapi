@@ -242,7 +242,7 @@ func NamedTypeWidgetOrder(r entapi.ListRequest) ([]namedtypewidget.OrderOption, 
 	if len(r.Sort) == 0 {
 		return []namedtypewidget.OrderOption{namedtypewidget.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]namedtypewidget.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]namedtypewidget.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -254,14 +254,14 @@ func NamedTypeWidgetOrder(r entapi.ListRequest) ([]namedtypewidget.OrderOption, 
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, namedtypewidget.ByID(lastDir))
+		orderBy = append(orderBy, namedtypewidget.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

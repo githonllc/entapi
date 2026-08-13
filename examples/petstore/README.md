@@ -714,6 +714,7 @@ return 400 responses as `application/problem+json` documents.
 
 ## Where to look next
 
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) explains how the seven hand-written files become the generated API and why the example has this shape.
 - The root [`README.md`](../../README.md) covers the annotation model, field
   shapes, query grammar, and operation replacement.
 - `petstoreent/entapi_http.go` contains `APIHandler`, `API`, `Mount`,

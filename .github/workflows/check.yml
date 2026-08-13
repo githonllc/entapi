@@ -1,0 +1,70 @@
+name: Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+# Superseded pull-request runs are cancelled, but pushes to main are not: this workflow
+# is the repository's only gate, so cancelling a main run would leave that commit
+# permanently unverified.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GOPATH: /home/runner/go
+  GOMODCACHE: /home/runner/go/pkg/mod
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            internal/fixture/go.sum
+            internal/fixtures/httpdemo/e2e/go.sum
+            internal/fixtures/wiring/e2e/go.sum
+            internal/softdeleteproof/go.sum
+            internal/uniqueproof/go.sum
+
+      - name: Install goimports
+        run: |
+          go install golang.org/x/tools/cmd/goimports@v0.30.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Run repository checks
+        run: make check
+
+      - name: Assert all Go files are formatted
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            echo "gofmt found unformatted files:"
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+
+      - name: Assert generated fixtures are current
+        shell: bash
+        run: |
+          dirty="$(git status --porcelain)"
+          if [[ -n "$dirty" ]]; then
+            echo "make check changed the tree: generated fixtures were not regenerated, or unformatted code was committed and make fmt rewrote it."
+            echo "Paths under internal/fixtures/ indicate fixture drift; paths elsewhere indicate formatting drift."
+            echo "Offending paths:"
+            printf '%s\n' "$dirty"
+            git diff --no-ext-diff
+            exit 1
+          fi

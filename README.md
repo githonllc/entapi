@@ -448,6 +448,37 @@ a template bug lands and is caught afterwards — by the fixture assertions and
 by the OpenAPI 3.1 validator in `internal/fixtures/httpdemo/e2e`, which is a
 nested module precisely so that validator dependency stays out of this one.
 
+### Generating a client with ogen
+
+This generator emits no client. It does not have to: the document is consumed
+as-is by [ogen](https://github.com/ogen-go/ogen), so the server is generated
+here and the typed Go client is generated from the same file.
+
+```console
+go install github.com/ogen-go/ogen/cmd/ogen@latest
+ogen --target ./apiclient --package apiclient --clean ./ent/openapi.yaml
+```
+
+Verified against **ogen v1.24.0** (#129), and verified as behaviour rather than
+as "it parsed": the generated client compiles, and a round trip against the
+generated server on real SQLite preserves PATCH's three states. That last part
+is the interesting one. `openapi.yaml` spells an optional clearable field as
+`"type": ["integer", "null"]` — a 3.1 union, not 3.0's `nullable: true` — and
+ogen reads it as `OptNilInt64{Value, Set, Null}`, so an explicit null still
+clears, a value still sets, and an absent key still leaves the row alone. The
+problem+json 400 and 404 bodies decode into typed union members the same way.
+That is a genuine 3.1 read, not a lenient fallback, which is what the emitted
+`openapi: 3.1.0` needed proving.
+
+Two things to expect. ogen emits server and router code beside the client and
+has no client-only command-line flag (it is configurable only through a config
+file); the extra files compile and are harmless. And **filter parameters arrive
+single-valued**: each is declared `"type": "string"`, so ogen produces one
+`OptString` per field, while repeating a filter parameter to AND predicates —
+which the parser really does support — needs a raw query. That mismatch is a
+defect in this generator's document rather than a limitation of ogen, and #135
+owns fixing it.
+
 ### Registering exported endpoints
 
 Composition is a ladder, and which rung you stand on is decided by how much of

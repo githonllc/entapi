@@ -381,6 +381,30 @@ func withAuth(c *gin.Context) {
 `internal/fixtures/httpdemo/e2e` 里的 OpenAPI 3.1 验证器。那是个嵌套模块，正是为了让验证器
 依赖留在本模块之外。
 
+### 用 ogen 生成客户端
+
+本生成器不生成客户端，也不需要生成：这份文档可以**原样**交给
+[ogen](https://github.com/ogen-go/ogen)，于是服务端由这里生成，类型化的 Go 客户端由同一份
+文件生成。
+
+```console
+go install github.com/ogen-go/ogen/cmd/ogen@latest
+ogen --target ./apiclient --package apiclient --clean ./ent/openapi.yaml
+```
+
+已针对 **ogen v1.24.0** 验证（#129），而且验的是行为、不是"它能解析"：生成的客户端可编译，
+并且在真实 SQLite 上与生成的服务端往返一次，PATCH 的三态得以保全。最后这一点才是关键。
+`openapi.yaml` 把一个可选可清除字段写成 `"type": ["integer", "null"]`——这是 3.1 的 union，
+不是 3.0 的 `nullable: true`——而 ogen 把它读成 `OptNilInt64{Value, Set, Null}`：显式 null
+仍然清除，有值仍然写入，缺席仍然不动那一行。problem+json 的 400 与 404 同样解码成类型化的
+union 成员。这是真读懂了 3.1，而不是宽容降级——正是发出 `openapi: 3.1.0` 需要被证明的那件事。
+
+有两点要有预期。ogen 会在客户端旁边一并生成服务端与 router 代码，且没有"只要客户端"的命令行
+开关（只能通过配置文件调整）；多出来的文件能编译，无害。以及**过滤参数是单值的**：每个过滤参数
+声明为 `"type": "string"`，所以 ogen 每个字段只产出一个 `OptString`；而重复传同一个过滤参数以
+AND 谓词——parser 确实支持——需要自己拼原始 query。这处不一致是本生成器文档的缺陷，不是 ogen
+的限制，由 #135 负责修。
+
 ### 注册导出的端点
 
 组合方式是一架梯子，站哪一级取决于你要点名多大一片面：

@@ -76,11 +76,11 @@ func GetCounter(ctx context.Context, db *Client, id int) (*CounterResponse, erro
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListCounters(ctx context.Context, db *Client, f *CounterFilter, r entapi.ListRequest) (*entapi.Page[CounterResponse], error) {
-	order, err := CounterOrder(r)
+	orderBy, err := CounterOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, CounterQueryWithResponseEdges(db.Counter.Query()), f.Predicates(), order, r, NewCounterResponse)
+	p, err := entapi.ListPage(ctx, CounterQueryWithResponseEdges(db.Counter.Query()), f.Predicates(), orderBy, r, NewCounterResponse)
 	return p, ErrorMap.MapError(err)
 }
 

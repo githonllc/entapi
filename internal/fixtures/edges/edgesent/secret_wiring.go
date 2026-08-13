@@ -77,11 +77,11 @@ func GetSecret(ctx context.Context, db *Client, id uuid.UUID) (*SecretResponse, 
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListSecrets(ctx context.Context, db *Client, f *SecretFilter, r entapi.ListRequest) (*entapi.Page[SecretResponse], error) {
-	order, err := SecretOrder(r)
+	orderBy, err := SecretOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, SecretQueryWithResponseEdges(db.Secret.Query()), f.Predicates(), order, r, NewSecretResponse)
+	p, err := entapi.ListPage(ctx, SecretQueryWithResponseEdges(db.Secret.Query()), f.Predicates(), orderBy, r, NewSecretResponse)
 	return p, ErrorMap.MapError(err)
 }
 

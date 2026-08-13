@@ -964,7 +964,7 @@ func RecordOrder(r entapi.ListRequest) ([]record.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []record.OrderOption{record.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]record.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]record.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -976,14 +976,14 @@ func RecordOrder(r entapi.ListRequest) ([]record.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, record.ByID(lastDir))
+		orderBy = append(orderBy, record.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

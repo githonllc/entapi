@@ -77,11 +77,11 @@ func GetLedger(ctx context.Context, db *Client, id uuid.UUID) (*LedgerResponse, 
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListLedgers(ctx context.Context, db *Client, f *LedgerFilter, r entapi.ListRequest) (*entapi.Page[LedgerResponse], error) {
-	order, err := LedgerOrder(r)
+	orderBy, err := LedgerOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, LedgerQueryWithResponseEdges(db.Ledger.Query()), f.Predicates(), order, r, NewLedgerResponse)
+	p, err := entapi.ListPage(ctx, LedgerQueryWithResponseEdges(db.Ledger.Query()), f.Predicates(), orderBy, r, NewLedgerResponse)
 	return p, ErrorMap.MapError(err)
 }
 

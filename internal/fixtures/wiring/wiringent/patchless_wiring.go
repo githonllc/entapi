@@ -77,11 +77,11 @@ func GetPatchless(ctx context.Context, db *Client, id uuid.UUID) (*PatchlessResp
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListPatchlesses(ctx context.Context, db *Client, f *PatchlessFilter, r entapi.ListRequest) (*entapi.Page[PatchlessResponse], error) {
-	order, err := PatchlessOrder(r)
+	orderBy, err := PatchlessOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, PatchlessQueryWithResponseEdges(db.Patchless.Query()), f.Predicates(), order, r, NewPatchlessResponse)
+	p, err := entapi.ListPage(ctx, PatchlessQueryWithResponseEdges(db.Patchless.Query()), f.Predicates(), orderBy, r, NewPatchlessResponse)
 	return p, ErrorMap.MapError(err)
 }
 

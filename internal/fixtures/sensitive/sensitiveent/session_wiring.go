@@ -91,11 +91,11 @@ func GetSession(ctx context.Context, db *Client, id uuid.UUID) (*SessionResponse
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListSessions(ctx context.Context, db *Client, f *SessionFilter, r entapi.ListRequest) (*entapi.Page[SessionResponse], error) {
-	order, err := SessionOrder(r)
+	orderBy, err := SessionOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, SessionQueryWithResponseEdges(db.Session.Query()), f.Predicates(), order, r, NewSessionResponse)
+	p, err := entapi.ListPage(ctx, SessionQueryWithResponseEdges(db.Session.Query()), f.Predicates(), orderBy, r, NewSessionResponse)
 	return p, ErrorMap.MapError(err)
 }
 

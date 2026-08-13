@@ -282,7 +282,7 @@ func {{ $.Name }}Order(r entapi.ListRequest) ([]{{ $pkg }}.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []{{ $pkg }}.OrderOption{ {{ $pkg }}.{{ $.ID.OrderName }}(sql.OrderAsc()) }, nil
 	}
-	order := make([]{{ $pkg }}.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]{{ $pkg }}.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -294,14 +294,14 @@ func {{ $.Name }}Order(r entapi.ListRequest) ([]{{ $pkg }}.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "{{ $.ID.StorageKey }}" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, {{ $pkg }}.{{ $.ID.OrderName }}(lastDir))
+		orderBy = append(orderBy, {{ $pkg }}.{{ $.ID.OrderName }}(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

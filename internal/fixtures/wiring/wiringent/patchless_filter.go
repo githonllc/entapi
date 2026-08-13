@@ -238,7 +238,7 @@ func PatchlessOrder(r entapi.ListRequest) ([]patchless.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []patchless.OrderOption{patchless.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]patchless.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]patchless.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -250,14 +250,14 @@ func PatchlessOrder(r entapi.ListRequest) ([]patchless.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, patchless.ByID(lastDir))
+		orderBy = append(orderBy, patchless.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

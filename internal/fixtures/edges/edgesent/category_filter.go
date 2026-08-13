@@ -238,7 +238,7 @@ func CategoryOrder(r entapi.ListRequest) ([]category.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []category.OrderOption{category.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]category.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]category.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -250,14 +250,14 @@ func CategoryOrder(r entapi.ListRequest) ([]category.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, category.ByID(lastDir))
+		orderBy = append(orderBy, category.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

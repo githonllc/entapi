@@ -238,7 +238,7 @@ func LedgerOrder(r entapi.ListRequest) ([]ledger.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []ledger.OrderOption{ledger.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]ledger.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]ledger.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -250,14 +250,14 @@ func LedgerOrder(r entapi.ListRequest) ([]ledger.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, ledger.ByID(lastDir))
+		orderBy = append(orderBy, ledger.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

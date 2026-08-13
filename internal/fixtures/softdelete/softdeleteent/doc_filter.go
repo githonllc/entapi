@@ -238,7 +238,7 @@ func DocOrder(r entapi.ListRequest) ([]doc.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []doc.OrderOption{doc.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]doc.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]doc.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -250,14 +250,14 @@ func DocOrder(r entapi.ListRequest) ([]doc.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, doc.ByID(lastDir))
+		orderBy = append(orderBy, doc.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

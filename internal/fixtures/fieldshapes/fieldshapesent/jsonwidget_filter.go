@@ -242,7 +242,7 @@ func JSONWidgetOrder(r entapi.ListRequest) ([]jsonwidget.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []jsonwidget.OrderOption{jsonwidget.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]jsonwidget.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]jsonwidget.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -254,14 +254,14 @@ func JSONWidgetOrder(r entapi.ListRequest) ([]jsonwidget.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, jsonwidget.ByID(lastDir))
+		orderBy = append(orderBy, jsonwidget.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

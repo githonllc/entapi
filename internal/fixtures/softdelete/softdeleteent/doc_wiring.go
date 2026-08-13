@@ -91,11 +91,11 @@ func GetDoc(ctx context.Context, db *Client, id uuid.UUID) (*DocResponse, error)
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListDocs(ctx context.Context, db *Client, f *DocFilter, r entapi.ListRequest) (*entapi.Page[DocResponse], error) {
-	order, err := DocOrder(r)
+	orderBy, err := DocOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, DocQueryWithResponseEdges(db.Doc.Query()), f.Predicates(), order, r, NewDocResponse)
+	p, err := entapi.ListPage(ctx, DocQueryWithResponseEdges(db.Doc.Query()), f.Predicates(), orderBy, r, NewDocResponse)
 	return p, ErrorMap.MapError(err)
 }
 

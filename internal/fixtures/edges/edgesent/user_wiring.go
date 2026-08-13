@@ -91,11 +91,11 @@ func GetUser(ctx context.Context, db *Client, id uuid.UUID) (*UserResponse, erro
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListUsers(ctx context.Context, db *Client, f *UserFilter, r entapi.ListRequest) (*entapi.Page[UserResponse], error) {
-	order, err := UserOrder(r)
+	orderBy, err := UserOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, UserQueryWithResponseEdges(db.User.Query()), f.Predicates(), order, r, NewUserResponse)
+	p, err := entapi.ListPage(ctx, UserQueryWithResponseEdges(db.User.Query()), f.Predicates(), orderBy, r, NewUserResponse)
 	return p, ErrorMap.MapError(err)
 }
 

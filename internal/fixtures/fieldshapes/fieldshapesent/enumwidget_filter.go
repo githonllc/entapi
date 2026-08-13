@@ -238,7 +238,7 @@ func EnumWidgetOrder(r entapi.ListRequest) ([]enumwidget.OrderOption, error) {
 	if len(r.Sort) == 0 {
 		return []enumwidget.OrderOption{enumwidget.ByID(sql.OrderAsc())}, nil
 	}
-	order := make([]enumwidget.OrderOption, 0, len(r.Sort)+1)
+	orderBy := make([]enumwidget.OrderOption, 0, len(r.Sort)+1)
 	idPresent := false
 	lastDir := sql.OrderAsc()
 	for _, spec := range r.Sort {
@@ -250,14 +250,14 @@ func EnumWidgetOrder(r entapi.ListRequest) ([]enumwidget.OrderOption, error) {
 		if spec.Desc {
 			dir = sql.OrderDesc()
 		}
-		order = append(order, by(dir))
+		orderBy = append(orderBy, by(dir))
 		lastDir = dir
 		if spec.Key == "id" {
 			idPresent = true
 		}
 	}
 	if !idPresent {
-		order = append(order, enumwidget.ByID(lastDir))
+		orderBy = append(orderBy, enumwidget.ByID(lastDir))
 	}
-	return order, nil
+	return orderBy, nil
 }

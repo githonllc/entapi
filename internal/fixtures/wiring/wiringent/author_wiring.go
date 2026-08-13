@@ -91,11 +91,11 @@ func GetAuthor(ctx context.Context, db *Client, id uuid.UUID) (*AuthorResponse, 
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListAuthors(ctx context.Context, db *Client, f *AuthorFilter, r entapi.ListRequest) (*entapi.Page[AuthorResponse], error) {
-	order, err := AuthorOrder(r)
+	orderBy, err := AuthorOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, AuthorQueryWithResponseEdges(db.Author.Query()), f.Predicates(), order, r, NewAuthorResponse)
+	p, err := entapi.ListPage(ctx, AuthorQueryWithResponseEdges(db.Author.Query()), f.Predicates(), orderBy, r, NewAuthorResponse)
 	return p, ErrorMap.MapError(err)
 }
 

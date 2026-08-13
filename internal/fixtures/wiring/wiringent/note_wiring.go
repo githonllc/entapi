@@ -77,11 +77,11 @@ func GetNote(ctx context.Context, db *Client, id uuid.UUID) (*NoteResponse, erro
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListNotes(ctx context.Context, db *Client, f *NoteFilter, r entapi.ListRequest) (*entapi.Page[NoteResponse], error) {
-	order, err := NoteOrder(r)
+	orderBy, err := NoteOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, NoteQueryWithResponseEdges(db.Note.Query()), f.Predicates(), order, r, NewNoteResponse)
+	p, err := entapi.ListPage(ctx, NoteQueryWithResponseEdges(db.Note.Query()), f.Predicates(), orderBy, r, NewNoteResponse)
 	return p, ErrorMap.MapError(err)
 }
 

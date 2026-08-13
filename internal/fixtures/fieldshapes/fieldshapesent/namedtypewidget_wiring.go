@@ -77,11 +77,11 @@ func GetNamedTypeWidget(ctx context.Context, db *Client, id uuid.UUID) (*NamedTy
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListNamedTypeWidgets(ctx context.Context, db *Client, f *NamedTypeWidgetFilter, r entapi.ListRequest) (*entapi.Page[NamedTypeWidgetResponse], error) {
-	order, err := NamedTypeWidgetOrder(r)
+	orderBy, err := NamedTypeWidgetOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, NamedTypeWidgetQueryWithResponseEdges(db.NamedTypeWidget.Query()), f.Predicates(), order, r, NewNamedTypeWidgetResponse)
+	p, err := entapi.ListPage(ctx, NamedTypeWidgetQueryWithResponseEdges(db.NamedTypeWidget.Query()), f.Predicates(), orderBy, r, NewNamedTypeWidgetResponse)
 	return p, ErrorMap.MapError(err)
 }
 

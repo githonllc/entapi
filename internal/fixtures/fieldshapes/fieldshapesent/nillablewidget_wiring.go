@@ -77,11 +77,11 @@ func GetNillableWidget(ctx context.Context, db *Client, id uuid.UUID) (*Nillable
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListNillableWidgets(ctx context.Context, db *Client, f *NillableWidgetFilter, r entapi.ListRequest) (*entapi.Page[NillableWidgetResponse], error) {
-	order, err := NillableWidgetOrder(r)
+	orderBy, err := NillableWidgetOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, NillableWidgetQueryWithResponseEdges(db.NillableWidget.Query()), f.Predicates(), order, r, NewNillableWidgetResponse)
+	p, err := entapi.ListPage(ctx, NillableWidgetQueryWithResponseEdges(db.NillableWidget.Query()), f.Predicates(), orderBy, r, NewNillableWidgetResponse)
 	return p, ErrorMap.MapError(err)
 }
 

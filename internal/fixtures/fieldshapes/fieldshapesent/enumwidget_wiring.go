@@ -77,11 +77,11 @@ func GetEnumWidget(ctx context.Context, db *Client, id uuid.UUID) (*EnumWidgetRe
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListEnumWidgets(ctx context.Context, db *Client, f *EnumWidgetFilter, r entapi.ListRequest) (*entapi.Page[EnumWidgetResponse], error) {
-	order, err := EnumWidgetOrder(r)
+	orderBy, err := EnumWidgetOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, EnumWidgetQueryWithResponseEdges(db.EnumWidget.Query()), f.Predicates(), order, r, NewEnumWidgetResponse)
+	p, err := entapi.ListPage(ctx, EnumWidgetQueryWithResponseEdges(db.EnumWidget.Query()), f.Predicates(), orderBy, r, NewEnumWidgetResponse)
 	return p, ErrorMap.MapError(err)
 }
 

@@ -77,11 +77,11 @@ func GetAccount(ctx context.Context, db *Client, id uuid.UUID) (*AccountResponse
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListAccounts(ctx context.Context, db *Client, f *AccountFilter, r entapi.ListRequest) (*entapi.Page[AccountResponse], error) {
-	order, err := AccountOrder(r)
+	orderBy, err := AccountOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, AccountQueryWithResponseEdges(db.Account.Query()), f.Predicates(), order, r, NewAccountResponse)
+	p, err := entapi.ListPage(ctx, AccountQueryWithResponseEdges(db.Account.Query()), f.Predicates(), orderBy, r, NewAccountResponse)
 	return p, ErrorMap.MapError(err)
 }
 

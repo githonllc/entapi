@@ -10,6 +10,7 @@ import (
 	_ "github.com/githonllc/entapi/examples/petstore/petstoreent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
+
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/migrate"
 )
 

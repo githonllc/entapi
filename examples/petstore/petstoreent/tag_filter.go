@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"entgo.io/ent/dialect/sql"
+
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/predicate"
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/tag"
 	entapi "github.com/githonllc/entapi/runtime"

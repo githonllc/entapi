@@ -218,7 +218,42 @@ func TestParseFieldValues_ListParseErrorPropagates(t *testing.T) {
 	if err == nil || !errors.Is(err, ErrValidation) {
 		t.Fatalf("error = %v, want wrapped ErrValidation", err)
 	}
+	want := `validation failed: field "n" value "in:1,x" is not a valid int: strconv.ParseInt: parsing "x": invalid syntax`
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
 	if len(s.in) != 0 {
 		t.Errorf("in slot = %v, want empty after failed parse", s.in)
+	}
+}
+
+func TestParseFieldValues_RangeParseErrorPropagates(t *testing.T) {
+	// between parses both parts before appending either, so a failure in the
+	// lower or the upper part surfaces that part's error unchanged and leaves
+	// both slots empty.
+	for _, tc := range []struct {
+		value string
+		want  string
+	}{
+		{
+			value: "between:x,2",
+			want:  `validation failed: field "n" value "between:x,2" is not a valid int: strconv.ParseInt: parsing "x": invalid syntax`,
+		},
+		{
+			value: "between:1,x",
+			want:  `validation failed: field "n" value "between:1,x" is not a valid int: strconv.ParseInt: parsing "x": invalid syntax`,
+		},
+	} {
+		var s intSlots
+		err := ParseFieldValues("n", []string{tc.value}, false, intLegal, parseIntValue, intTable(&s))
+		if err == nil || !errors.Is(err, ErrValidation) {
+			t.Fatalf("%s: error = %v, want wrapped ErrValidation", tc.value, err)
+		}
+		if err.Error() != tc.want {
+			t.Fatalf("%s: error = %q, want %q", tc.value, err.Error(), tc.want)
+		}
+		if len(s.gte) != 0 || len(s.lte) != 0 {
+			t.Errorf("%s: ge/le slots = %v/%v, want both empty after failed parse", tc.value, s.gte, s.lte)
+		}
 	}
 }

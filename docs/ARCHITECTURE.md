@@ -111,7 +111,7 @@ end note
 | 生成器 | `./*.go` | ent 扩展本体：读取注解、冲突检查、渲染、落盘、回收 | `NewExtension` / `NewExtensionWithOptions` / `SoftDeleteMixin` | `api`、`entc/gen`、`x/tools/imports`、`embed` |
 | 模板 | `templates/*.tmpl` | 生成物的形状（10 个） | 经 `//go:embed` 由 `template_loader.go` — `templateFS` 读入 | — |
 | 模板函数 | `funcs_*.go`、`annotations_edge.go` | 模板能问的所有问题 | `templateFuncs()`（`funcs.go`）**唯一注册处** | `entc/gen` |
-| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `WithValidation` / `WithUniqueViolation` / `HasUniqueViolation` / `UniqueViolation` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `ParseFieldValues` / `QueryOp` / `WriteProblem` / `FieldError` / `Endpoint`（仅端点元数据）/ `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
+| 运行时 | `runtime/*.go` | 生成代码在生产环境调用的算法 | `ListPage` / `SaveOne` / `GetOne` / `ErrorMapper` / `WithValidation` / `WithUniqueViolation` / `HasUniqueViolation` / `UniqueViolation` / `ListRequest` / `Page` / `AppendEach` / `AppendEachSlice` / `ParseFieldValues` / `QueryOp` / `OpKind` / `WriteProblem` / `FieldError` / `Endpoint`（仅端点元数据）/ `WithActor` / `ActorFrom` / soft-delete 上下文开关 | **仅标准库** |
 | codegen fixtures | `internal/fixtures/<dir>/<dir>ent/` | 生成 + 编译的证明 | — | 本模块 |
 | spike 规格 | `internal/fixture/`（**单数**） | #22 手写目标，是生成物的规格 | 独立 go.mod | ent + SQLite |
 | 行为证明 | `internal/fixtures/wiring/e2e`、`internal/fixtures/httpdemo/e2e`、`internal/softdeleteproof`、`internal/uniqueproof` | wiring、HTTP、OpenAPI 文档校验、软删除与真实 driver uniqueness channel 的行为证明 | 独立 go.mod | ent + SQL driver（`httpdemo/e2e` 另含 `pb33f/libopenapi{,-validator}`，全仓仅此一处） |

@@ -76,8 +76,10 @@ func parse{{ $.Name }}{{ $pf.Name }}QueryValue(raw, whole string) ({{ $pf.Field.
 	return {{ $pf.Conversion }}, nil
 {{- else if eq $pf.ParseKind "enum" }}
 	switch raw {
+{{- if $pf.Enums }}
 	case {{ range $i, $value := $pf.Enums }}{{ if $i }}, {{ end }}{{ printf "%q" $value }}{{ end }}:
 		return {{ $pf.Conversion }}, nil
+{{- end }}
 	default:
 		var zero {{ $pf.Field.Type }}
 		return zero, fmt.Errorf("%w: field %q value %q is not an enum member; legal members: %s", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, strings.Join([]string{

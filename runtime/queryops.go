@@ -23,9 +23,15 @@ const (
 )
 
 // QueryOp is one operator row of a generated field's dispatch table. Exactly
-// one slot pointer group is set per row, matching Kind; the pointers bind the
-// generated filter struct's typed fields, so a missing slot is a compile
-// error in the generated code, never a runtime lookup miss.
+// one slot pointer group is set per row, matching Kind. The slots are typed
+// pointers into the generated filter struct, so a missing or wrong-typed
+// struct field is a compile error in the generated code, and dispatch involves
+// no reflection and no string-keyed runtime lookup of the predicate target.
+// The pairing between Kind and which slot is set is NOT checked by the
+// compiler: it is a contract upheld by filter.tmpl, the sole construction
+// site. A row whose Kind names a slot it did not set is a programming error,
+// which ParseFieldValues reports as a plain error rather than a validation
+// failure.
 type QueryOp[T any] struct {
 	Prefix    string
 	Kind      OpKind
@@ -98,12 +104,14 @@ func ParseFieldValues[T any](field string, values []string, strict bool, legal s
 			}
 			*row.One = append(*row.One, lower)
 			*row.Second = append(*row.Second, upper)
-		default:
+		case OpKindValue:
 			parsed, err := parse(raw, whole)
 			if err != nil {
 				return err
 			}
 			*row.One = append(*row.One, parsed)
+		default:
+			return fmt.Errorf("entapi: query operator %q has invalid OpKind %d", row.Prefix, row.Kind)
 		}
 	}
 	return nil

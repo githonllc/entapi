@@ -76,10 +76,8 @@ func parse{{ $.Name }}{{ $pf.Name }}QueryValue(raw, whole string) ({{ $pf.Field.
 	return {{ $pf.Conversion }}, nil
 {{- else if eq $pf.ParseKind "enum" }}
 	switch raw {
-{{- range $value := $pf.Enums }}
-	case {{ printf "%q" $value }}:
+	case {{ range $i, $value := $pf.Enums }}{{ if $i }}, {{ end }}{{ printf "%q" $value }}{{ end }}:
 		return {{ $pf.Conversion }}, nil
-{{- end }}
 	default:
 		var zero {{ $pf.Field.Type }}
 		return zero, fmt.Errorf("%w: field %q value %q is not an enum member; legal members: %s", entapi.ErrValidation, "{{ $pf.Field.StorageKey }}", whole, strings.Join([]string{
@@ -180,74 +178,24 @@ func Parse{{ $.Name }}Query(q url.Values) (*{{ $.Name }}Filter, entapi.ListReque
 		switch key {
 {{- range $pf := $parseFields }}
 		case "{{ $pf.Field.StorageKey }}":
-			for _, whole := range values {
-				if whole == "" {
-					continue
-				}
-				op, raw, explicit := entapi.SplitOp(whole)
-				if !explicit {
-					op = "eq"
-				}
-				switch op {
+			if err := entapi.ParseFieldValues("{{ $pf.Field.StorageKey }}", values, {{ strictQueryOperators }}, "{{ $pf.Allowed }}", parse{{ $.Name }}{{ $pf.Name }}QueryValue, []entapi.QueryOp[{{ $pf.Field.Type }}]{
 {{- range $op := $pf.Operators }}
-				case "{{ $op.Prefix }}":
-{{- end }}
-				default:
-					if entapi.KnownQueryOperator(op) {
-						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses operator %q; legal operators: %s", entapi.ErrValidation, key, whole, op, "{{ $pf.Allowed }}")
-					}
-					{{- if strictQueryOperators }}
-					return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses unknown operator prefix %q; legal operators: %s; prefix the value with \"eq:\" to filter for a literal value containing a colon", entapi.ErrValidation, key, whole, op, "{{ $pf.Allowed }}")
-					{{- else }}
-					op, raw = "eq", whole
-					{{- end }}
-				}
-				switch op {
-{{- range $op := $pf.Operators }}
-				case "{{ $op.Prefix }}":
 {{- if eq $op.Kind "null" }}
-					if raw != "" {
-						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses %q with a value; legal operators: %s", entapi.ErrValidation, key, whole, op, "{{ $pf.Allowed }}")
-					}
-					f.{{ $op.Field }} = append(f.{{ $op.Field }}, {{ $op.BoolValue }})
+				{Prefix: "{{ $op.Prefix }}", Kind: entapi.OpKindFlag, Null: &f.{{ $op.Field }}, BoolValue: {{ $op.BoolValue }}},
 {{- else if eq $op.Kind "many" }}
-					parts := strings.Split(raw, ",")
-					parsedValues := make([]{{ $pf.Field.Type }}, 0, len(parts))
-					for _, part := range parts {
-						parsed, parseErr := parse{{ $.Name }}{{ $pf.Name }}QueryValue(part, whole)
-						if parseErr != nil {
-							return nil, entapi.ListRequest{}, parseErr
-						}
-						parsedValues = append(parsedValues, parsed)
-					}
-					f.{{ $op.Field }} = append(f.{{ $op.Field }}, parsedValues)
+				{Prefix: "{{ $op.Prefix }}", Kind: entapi.OpKindList, Many: &f.{{ $op.Field }}},
 {{- else if eq $op.Kind "between" }}
-					parts := strings.Split(raw, ",")
-					if len(parts) != 2 {
-						return nil, entapi.ListRequest{}, fmt.Errorf("%w: field %q value %q uses between with %d parts; exactly two are required", entapi.ErrValidation, key, whole, len(parts))
-					}
-					lower, parseErr := parse{{ $.Name }}{{ $pf.Name }}QueryValue(parts[0], whole)
-					if parseErr != nil {
-						return nil, entapi.ListRequest{}, parseErr
-					}
-					upper, parseErr := parse{{ $.Name }}{{ $pf.Name }}QueryValue(parts[1], whole)
-					if parseErr != nil {
-						return nil, entapi.ListRequest{}, parseErr
-					}
-					f.{{ $op.Field }} = append(f.{{ $op.Field }}, lower)
-					f.{{ $op.SecondField }} = append(f.{{ $op.SecondField }}, upper)
+				{Prefix: "{{ $op.Prefix }}", Kind: entapi.OpKindRange, One: &f.{{ $op.Field }}, Second: &f.{{ $op.SecondField }}},
 {{- else }}
-					parsed, parseErr := parse{{ $.Name }}{{ $pf.Name }}QueryValue(raw, whole)
-					if parseErr != nil {
-						return nil, entapi.ListRequest{}, parseErr
-					}
-					f.{{ $op.Field }} = append(f.{{ $op.Field }}, parsed)
+				{Prefix: "{{ $op.Prefix }}", Kind: entapi.OpKindValue, One: &f.{{ $op.Field }}},
 {{- end }}
 {{- end }}
-				}
+			}); err != nil {
+				return nil, entapi.ListRequest{}, err
 			}
 {{- end }}
 		default:
+{{- if $unfilterableFields }}
 			switch key {
 {{- range $f := $unfilterableFields }}
 			case "{{ $f.StorageKey }}":
@@ -256,6 +204,9 @@ func Parse{{ $.Name }}Query(q url.Values) (*{{ $.Name }}Filter, entapi.ListReque
 			default:
 				return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown query field %q with value %q", entapi.ErrValidation, key, values)
 			}
+{{- else }}
+			return nil, entapi.ListRequest{}, fmt.Errorf("%w: unknown query field %q with value %q", entapi.ErrValidation, key, values)
+{{- end }}
 		}
 	}
 	return f, request, nil

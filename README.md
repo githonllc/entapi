@@ -981,6 +981,8 @@ nothing else.
 > `MaxPageSize`; `runtime/urlquery.go` — lexical query parsing;
 > `runtime/query.go` — `Limit`, `Offset`, `Page[R]`, `Query[Q,P,O,E]`,
 > `ListPage`; `runtime/filter.go` — `AppendEach`, `AppendEachSlice`;
+> `runtime/queryops.go` — `ParseFieldValues`, `QueryOp`, `OpKind`, the shared
+> per-field dispatch loop generated tables bind into;
 > `templates/filter.tmpl`; generated example:
 > `internal/fixtures/query/queryent/record_filter.go` — `RecordFilter`,
 > `ParseRecordQuery`, `Predicates`, `recordSortOptions`, `RecordSortKeys`,

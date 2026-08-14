@@ -58,8 +58,8 @@ func parseSessionIDQueryValue(raw, whole string) (uuid.UUID, error) {
 }
 
 // ParseSessionQuery parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func ParseSessionQuery(q url.Values) (*SessionFilter, entapi.ListRequest, error) {
 	f := &SessionFilter{}
 	var request entapi.ListRequest

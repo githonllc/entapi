@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"entgo.io/ent/dialect/sql"
-
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/category"
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/predicate"
 	entapi "github.com/githonllc/entapi/runtime"
@@ -95,8 +94,8 @@ func parseCategoryNameQueryValue(raw, whole string) (string, error) {
 }
 
 // ParseCategoryQuery parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func ParseCategoryQuery(q url.Values) (*CategoryFilter, entapi.ListRequest, error) {
 	f := &CategoryFilter{}
 	var request entapi.ListRequest

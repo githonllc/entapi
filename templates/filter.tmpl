@@ -135,8 +135,8 @@ func parse{{ $.Name }}{{ $pf.Name }}QueryValue(raw, whole string) ({{ $pf.Field.
 {{- end }}
 
 // Parse{{ $.Name }}Query parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func Parse{{ $.Name }}Query(q url.Values) (*{{ $.Name }}Filter, entapi.ListRequest, error) {
 	f := &{{ $.Name }}Filter{}
 	var request entapi.ListRequest

@@ -79,8 +79,8 @@ func parseNoteBodyQueryValue(raw, whole string) (string, error) {
 }
 
 // ParseNoteQuery parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func ParseNoteQuery(q url.Values) (*NoteFilter, entapi.ListRequest, error) {
 	f := &NoteFilter{}
 	var request entapi.ListRequest

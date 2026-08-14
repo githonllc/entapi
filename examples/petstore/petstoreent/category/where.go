@@ -5,7 +5,6 @@ package category
 import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/predicate"
 )
 

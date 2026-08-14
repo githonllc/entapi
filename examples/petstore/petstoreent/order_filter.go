@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"entgo.io/ent/dialect/sql"
-
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/order"
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/predicate"
 	entapi "github.com/githonllc/entapi/runtime"
@@ -82,8 +81,8 @@ func parseOrderStatusQueryValue(raw, whole string) (order.Status, error) {
 }
 
 // ParseOrderQuery parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func ParseOrderQuery(q url.Values) (*OrderFilter, entapi.ListRequest, error) {
 	f := &OrderFilter{}
 	var request entapi.ListRequest

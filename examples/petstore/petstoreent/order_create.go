@@ -10,7 +10,6 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/order"
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/pet"
 )

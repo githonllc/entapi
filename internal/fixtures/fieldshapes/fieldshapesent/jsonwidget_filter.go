@@ -58,8 +58,8 @@ func parseJSONWidgetIDQueryValue(raw, whole string) (uuid.UUID, error) {
 }
 
 // ParseJSONWidgetQuery parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func ParseJSONWidgetQuery(q url.Values) (*JSONWidgetFilter, entapi.ListRequest, error) {
 	f := &JSONWidgetFilter{}
 	var request entapi.ListRequest

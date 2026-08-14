@@ -58,8 +58,8 @@ func parseNodeIDQueryValue(raw, whole string) (uuid.UUID, error) {
 }
 
 // ParseNodeQuery parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func ParseNodeQuery(q url.Values) (*NodeFilter, entapi.ListRequest, error) {
 	f := &NodeFilter{}
 	var request entapi.ListRequest

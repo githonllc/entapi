@@ -15,7 +15,6 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/category"
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/order"
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/pet"

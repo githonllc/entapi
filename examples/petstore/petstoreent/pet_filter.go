@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"entgo.io/ent/dialect/sql"
-
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/pet"
 	"github.com/githonllc/entapi/examples/petstore/petstoreent/predicate"
 	entapi "github.com/githonllc/entapi/runtime"
@@ -152,8 +151,8 @@ func parsePetPriceQueryValue(raw, whole string) (float64, error) {
 }
 
 // ParsePetQuery parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func ParsePetQuery(q url.Values) (*PetFilter, entapi.ListRequest, error) {
 	f := &PetFilter{}
 	var request entapi.ListRequest

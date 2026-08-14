@@ -58,8 +58,8 @@ func parseLedgerIDQueryValue(raw, whole string) (uuid.UUID, error) {
 }
 
 // ParseLedgerQuery parses the complete URL query contract in sorted-key
-// order. Runtime code owns lexical grammar; this generated switch owns the
-// field-local operator set, conversion and predicate slots.
+// order. Runtime code owns lexical grammar; the generated operator tables own
+// the field-local operator set, conversion and predicate slots.
 func ParseLedgerQuery(q url.Values) (*LedgerFilter, entapi.ListRequest, error) {
 	f := &LedgerFilter{}
 	var request entapi.ListRequest

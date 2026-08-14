@@ -26,7 +26,7 @@ One Go module, **three packages**, split by *when the code runs* (#15, #71).
 
 1. **`github.com/githonllc/entapi` — code-generation time.** The Ent extension and `SoftDeleteMixin`. It writes `{entity}_dto.go`, `{entity}_filter.go`, `{entity}_wiring.go` per `api.Resource()`, plus graph files, into the consumer's `ent/` package.
 2. **`github.com/githonllc/entapi/api` — schema time only.** The three mergeable annotations and their builders. It may import only `entgo.io/ent/schema` and stdlib; `TestSchemaAPIPackageIsGeneratorFree` guards the transitive closure.
-3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`/`SortSpec`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendEach`/`AppendEachSlice`, lexical URL-query helpers, error sentinels and mapper, `WriteProblem`/`FieldError`/`Endpoint` plus `ColonPath`/`Endpoint.Bind`, actor context, pointer helpers, and soft-delete context switches.
+3. **`github.com/githonllc/entapi/runtime` — application run time.** The types generated code links against: `Page`/`ListRequest`/`SortSpec`, the generic `ListPage`/`GetOne`/`SaveOne`, `AppendEach`/`AppendEachSlice`, `ParseFieldValues`/`QueryOp`/`OpKind` (the table-driven per-field query dispatch), lexical URL-query helpers, error sentinels and mapper, `WriteProblem`/`FieldError`/`Endpoint` plus `ColonPath`/`Endpoint.Bind`, actor context, pointer helpers, and soft-delete context switches.
 
 **The split is load-bearing, not cosmetic.** `template_index.go` declares package-level vars calling `mustLoadTemplate`, so while the two halves shared a package, a consumer's production binary that wanted `ErrValidation` embedded five templates and ran the template loader at init. Measured, and asserted by `TestRuntimePackageIsGeneratorFree`: `go list -deps ./runtime` reports **0** `entgo.io` packages out of 186 (all standard library, the `vendor/golang.org/x/…` entries being the ones the Go distribution ships inside std) and `EmbedFiles` is empty, against **15** for the generator — which is correct there, since generating genuinely needs ent. The closure was 62 packages until #73 put `WriteProblem` in the runtime and brought `net/http` with it; the invariant the test asserts is the **0**, never the total, which is why the growth is a documentation update and not a regression.
 
@@ -99,7 +99,12 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 `templates/filter.tmpl` emits `Parse{Entity}Query(url.Values)`, the typed filter,
 and `{Entity}Order`. Runtime owns only lexical grammar: split on the first colon,
 the global operator-prefix vocabulary, reserved parameter syntax and sort-spec
-parsing. Generated code owns semantic permission and conversion: each field's
+parsing — and, since #143 moved the dispatch loop into `ParseFieldValues`, the
+rest of the grammar that was never field-specific: the implicit `eq` for an
+unprefixed value, the lenient reset to the whole value on an unknown prefix, the
+comma as the part separator for `in`/`not_in`/`between`, `between`'s
+exactly-two-parts arity, and the rule that `is_null`/`not_null` may carry no
+value. Generated code owns semantic permission and conversion: each field's
 allowed operators are `$field.Ops` intersected with the wire vocabulary, with
 Searchable gating the expensive substring class. Wire field names always come
 from `StorageKey()`. The primary key is annotation-free but always Filterable

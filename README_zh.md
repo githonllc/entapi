@@ -832,7 +832,9 @@ Sortable。除非主键已出现在列表任意位置，否则它会作为最后
 > 每字段操作符集合与转换表达式；`runtime/types.go` — `ListRequest`、`SortSpec`、
 > `DefaultPageSize`、`MaxPageSize`；`runtime/urlquery.go` — query 词法解析；
 > `runtime/query.go` — `Limit`、`Offset`、`Page[R]`、`Query[Q,P,O,E]`、`ListPage`；
-> `runtime/filter.go` — `AppendEach`、`AppendEachSlice`；`templates/filter.tmpl`；
+> `runtime/filter.go` — `AppendEach`、`AppendEachSlice`；
+> `runtime/queryops.go` — `ParseFieldValues`、`QueryOp`、`OpKind`，生成的操作符表
+> 绑定进的共享逐字段分发循环；`templates/filter.tmpl`；
 > 生成物样例：`internal/fixtures/query/queryent/record_filter.go` — `RecordFilter`、
 > `ParseRecordQuery`、`Predicates`、`recordSortOptions`、`RecordSortKeys`、`RecordOrder`
 

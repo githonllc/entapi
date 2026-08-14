@@ -76,11 +76,11 @@ func GetTodo(ctx context.Context, db *Client, id int) (*TodoResponse, error) {
 // entapi.ErrValidation and never reached the database, so there is nothing
 // for a persistence-layer classifier to say about it.
 func ListTodos(ctx context.Context, db *Client, f *TodoFilter, r entapi.ListRequest) (*entapi.Page[TodoResponse], error) {
-	order, err := TodoOrder(r)
+	orderBy, err := TodoOrder(r)
 	if err != nil {
 		return nil, err
 	}
-	p, err := entapi.ListPage(ctx, TodoQueryWithResponseEdges(db.Todo.Query()), f.Predicates(), order, r, NewTodoResponse)
+	p, err := entapi.ListPage(ctx, TodoQueryWithResponseEdges(db.Todo.Query()), f.Predicates(), orderBy, r, NewTodoResponse)
 	return p, ErrorMap.MapError(err)
 }
 

@@ -61,7 +61,7 @@ func (DomainSoftDelete) Name() string { return SoftDeleteAnnotationName }
 //     to the "empty-import" format (entc/gen/template/runtime.tmpl:12-17,50-63),
 //     which obliges every consumer to add `_ "<project>/ent/runtime"` to their
 //     main package. Carrying no hooks here means adopting soft delete does not
-//     change how the consumer's project is generated. See README.
+//     change how the consumer's project is generated. See docs/GUIDE.md.
 //
 // Both halves are installed instead by the generated
 // config/init/fields/entapi_softdelete partial. Ent executes that partial inside

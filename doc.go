@@ -80,6 +80,6 @@
 // Generated Update{Entity} was renamed to Patch{Entity}, and generated Routes()
 // to Endpoints() when entapi.Route became entapi.Endpoint. The generated base
 // service, base handler and RegisterSoftDelete entry point were removed in
-// earlier migrations. See README.md for the complete generated surface and
-// refusal matrix.
+// earlier migrations. See README.md for the migration notes, and docs/GUIDE.md
+// for the complete generated surface and refusal matrix.
 package entapi

@@ -250,9 +250,12 @@ checking `git status`, or the tree will look dirty.
 
 ## Where to look next
 
-- The root [`README.md`](../../README.md) — the annotation model, field shapes,
-  the query wire format, and how to replace a generated operation with your own
-  implementation via `With`.
+- The root [`README.md`](../../README.md) — the annotation model, the query wire
+  format, and how to replace a generated operation with your own implementation
+  via `With`.
+- [`docs/GUIDE.md`](../../docs/GUIDE.md) — the same ground in full, with the
+  reason behind each rule and a pointer to the source that makes it true:
+  field shapes, the refusal matrix, the OpenAPI document, endpoint registration.
 - `todoent/entapi_http.go` — `APIHandler`, `API`, `Mount`, `Endpoints`, and one
   `…Endpoint()` accessor per operation, for wrapping a single route in
   middleware.

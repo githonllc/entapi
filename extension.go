@@ -22,10 +22,8 @@ type Extension struct {
 
 // ExtensionConfig holds configuration for the extension.
 //
-// GenerateBaseService and GenerateBaseHandler used to live here. Both are gone
-// with the templates they selected (#29); every generated artifact is now
-// emitted unconditionally for an api.Resource, so there is nothing left to
-// switch on. See the migration note in README.md.
+// Every generated artifact is emitted unconditionally for an api.Resource, so
+// nothing here selects which files are produced.
 type ExtensionConfig struct {
 	// EntAPIPackage is the import path generated code imports for the Layer 2
 	// runtime — ErrValidation, ListRequest, ListPage, the error mapper.
@@ -639,10 +637,6 @@ func (e *Extension) templateFuncMap() template.FuncMap {
 
 // Option is a function type for configuring the extension.
 type Option func(*ExtensionConfig)
-
-// WithBaseService and WithBaseHandler have been removed along with the
-// templates they selected (#29). A call site that passed them now omits them;
-// see the migration note in README.md.
 
 // WithEntAPIPackage sets the import path for the entapi package
 func WithEntAPIPackage(pkg string) Option {

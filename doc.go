@@ -48,38 +48,6 @@
 //		}
 //	}
 //
-// # Migration from the scope model
-//
-// The old field model was removed without compatibility aliases. Migrate by
-// effect, not by constructor name:
-//
-//	DefaultField()                         -> no field annotation
-//	InputOnlyField()                       -> Ent Sensitive()
-//	OutputOnlyField()                      -> api.ReadOnly()
-//	CreateOnlyField()                      -> Ent Immutable()
-//	IdField()                              -> no annotation; Ent's ID is automatic
-//	AuditLogField()                        -> api.ReadOnly()
-//	NewDomainField()                       -> api.Hidden()
-//	DomainFieldWithScopes(...)             -> spell the intended effect with Ent plus the five words
-//	ScopeCreate / ScopeUpdate              -> derived from Optional, Default, Nillable and Immutable
-//	ScopeResponse                          -> derived; use Hidden or Sensitive to remove it
-//	ScopeQuery                             -> api.Searchable(), api.Filterable() and/or api.Sortable()
-//	WithRequired(ScopeCreate)              -> no successor; requiredness is !Optional && !Default
-//	AsSearchable/AsFilterable/AsSortable   -> api.Searchable/api.Filterable/api.Sortable
-//	AsReadOnly                             -> api.ReadOnly()
-//	AsWriteOnly                            -> Ent Sensitive()
-//	WithMetadata and metadata builders     -> no successor
-//	Edge().InResponse().As("key")          -> api.Expand().JSONKey("key")
-//
-// InputOnlyField previously expressed an HTTP-only promise. Sensitive is an
-// Ent field-builder fact: it also binds service-layer and logging behaviour.
-// That broader meaning is deliberate; an annotation cannot honestly alias it.
-// WithRequired has no successor because HTTP requiredness no longer overrides
-// the database schema.
-//
-// Generated Update{Entity} was renamed to Patch{Entity}, and generated Routes()
-// to Endpoints() when entapi.Route became entapi.Endpoint. The generated base
-// service, base handler and RegisterSoftDelete entry point were removed in
-// earlier migrations. See README.md for the migration notes, and docs/GUIDE.md
-// for the complete generated surface and refusal matrix.
+// For the complete generated surface, the annotation model and the refusal
+// matrix, see docs/GUIDE.md.
 package entapi

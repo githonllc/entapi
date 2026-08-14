@@ -155,10 +155,10 @@ func TestSoftDeleteTypesAndImports(t *testing.T) {
 func TestSoftDeleteMixinDeclaresNoHooks(t *testing.T) {
 	m := SoftDeleteMixin{}
 	if got := m.Hooks(); len(got) != 0 {
-		t.Errorf("SoftDeleteMixin.Hooks() = %d hooks, want 0; see the README section on the empty import", len(got))
+		t.Errorf("SoftDeleteMixin.Hooks() = %d hooks, want 0; see SoftDeleteMixin's doc comment on the empty-import format", len(got))
 	}
 	if got := m.Interceptors(); len(got) != 0 {
-		t.Errorf("SoftDeleteMixin.Interceptors() = %d interceptors, want 0; see the README section on the empty import", len(got))
+		t.Errorf("SoftDeleteMixin.Interceptors() = %d interceptors, want 0; see SoftDeleteMixin's doc comment on the empty-import format", len(got))
 	}
 	if m.Policy() != nil {
 		t.Error("SoftDeleteMixin.Policy() is non-nil, which has the same consequence as a hook")

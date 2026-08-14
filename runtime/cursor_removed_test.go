@@ -33,8 +33,8 @@ var removedCursorSymbols = []string{
 // it: a reintroduction has to argue with a test rather than slip in as a
 // convenience.
 //
-// It scans declarations rather than text so a mention in a comment — the README
-// pointer, this file's own list — does not trip it.
+// It scans declarations rather than text so a mention in a comment — this
+// file's own list, for one — does not trip it.
 //
 // It scans BOTH halves of the split #15 made: "." is this runtime package,
 // where a revived Cursor would most naturally land, and ".." is the generator

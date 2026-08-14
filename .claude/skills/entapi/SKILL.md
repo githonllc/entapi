@@ -27,10 +27,10 @@ self-reference to install and no fixed set of override points. To change one
 operation, write your own function and stop calling the generated one; the
 others keep working, because nothing is registered anywhere.
 
-> **`Base{Entity}Service` and `Base{Entity}Handler` were removed** (issue #29),
-> along with `WithBaseService` / `WithBaseHandler`, `{Entity}EntToResponse`,
-> `SetSelf` and the Before/After hooks. See "Migrating from `BaseService` and
-> `BaseHandler`" in the library's README for the member-by-member mapping.
+> **There are no base classes.** The generated surface is free functions —
+> `Get{E}`, `List{Es}`, `Create{E}`, `Patch{E}`, `Delete{E}`,
+> `DeleteBatch{Es}` — plus `New{Entity}Response`. Write your own function when
+> you need different behaviour; see [`docs/GUIDE.md`](../../../docs/GUIDE.md).
 
 ## ORM-Level Interceptors (IMPORTANT)
 

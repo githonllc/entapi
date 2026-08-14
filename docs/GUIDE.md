@@ -6,10 +6,6 @@ This file is the long form of every section it summarises: what each rule is,
 why it is that rule, and the `> **Implementation:**` pointer to the source that
 makes it true.
 
-Anything about a symbol this module **removed** is not here. Migration notes
-live in [`README.md`](../README.md#migration-notes), which is where the package
-comments point.
-
 ## Contents
 
 - [Install](#install) · [Three import paths](#three-import-paths) · [Wiring it in](#wiring-it-in)
@@ -24,7 +20,6 @@ comments point.
 - [Generation can fail, and that is the design](#generation-can-fail-and-that-is-the-design)
 - [What the generator does to your directory](#what-the-generator-does-to-your-directory)
 - [Field shapes](#field-shapes) · [Annotation surface](#annotation-surface) · [Limits](#limits)
-- [Deviations from DESIGN-v2](#deviations-from-design-v2) · [Deviations from DESIGN-v3](#deviations-from-design-v3)
 
 ---
 
@@ -152,34 +147,6 @@ The five field words share one mergeable annotation. Separate spelling is
 canonical and safe: `Annotations(api.Searchable(), api.Sortable())` preserves
 both words through Ent's serialized schema loader. Builders use value receivers
 and return copies.
-
-### Migration from the scope model
-
-There are no compatibility aliases. Migrate the old vocabulary by effect:
-
-| Old spelling | New spelling |
-|---|---|
-| `DefaultField()` | no field annotation |
-| `InputOnlyField()` | Ent `Sensitive()` |
-| `OutputOnlyField()` | `api.ReadOnly()` |
-| `CreateOnlyField()` | Ent `Immutable()` |
-| `IdField()` | no annotation; Ent's ID is automatic |
-| `AuditLogField()` | `api.ReadOnly()` |
-| `NewDomainField()` | `api.Hidden()` |
-| `DomainFieldWithScopes(...)` | spell the intended effect with Ent plus the five words |
-| `ScopeCreate` / `ScopeUpdate` | derived from `Optional`, `Default`, `Nillable`, `Immutable` |
-| `ScopeResponse` | derived; remove with `Hidden` or Ent `Sensitive` |
-| `ScopeQuery` | one or more of `Searchable`, `Filterable`, `Sortable` |
-| `WithRequired(ScopeCreate)` | no successor; required means `!Optional && !Default` |
-| `AsSearchable` / `AsFilterable` / `AsSortable` | `api.Searchable()` / `api.Filterable()` / `api.Sortable()` |
-| `AsReadOnly` | `api.ReadOnly()` |
-| `AsWriteOnly` | Ent `Sensitive()` |
-| metadata builders | no successor |
-| `Edge().InResponse().As("key")` | `api.Expand().JSONKey("key")` |
-
-`InputOnlyField()` was an HTTP-only promise. Ent `Sensitive()` also affects the
-service layer and logging. That broader semantic is deliberate: the declaration
-lives in the layer that owns secrecy.
 
 ### Edges
 
@@ -431,7 +398,7 @@ go install github.com/ogen-go/ogen/cmd/ogen@latest
 ogen --target ./apiclient --package apiclient --clean ./ent/openapi.yaml
 ```
 
-Verified against **ogen v1.24.0** (#129), and verified as behaviour rather than
+Verified against **ogen v1.24.0**, and verified as behaviour rather than
 as "it parsed": the generated client compiles, and a round trip against the
 generated server on real SQLite preserves PATCH's three states. That last part
 is the interesting one. `openapi.yaml` spells an optional clearable field as
@@ -525,7 +492,7 @@ own router.
 
 `Entity` is the Ent type name (`"Article"`) and `Op` is an `entapi.Op` —
 `OpList`, `OpCreate`, `OpGet`, `OpPatch`, `OpDelete`, or `OpNone` for an endpoint
-that belongs to no resource. They carry the identity the path used to hide, so
+that belongs to no resource. They carry the endpoint's identity as data, so
 splitting the surface by audience is a comparison the compiler checks rather
 than a match on path text, where a typo selects nothing and reports nothing.
 And because `Endpoint` itself is not comparable, a field comparison like the
@@ -767,11 +734,6 @@ if _, ok := v.SuspendedUntil(); ok && status != user.StatusSuspended {
 }
 ```
 
-Before the readers, the only way out of the wrapper was `Apply`, so the rule had
-to allocate an update builder it never executed, apply the request to it and
-read back `Mutation()` — coupling the business logic to Ent's mutation
-vocabulary to answer a question about the request (#113).
-
 Only the wrapper gets readers. The **raw** request already exposes its `*T`
 fields as exported struct fields, so the value is reachable there; the wrapper
 is the only thing that hides it, and the only thing a customization point
@@ -991,7 +953,7 @@ to supply the allow-list — which is exactly what `Parse{Entity}Query` and
 `{Entity}Order` are.
 
 Above those five sits one more exported piece, and it is where the split is
-actually enforced (#143). `ParseFieldValues` runs the per-field dispatch loop
+actually enforced. `ParseFieldValues` runs the per-field dispatch loop
 once for every field, and it is handed a **table** the generated code built:
 
 ```go
@@ -1035,7 +997,7 @@ nil panics on the nil dereference.
 > `KnownQueryOperator`, `ReservedQueryValue`, `ParsePageParam`,
 > `ParseSortSpecs`; `runtime/queryops.go` — `ParseFieldValues`, `QueryOp`,
 > `OpKind` with `OpKindValue`/`OpKindList`/`OpKindFlag`/`OpKindRange`,
-> `findQueryOp` (#143);
+> `findQueryOp`;
 > `runtime/query.go` — `Limit`, `Offset`, `Page[R]`, `Query[Q,P,O,E]`,
 > `ListPage`; `runtime/filter.go` — `AppendEach`, `AppendEachSlice`;
 > `templates/filter.tmpl`; generated example:
@@ -1320,9 +1282,9 @@ field's own name, so two patch-visible field names now break the build:
 | a field whose Go name is `Apply` | `Apply(b *<Entity>UpdateOne)` on the same wrapper — `method Apply already declared` |
 | a pair `x` and `has_x` | `HasX()`, the presence method generated for `x`, against the struct field `HasX` — `field and method with the same name HasX` |
 
-The second one is **older than the readers**: `Has<Field>()` has been on the raw
-request since #98, where `has_x` is a struct field of that very name, so the
-pair already failed to compile. Both messages point at `.StorageKey(…)`, because
+The second one bites without the readers too: `Has<Field>()` is generated on
+the raw request as well, where `has_x` is a struct field of that very name, so
+the pair cannot compile either way. Both messages point at `.StorageKey(…)`, because
 the JSON tag is spelled from it — the wire key does not have to move when the Go
 name does.
 
@@ -1373,23 +1335,16 @@ deletes nothing — the generator scans the target directory and deletes any `.g
 file meeting **both**:
 
 1. its **first line** (the head 4096 bytes, cut at the first newline) contains
-   `Code generated by entapi extension` **or** `Code generated by entdomain
-   extension`, and
+   `Code generated by entapi extension` or `Code generated by entdomain
+   extension` — two spellings, both owned by this extension, and the escape
+   hatch below applies to either identically, and
 2. it was not written by this run.
 
-**Two marker spellings are recognised, permanently.** `entdomain` is what this
-extension wrote before the module was renamed (ADR-0011), and recognising it is
-not a transition window: dropping it would strand every pre-rename consumer tree
-with stale files the build then trips over, and keeping it costs one string
-comparison. The escape hatch below applies to both spellings identically —
-delete the marker line and the file is yours.
-
-This is why a schema edit no longer breaks your build: delete an entity and its
-`_dto.go`/`_filter.go`/`_wiring.go`/`_handler.go` go with it, instead of lingering as a
-reference to a builder ent no longer generates. For anyone upgrading past the
-removal of the base classes, it also removes `_base_service.go` /
-`_base_handler.go` — those names are in no list; they simply carry the same
-marker.
+This is what keeps a schema edit from breaking your build: delete an entity and
+its `_dto.go`/`_filter.go`/`_wiring.go`/`_handler.go` go with it, rather than
+lingering as a reference to a builder ent does not generate. The rule is the
+marker, not a list of names, so any marked file this extension is not producing
+goes the same way.
 
 The scan is **top-level only** (`os.ReadDir`, not `filepath.Walk`) and skips
 directory entries — ent's generated subpackages (`<entity>/`, `predicate/`,
@@ -1493,9 +1448,10 @@ they are the one list a reader has to see before adopting, not after.
   *same field* end with the later writer winning silently. The exposure is
   narrower than PUT semantics — this package has partial update only, so patches
   touching different fields do not interfere. There is no version word, because
-  the framework has no legitimate way to know which column is the version and
-  guessing `version`/`updated_at` by name is exactly the convention-derivation
-  #18 retired. The escape hatch is the customization point: replace that one step
+  the framework has no legitimate way to know which column is the version, and
+  guessing `version`/`updated_at` by name is the kind of convention-derivation
+  this package refuses everywhere else. The escape hatch is the customization
+  point: replace that one step
   with `With(ent.PatchXFn(...))`, add your own `Where(x.Version(v))`, and return
   409 on zero rows affected.
 - **Output shares a package with ent's own.** The generator creates no separate
@@ -1511,53 +1467,3 @@ they are the one list a reader has to see before adopting, not after.
 - **The generator package loads all ten templates at package init.** Confine it
   to `entc.go` and your schema files; `runtime/` is what keeps it out of your
   binary.
-
-## Deviations from DESIGN-v2
-
-The header of [`docs/DESIGN-v2.md`](DESIGN-v2.md) says implementation has
-not started. That is **stale**: the T3 it proposed has landed in full. Three
-deviations remain, all deliberate:
-
-| Design item | Actual state |
-|---|---|
-| §1.6 move output into an `ent/dto` subpackage | **Not done, and superseded.** Output lands in the consumer's `ent` package; handler decoupling is achieved by the generated free functions rather than by package placement |
-| §8.1 refuse generation when the directory holds files that are not ours | **Not done.** Cleanup **leaves such files in place and logs them**. It depended on §1.6's exclusive directory |
-| §8.4 an `OutputPackage` config option | **Not done**, and moot without §1.6. The supported options configure the runtime import path, strict query parsing, or OpenAPI info; none relocates output |
-
-T2 (the audience dimension), which the design itself deferred, is likewise
-unimplemented — consistent with the design.
-
-## Deviations from DESIGN-v3
-
-[`docs/DESIGN-v3-final.md`](DESIGN-v3-final.md) also still says
-implementation has not started. That too is **stale**: all eight slices it lists
-(#69–#76) have landed, closed by #77, #78, #81, #82, #84, #85, #86 and #87. Read
-it for the decisions and their rationale, never for the current API — three
-things it specifies were superseded during implementation, and the code is what
-shipped:
-
-| Design item | Actual state |
-|---|---|
-| §2.1 / §2.5 `ent.API(client)` returns `*API`; `func (a *API) Routes()` | The type is **`*APIHandler`** (`templates/http.tmpl` — `API`). `API` is the constructor's name, so the handler could not also be called that. The method is **`Endpoints()`** since #118 — the manifest is a record of handler contracts, not routing |
-| §4.3 soft delete registers from a generated `init()`, falling back to an explicit `RegisterSoftDelete(client)` | Neither exists. #78 installs the hook and interceptor from a `config/init/fields/*` **partial that Ent executes inside `newConfig`** (`templates/softdelete_config_init.tmpl`), so `NewClient`, `Open`, `enttest.Open` and every later config copy carry them with no registration call and no initialization-order dependency. `RegisterSoftDelete` was removed rather than kept as a fallback |
-| §2.3 the generated handler enables `DisallowUnknownFields`, and the rejected field name is scraped out of `encoding/json`'s error text | The handler decodes the body into a `map[string]json.RawMessage` first and compares its keys against generated `{entity}{Op}RequestTags` data (`templates/handler.tmpl`), reporting the offending key through `entapi.FieldError`. A consumer that writes its own bind step gets the same data from the exported `{Entity}{Op}RequestTags()` accessor, which returns a copy. The design called the error-text scrape a known residue; this removes it — the field name is now generated data, not a parsed string. `DisallowUnknownFields` stays the consumer handler's decision for à la carte DTO decoding |
-
-A fourth item was neither superseded nor already true: the service example
-calls `v.HasStatus()` on a validated patch request, and the `Valid…` wrapper
-answered no such method. That gap was closed by **generating the forwarder**
-rather than by recording a deviation — the example was right about what a
-customization point needs, since it receives the validated type and nothing
-else. The document's line now compiles.
-
-Everything else in that document — the five deviation words, `Except`'s three
-layers plus the create-family exception, the op-in-value wire format, the `_`
-namespace, 413/415 request hardening, RFC 9457 errors, the exported manifest,
-and the OpenAPI decisions — describes what shipped.
-
----
-
-## Migration notes
-
-Every symbol this module has removed, and the wire-format changes that came with
-them, are in [`README.md`](../README.md#migration-notes) — one list rather than
-two, because the package comments that tell a reader where to look point there.

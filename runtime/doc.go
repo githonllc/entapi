@@ -43,10 +43,8 @@
 //
 // [ListPage] uses offset pagination, which is O(n) deep, costs a COUNT per
 // page, and can skip or repeat rows under concurrent writes. It is also the
-// only pagination this package has: Cursor, PageInfo, EncodeCursor,
-// DecodeCursor and ListRequest.Cursor have been removed, and generated
-// {Entity}ListResponse no longer carries a PageInfo field — see the README for
-// the migration note.
+// only pagination this package has: there is no cursor type and no keyset
+// alternative.
 //
 // [MaxPageSize] is the single place the page-size ceiling is decided, with a
 // single reaction to crossing it: [ListRequest.Limit] clamps. Generated query
@@ -55,19 +53,12 @@
 // callers.
 //
 // A ListRequest zero value is usable as-is; there is deliberately no defaulting
-// method, so there is none to forget. ListRequest.SetDefaults has been removed —
-// see the README for the migration note.
+// method, so there is none to forget.
 //
-// Query wire v2 removed the previous scalar sort fields, request validation
-// method and sort-key helper. Callers regenerate a typed Parse{Entity}Query
-// function and pass its []SortSpec to the generated {Entity}Order allow-list.
-// AppendIf and AppendIfSlice likewise became
-// [AppendEach] and [AppendEachSlice] when filter slots became slices. See the
-// README migration notes for the old-to-new wire spelling table.
-//
-// Route is now [Endpoint] and Route.Bind is now [Endpoint.Bind]; generated
-// APIHandler.Routes() is now APIHandler.Endpoints(). Only the names changed —
-// see the README for the migration note.
+// Sorting arrives as []SortSpec from the generated Parse{Entity}Query, and the
+// generated {Entity}Order is the single key allow-list. Filter slots are
+// slices, so [AppendEach] and [AppendEachSlice] are how repeated wire values
+// become ANDed predicates.
 //
 // # Binding, classifying and writing
 //

@@ -26,12 +26,10 @@ const (
 // ListRequest represents a paginated list request with optional sorting.
 //
 // Pagination is offset-based, and only offset-based: Page and Size are the
-// whole of it. There used to be a Cursor field here, documented as "when Cursor
-// is set, keyset pagination is used", and no code anywhere branched on it — a
-// consumer who believed the comment got offset page one, silently, forever. It
-// was removed on #6 along with the base64(json) codec that named its format;
-// see the README migration note. Adding keyset paging later is additive, which
-// is the asymmetry that decided it.
+// whole of it. There is deliberately no cursor field, because a field the
+// query path does not branch on is worse than no field at all — a consumer who
+// believed it would get offset page one, silently, forever. Adding keyset
+// paging later is additive, which is the asymmetry that decided it.
 //
 // The zero value is usable and needs no preparation. Read the effective values
 // through [ListRequest.Limit] and [ListRequest.Offset], never off the fields

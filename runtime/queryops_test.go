@@ -200,6 +200,48 @@ func TestParseFieldValues_EqAbsentFromTable(t *testing.T) {
 	}
 }
 
+func TestParseFieldValues_UnknownPrefixLenientEqAbsentFails(t *testing.T) {
+	// The accepted fail-closed deviation: an UNKNOWN prefix in lenient mode
+	// resets to whole-value equality, and the table has no eq row, so the
+	// re-search fails. The pre-refactor generated code silently DROPPED the
+	// predicate here, which is the fail-open direction.
+	var isNull []bool
+	table := []QueryOp[int]{
+		{Prefix: "is_null", Kind: OpKindFlag, Null: &isNull, BoolValue: true},
+		{Prefix: "not_null", Kind: OpKindFlag, Null: &isNull},
+	}
+	want := `validation failed: field "meta" value "zzz:1" uses operator "eq"; legal operators: is_null, not_null`
+	err := ParseFieldValues("meta", []string{"zzz:1"}, false, "is_null, not_null", parseIntValue, table)
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
+	}
+	if !errors.Is(err, ErrValidation) {
+		t.Fatalf("error %v does not wrap ErrValidation", err)
+	}
+	if len(isNull) != 0 {
+		t.Errorf("is_null slot = %v, want empty", isNull)
+	}
+}
+
+func TestParseFieldValues_InvalidOpKindIsNotAValidationError(t *testing.T) {
+	// An out-of-range Kind can only come from a generator bug, so it must NOT
+	// wrap ErrValidation: the request-time fallback turns a plain error into a
+	// 500 rather than a 400 blaming the client.
+	var eq []int
+	table := []QueryOp[int]{{Prefix: "eq", Kind: OpKind(99), One: &eq}}
+	err := ParseFieldValues("n", []string{"eq:1"}, false, "eq", parseIntValue, table)
+	if err == nil {
+		t.Fatal("error = nil, want an invalid-OpKind error")
+	}
+	want := `entapi: field "n" query operator "eq" has invalid OpKind 99`
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+	if errors.Is(err, ErrValidation) {
+		t.Fatalf("error %v wraps ErrValidation; a generator bug must surface as a 500, not a 400", err)
+	}
+}
+
 func TestParseFieldValues_ParseErrorPropagates(t *testing.T) {
 	var s intSlots
 	err := ParseFieldValues("n", []string{"gt:abc"}, false, intLegal, parseIntValue, intTable(&s))
@@ -230,18 +272,25 @@ func TestParseFieldValues_ListParseErrorPropagates(t *testing.T) {
 func TestParseFieldValues_RangeParseErrorPropagates(t *testing.T) {
 	// between parses both parts before appending either, so a failure in the
 	// lower or the upper part surfaces that part's error unchanged and leaves
-	// both slots empty.
+	// both slots empty. Each part is spelled differently from the other, so the
+	// message names WHICH part failed; the third case, where both parts are
+	// unparseable, is the one that pins the order — an implementation that
+	// parsed the upper operand first would report "upper" there.
 	for _, tc := range []struct {
 		value string
 		want  string
 	}{
 		{
-			value: "between:x,2",
-			want:  `validation failed: field "n" value "between:x,2" is not a valid int: strconv.ParseInt: parsing "x": invalid syntax`,
+			value: "between:lower,2",
+			want:  `validation failed: field "n" value "between:lower,2" is not a valid int: strconv.ParseInt: parsing "lower": invalid syntax`,
 		},
 		{
-			value: "between:1,x",
-			want:  `validation failed: field "n" value "between:1,x" is not a valid int: strconv.ParseInt: parsing "x": invalid syntax`,
+			value: "between:1,upper",
+			want:  `validation failed: field "n" value "between:1,upper" is not a valid int: strconv.ParseInt: parsing "upper": invalid syntax`,
+		},
+		{
+			value: "between:lower,upper",
+			want:  `validation failed: field "n" value "between:lower,upper" is not a valid int: strconv.ParseInt: parsing "lower": invalid syntax`,
 		},
 	} {
 		var s intSlots

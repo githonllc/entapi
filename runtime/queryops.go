@@ -29,9 +29,10 @@ const (
 // no reflection and no string-keyed runtime lookup of the predicate target.
 // The pairing between Kind and which slot is set is NOT checked by the
 // compiler: it is a contract upheld by filter.tmpl, the sole construction
-// site. A row whose Kind names a slot it did not set is a programming error,
-// which ParseFieldValues reports as a plain error rather than a validation
-// failure.
+// site. ParseFieldValues catches only a Kind outside the declared range, which
+// it reports as a plain error rather than a validation failure; a row whose
+// Kind is one of the four but whose matching slot pointer is nil panics on the
+// nil dereference.
 type QueryOp[T any] struct {
 	Prefix    string
 	Kind      OpKind
@@ -111,7 +112,7 @@ func ParseFieldValues[T any](field string, values []string, strict bool, legal s
 			}
 			*row.One = append(*row.One, parsed)
 		default:
-			return fmt.Errorf("entapi: query operator %q has invalid OpKind %d", row.Prefix, row.Kind)
+			return fmt.Errorf("entapi: field %q query operator %q has invalid OpKind %d", field, row.Prefix, row.Kind)
 		}
 	}
 	return nil

@@ -99,7 +99,12 @@ Split by concern across `funcs_*.go`, and registered in one map in `funcs.go`:
 `templates/filter.tmpl` emits `Parse{Entity}Query(url.Values)`, the typed filter,
 and `{Entity}Order`. Runtime owns only lexical grammar: split on the first colon,
 the global operator-prefix vocabulary, reserved parameter syntax and sort-spec
-parsing. Generated code owns semantic permission and conversion: each field's
+parsing — and, since #143 moved the dispatch loop into `ParseFieldValues`, the
+rest of the grammar that was never field-specific: the implicit `eq` for an
+unprefixed value, the lenient reset to the whole value on an unknown prefix, the
+comma as the part separator for `in`/`not_in`/`between`, `between`'s
+exactly-two-parts arity, and the rule that `is_null`/`not_null` may carry no
+value. Generated code owns semantic permission and conversion: each field's
 allowed operators are `$field.Ops` intersected with the wire vocabulary, with
 Searchable gating the expensive substring class. Wire field names always come
 from `StorageKey()`. The primary key is annotation-free but always Filterable
